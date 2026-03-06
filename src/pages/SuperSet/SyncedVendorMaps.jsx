@@ -9,6 +9,7 @@ import MapActions from "../../store/actions/map-actions"; //
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 // const MAPBOX_TOKEN = ""; 
 
+
 const SyncedVendorMaps = () => {
 
   const dispatch = useDispatch();
