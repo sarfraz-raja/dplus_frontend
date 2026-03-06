@@ -1025,6 +1025,7 @@
 
 // export default MapBoxView;
 
+
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMapGL, { Layer, Source } from 'react-map-gl';
 import mapboxgl from 'mapbox-gl';
