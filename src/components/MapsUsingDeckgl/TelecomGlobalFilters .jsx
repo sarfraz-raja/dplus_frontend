@@ -1,612 +1,13 @@
-// import React, { useEffect, useState, useRef } from "react";
-// import { useDispatch, useSelector } from "react-redux";
-// import MapActions from "../../store/actions/map-actions";
-// import AuthActions from "../../store/actions/auth-actions";
-
-// const TelecomGlobalFilters = () => {
-
-//   const dispatch = useDispatch();
-
-//   const allFilters = useSelector(state => state.map.telecomFilterMeta);
-//   const techWithBand = useSelector(state => state.map.telecomTechMeta);
-//   const mapConfig = useSelector(state => state.map.config);
-//   const syncEnabled = useSelector(state => state.map.syncEnabled);
-//   const rawCells = useSelector(state => state.map.rawCells || []);
-
-//   const [openDropdown, setOpenDropdown] = useState(null);
-//   const [selected, setSelected] = useState({});
-//   const [siteSearch, setSiteSearch] = useState("");
-//   const [showScale, setShowScale] = useState(false);
-//   const scaleRef = useRef(null)
-
-//   const siteSuggestions = [
-//     ...new Set(rawCells.map(cell => cell.site_name))
-//     ].filter(site =>
-//     site?.toLowerCase().includes(siteSearch.toLowerCase())
-//  );
-
-//   /* -------------------------
-//      LOAD FILTER METADATA
-//   --------------------------*/
-//   useEffect(() => {
-//     dispatch(MapActions.getTelecomFilterMeta());
-//     dispatch(MapActions.getTelecomTechMeta());
-//     dispatch(MapActions.getMultiVendorCells({}));
-//   }, []);
-
-//   useEffect(() => {
-//     const handleClickOutside = (event) => {
-//       if (scaleRef.current && !scaleRef.current.contains(event.target)) {
-//         setShowScale(false);
-//       }
-//     };
-
-//     if (showScale) {
-//       document.addEventListener("mousedown", handleClickOutside);
-//     }
-
-//     return () => {
-//       document.removeEventListener("mousedown", handleClickOutside);
-//     };
-//   }, [showScale]);
-
-//   const toggleDropdown = (name) => {
-//     setOpenDropdown(openDropdown === name ? null : name);
-//   };
-
-//   const handleCheck = (parent, value) => {
-//     setSelected(prev => {
-//       const existing = prev[parent] || [];
-//       if (existing.includes(value)) {
-//         return { ...prev, [parent]: existing.filter(v => v !== value) };
-//       }
-//       return { ...prev, [parent]: [...existing, value] };
-//     });
-//   };
-
-//   /* -------------------------
-//      SUBMIT (Backend Driven + Persisted)
-//   --------------------------*/
-//   const handleSubmit = () => {
-
-//     const payload = { ...selected };
-
-//     if (siteSearch.trim()) {
-//       payload.site_name = [siteSearch.trim()];
-//     }
-
-//     dispatch(MapActions.getMultiVendorCells(payload));
-
-//     dispatch(AuthActions.setupConf(true, {
-//       mapScale: mapConfig.mapScale,
-//       mapView: mapConfig.mapView,
-//       saveMapFilters: JSON.stringify(payload)
-//     }));
-//   };
-
-//   const handleClear = () => {
-//     setSelected({});
-//     setSiteSearch("");
-//     dispatch(MapActions.getMultiVendorCells({}));
-//   };
-
-//   /* -------------------------
-//      SAFE RENDER HELPERS
-//   --------------------------*/
-
-// //  const renderRegionDropdown = () => {
-// //   if (!allFilters?.d1) return null;
-
-// //   const regionBlock = allFilters.d1.find(
-// //     item => item.parent === "Region"
-// //   );
-
-// //   if (!regionBlock) return null;
-
-// //   return (
-// //     <div className="absolute top-8 bg-white text-black p-3 rounded shadow z-50 w-48 max-h-60 overflow-y-auto">
-// //       {/* {regionBlock.child.map(region => (
-// //         <label key={region} className="block text-sm"> */}
-// //         {regionBlock.child.map((region, index) => (
-// //         <label key={`region-${region}-${index}`} className="block text-sm">
-// //           <input
-// //             type="checkbox"
-// //             className="mr-2"
-// //             onChange={() => handleCheck("Region", region)}
-// //           />
-// //           {region}
-// //         </label>
-// //       ))}
-// //     </div>
-// //   );
-// // };
-
-// // const renderTechDropdown = () => {
-// //   if (!Array.isArray(techWithBand)) return null;
-
-// //   return (
-// //     <div className="absolute top-8 bg-white text-black p-4 rounded shadow z-50 w-64 max-h-72 overflow-y-auto">
-// //       {techWithBand.map((block, blockIndex) => (
-// //         <div key={`tech-${block.parent}-${blockIndex}`} className="mb-3">
-// //           <p className="font-semibold">{block.parent}</p>
-
-// //           {Array.isArray(block.child) &&
-// //             block.child.map((band, bandIndex) => (
-// //             <label key={`band-${block.parent}-${band}-${bandIndex}`} className="block text-sm">
-// //                 <input
-// //                   type="checkbox"
-// //                   className="mr-2"
-// //                   onChange={() => handleCheck(block.parent, band)}
-// //                 />
-// //                 {band}
-// //               </label>
-// //             ))}
-// //         </div>
-// //       ))}
-// //     </div>
-// //   );
-// // };
-
-
-//   return (
-// //     <div className="flex items-center gap-6 bg-[#0f1f3d] px-4 py-2 text-white text-sm">
-
-// //       {/* REGION */}
-// //       {/* <div className="relative flex items-center gap-2">
-// //         <span className="text-gray-300 text-xs uppercase">Region</span>
-// //         <button onClick={() => toggleDropdown("region")}>
-// //           Select ▾
-// //         </button>
-// //         {openDropdown === "region" && renderRegionDropdown()}
-// //       </div> */}
-
-// //       {/* TECHNOLOGY */}
-// //       {/* <div className="relative flex items-center gap-2">
-// //         <span className="text-gray-300 text-xs uppercase">Technology</span>
-// //         <button onClick={() => toggleDropdown("tech")}>
-// //           Select ▾
-// //         </button>
-// //         {openDropdown === "tech" && renderTechDropdown()}
-// //       </div> */}
-
-// //       {/* DYNAMIC BACKEND FILTERS */}
-// //       {Array.isArray(allFilters?.d1) &&
-// //         allFilters.d1.map((group, groupIndex) => (
-// //           <div
-// //             key={`filter-${group.parent}-${groupIndex}`}
-// //             className="relative flex items-center gap-2"
-// //           >
-// //             <span className="text-gray-300 text-xs uppercase">
-// //               {group.parent}
-// //             </span>
-
-// //             <button
-// //               onClick={() => toggleDropdown(group.parent)}
-// //               className="hover:text-white"
-// //             >
-// //               Select ▾
-// //             </button>
-
-// //             {openDropdown === group.parent && (
-// //               <div className="absolute left-0 top-full mt-2 bg-white text-black p-4 rounded shadow z-50 w-64 max-h-72 overflow-y-auto">
-
-// //                 {group.child?.map((item, itemIndex) => (
-// //                   <div key={`item-${item.name}-${itemIndex}`} className="mb-3">
-
-// //                     <p className="font-semibold">{item.name}</p>
-
-// //                     {item.columnName?.map((band, bandIndex) => (
-// //                       <label
-// //                         key={`band-${band.name}-${bandIndex}`}
-// //                         className="block text-sm"
-// //                       >
-// //                         <input
-// //                           type="checkbox"
-// //                           className="mr-2"
-// //                           onChange={() => handleCheck(item.name, band.name)}
-// //                         />
-// //                         {band.name}
-// //                       </label>
-// //                     ))}
-
-// //                   </div>
-// //                 ))}
-
-// //               </div>
-// //             )}
-// //           </div>
-// //       ))}
-
-// //       {/* SITE */}
-// //       <div className="relative flex items-center gap-2">
-// //         <span className="text-gray-300 text-xs uppercase">Site</span>
-
-// //         <input
-// //           type="text"
-// //           value={siteSearch}
-// //           onChange={(e) => setSiteSearch(e.target.value)}
-// //           placeholder="Search site ID..."
-// //           className="bg-[#1b2f55] px-2 py-1 rounded text-white text-sm"
-// //         />
-
-// //         {siteSearch && (
-// //           <div className="absolute top-8 bg-white text-black w-48 max-h-60 overflow-y-auto rounded shadow z-50">
-// //             {siteSuggestions.map((site, index) => (
-// //               <div key={`site-${site}-${index}`}
-// //                 onClick={() => setSiteSearch(site)}
-// //                 className="px-2 py-1 hover:bg-gray-200 cursor-pointer"
-// //               >
-// //                 {site}
-// //               </div>
-// //             ))}
-// //           </div>
-// //         )}
-// //       </div>
-
-// //       {/* MAP SCALE */}
-// //       {/* <div className="flex items-center gap-2">
-// //         <span className="text-gray-300 text-xs uppercase">Map Scale</span>
-// //         <input
-// //           type="range"
-// //           min={0.5}
-// //           max={3}
-// //           step={0.1}
-// //           value={mapConfig.mapScale}
-// //           onChange={(e) =>
-// //             dispatch(
-// //               MapActions.setMapConfig({
-// //                 mapScale: parseFloat(e.target.value)
-// //               })
-// //             )
-// //           }
-// //           className="w-24"
-// //         />
-// //         <span className="text-xs">{mapConfig.mapScale}x</span>
-// //       </div> */}
-// // <div
-// //   ref={scaleRef}
-// //   className="relative inline-block"
-// // >
-
-// //   {/* Trigger Button */}
-// //   <button
-// //     onClick={() => setShowScale(prev => !prev)}
-// //     className="px-3 py-1 bg-gray-100 hover:bg-green-100 text-black text-xs rounded-md transition"
-// //   >
-// //     Scale
-// //   </button>
-
-// //   {/* Dropdown Panel */}
-// //   {showScale && (
-// //     <div className="absolute right-0 mt-2 bg-gray-900 p-3 rounded-lg shadow-xl border border-gray-700 z-50">
-
-// //       <div className="flex flex-col items-center gap-2">
-
-// //         <span className="text-gray-300 text-xs uppercase tracking-wide">
-// //           Scale
-// //         </span>
-
-// //         <input
-// //           type="range"
-// //           min={0.5}
-// //           max={3}
-// //           step={0.1}
-// //           value={mapConfig.mapScale}
-// //           onChange={(e) =>
-// //             dispatch(
-// //               MapActions.setMapConfig({
-// //                 mapScale: parseFloat(e.target.value)
-// //               })
-// //             )
-// //           }
-// //           className="h-24 cursor-pointer"
-// //           style={{
-// //             writingMode: 'vertical-lr',
-// //             direction: 'rtl',
-// //             appearance: 'slider-vertical',
-// //             WebkitAppearance: 'slider-vertical',
-// //           }}
-// //         />
-
-// //         <span className="text-xs text-gray-300 font-medium">
-// //           {mapConfig.mapScale}x
-// //         </span>
-
-// //       </div>
-// //     </div>
-// //   )}
-
-// // </div>
-
-// //       {/* MAP VIEW */}
-// //       <div className="flex items-center gap-2">
-// //         <span className="text-gray-300 text-xs uppercase">Map View</span>
-// //         <select
-// //           value={mapConfig.mapView}
-// //           onChange={(e) =>
-// //             dispatch(
-// //               MapActions.setMapConfig({
-// //                 mapView: e.target.value
-// //               })
-// //             )
-// //           }
-// //           className="bg-[#1b2f55] text-white px-2 py-1 rounded"
-// //         >
-// //           <option value="mapbox://styles/mapbox/standard">Standard</option>
-// //           <option value="mapbox://styles/mapbox/streets-v11">Streets</option>
-// //           <option value="mapbox://styles/mapbox/outdoors-v11">Outdoors</option>
-// //           <option value="mapbox://styles/mapbox/light-v10">Light</option>
-// //           <option value="mapbox://styles/mapbox/dark-v10">Dark</option>
-// //           <option value="mapbox://styles/mapbox/satellite-v9">Satellite</option>
-// //           <option value="mapbox://styles/mapbox/satellite-streets-v11">Satellite Streets</option>
-// //           <option value="mapbox://styles/mapbox/navigation-day-v1">Navigation Day</option>
-// //           <option value="mapbox://styles/mapbox/navigation-night-v1">Navigation Night</option>
-// //         </select>
-// //       </div>
-
-// //       {/* MAPSYNC */}
-// //       <div className="flex items-center gap-2">
-// //         <span className="text-gray-300 text-xs uppercase">MapSync</span>
-// //         <button
-// //           onClick={() => dispatch(MapActions.setSyncEnabled(!syncEnabled))}
-// //           className={`w-10 h-5 rounded-full p-1 transition ${
-// //             syncEnabled ? "bg-blue-500" : "bg-gray-400"
-// //           }`}
-// //         >
-// //           <div
-// //             className={`bg-white w-4 h-4 rounded-full transform transition ${
-// //               syncEnabled ? "translate-x-4" : ""
-// //             }`}
-// //           />
-// //         </button>
-// //       </div>
-
-// //       {/* RIGHT SIDE BUTTONS */}
-// //       <div className="flex gap-2 flex-wrap ml-auto">
-// //         <button
-// //           onClick={handleClear}
-// //           className="bg-gray-500 px-3 py-1 rounded"
-// //         >
-// //           Clear
-// //         </button>
-// //         <button
-// //           onClick={handleSubmit}
-// //           className="bg-blue-500 px-4 py-1 rounded"
-// //         >
-// //           Submit
-// //         </button>
-// //       </div>
-
-// //     </div>
-
-// <div className="flex items-center gap-4 bg-[#0f1f3d] px-4 py-2 text-white text-sm">
-
-//   {/* DYNAMIC BACKEND FILTERS */}
-//   {Array.isArray(allFilters?.d1) &&
-//     allFilters.d1.map((group, groupIndex) => (
-//       <div
-//         key={`filter-${group.parent}-${groupIndex}`}
-//         className="relative"
-//       >
-//         <button
-//           onClick={() => toggleDropdown(group.parent)}
-//           className="px-3 py-1 bg-[#1b2f55] hover:bg-[#243b6b] text-white text-xs rounded-md transition"
-//         >
-//           {group.parent} ▾
-//         </button>
-
-//         {openDropdown === group.parent && (
-//           <div
-//             className="absolute left-0 mt-2 bg-white text-black p-4 rounded shadow z-50 w-64 max-h-72 overflow-y-auto"
-//             onClick={(e) => e.stopPropagation()}
-//           >
-//             {group.child?.map((item, itemIndex) => (
-//               <div key={`item-${item.name}-${itemIndex}`} className="mb-3">
-//                 <p className="font-semibold text-sm mb-1">
-//                   {item.name}
-//                 </p>
-
-//                 {item.columnName?.map((band, bandIndex) => (
-//                   <label
-//                     key={`band-${band.name}-${bandIndex}`}
-//                     className="block text-sm"
-//                   >
-//                     <input
-//                       type="checkbox"
-//                       className="mr-2"
-//                       onChange={() =>
-//                         handleCheck(item.name, band.name)
-//                       }
-//                     />
-//                     {band.name}
-//                   </label>
-//                 ))}
-//               </div>
-//             ))}
-//           </div>
-//         )}
-//       </div>
-//     ))}
-
-//   {/* SITE DROPDOWN */}
-//   <div className="relative">
-//     <button
-//       onClick={() => toggleDropdown("site")}
-//       className="px-3 py-1 bg-[#1b2f55] hover:bg-[#243b6b] text-white text-xs rounded-md transition"
-//     >
-//       Site ▾
-//     </button>
-
-//     {openDropdown === "site" && (
-//       <div
-//         className="absolute left-0 mt-2 bg-white text-black p-3 rounded shadow z-50 w-64"
-//         onClick={(e) => e.stopPropagation()}
-//       >
-//         <input
-//           type="text"
-//           value={siteSearch}
-//           onChange={(e) => setSiteSearch(e.target.value)}
-//           placeholder="Search site..."
-//           className="w-full border px-2 py-1 rounded mb-2 text-sm"
-//         />
-
-//         <div className="max-h-48 overflow-y-auto">
-//           {siteSuggestions.map((site, index) => (
-//             <div
-//               key={`site-${index}`}
-//               onClick={() => {
-//                 setSiteSearch(site);
-//                 setOpenDropdown(null);
-//               }}
-//               className="px-2 py-1 hover:bg-gray-200 cursor-pointer text-sm"
-//             >
-//               {site}
-//             </div>
-//           ))}
-//         </div>
-//       </div>
-//     )}
-//   </div>
-
-//   {/* SCALE BUTTON (Already Styled Correctly) */}
-//   <div ref={scaleRef} className="relative">
-//     <button
-//       onClick={() => setShowScale(prev => !prev)}
-//       className="px-3 py-1 bg-gray-100 hover:bg-green-100 text-black text-xs rounded-md transition"
-//     >
-//       Scale
-//     </button>
-
-//     {showScale && (
-//       <div
-//         className="absolute right-0 mt-2 bg-gray-900 p-3 rounded-lg shadow-xl border border-gray-700 z-50"
-//         onClick={(e) => e.stopPropagation()}
-//       >
-//         <div className="flex flex-col items-center gap-2">
-//           <span className="text-gray-300 text-xs uppercase">
-//             Scale
-//           </span>
-
-//           <input
-//             type="range"
-//             min={0.5}
-//             max={3}
-//             step={0.1}
-//             value={mapConfig.mapScale}
-//             onChange={(e) =>
-//               dispatch(
-//                 MapActions.setMapConfig({
-//                   mapScale: parseFloat(e.target.value)
-//                 })
-//               )
-//             }
-//             className="h-24 cursor-pointer"
-//             style={{
-//               writingMode: "vertical-lr",
-//               direction: "rtl",
-//               appearance: "slider-vertical",
-//               WebkitAppearance: "slider-vertical",
-//             }}
-//           />
-
-//           <span className="text-xs text-gray-300 font-medium">
-//             {mapConfig.mapScale}x
-//           </span>
-//         </div>
-//       </div>
-//     )}
-//   </div>
-
-//   {/* MAP VIEW DROPDOWN */}
-//   <div className="relative">
-//     <button
-//       onClick={() => toggleDropdown("mapView")}
-//       className="px-3 py-1 bg-[#1b2f55] hover:bg-[#243b6b] text-white text-xs rounded-md transition"
-//     >
-//       Map View ▾
-//     </button>
-
-//     {openDropdown === "mapView" && (
-//       <div
-//         className="absolute left-0 mt-2 bg-white text-black p-2 rounded shadow z-50 w-56"
-//         onClick={(e) => e.stopPropagation()}
-//       >
-//         {[
-//           { label: "Standard", value: "mapbox://styles/mapbox/standard" },
-//           { label: "Streets", value: "mapbox://styles/mapbox/streets-v11" },
-//           { label: "Outdoors", value: "mapbox://styles/mapbox/outdoors-v11" },
-//           { label: "Light", value: "mapbox://styles/mapbox/light-v10" },
-//           { label: "Dark", value: "mapbox://styles/mapbox/dark-v10" },
-//           { label: "Satellite", value: "mapbox://styles/mapbox/satellite-v9" },
-//           { label: "Satellite Streets", value: "mapbox://styles/mapbox/satellite-streets-v11" },
-//           { label: "Navigation Day", value: "mapbox://styles/mapbox/navigation-day-v1" },
-//           { label: "Navigation Night", value: "mapbox://styles/mapbox/navigation-night-v1" }
-//         ].map((option) => (
-//           <div
-//             key={option.value}
-//             onClick={() => {
-//               dispatch(
-//                 MapActions.setMapConfig({
-//                   mapView: option.value
-//                 })
-//               );
-//               setOpenDropdown(null);
-//             }}
-//             className="px-2 py-1 hover:bg-gray-200 cursor-pointer text-sm"
-//           >
-//             {option.label}
-//           </div>
-//         ))}
-//       </div>
-//     )}
-//   </div>
-
-//   {/* MAPSYNC */}
-//   <div className="flex items-center gap-2 ml-2">
-//     <span className="text-xs text-gray-300">Sync</span>
-//     <button
-//       onClick={() =>
-//         dispatch(MapActions.setSyncEnabled(!syncEnabled))
-//       }
-//       className={`w-10 h-5 rounded-full p-1 transition ${
-//         syncEnabled ? "bg-blue-500" : "bg-gray-400"
-//       }`}
-//     >
-//       <div
-//         className={`bg-white w-4 h-4 rounded-full transform transition ${
-//           syncEnabled ? "translate-x-4" : ""
-//         }`}
-//       />
-//     </button>
-//   </div>
-
-//   {/* RIGHT SIDE BUTTONS */}
-//   <div className="flex gap-2 flex-wrap ml-auto">
-//     <button
-//       onClick={handleClear}
-//       className="bg-gray-500 px-3 py-1 rounded text-xs"
-//     >
-//       Clear
-//     </button>
-//     <button
-//       onClick={handleSubmit}
-//       className="bg-blue-500 px-4 py-1 rounded text-xs"
-//     >
-//       Submit
-//     </button>
-//   </div>
-
-// </div>
-//   );
-// };
-
-// export default TelecomGlobalFilters;
-
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import MapActions from "../../store/actions/map-actions";
 import AuthActions from "../../store/actions/auth-actions";
 import { UilAngleDown, UilAngleUp } from '@iconscout/react-unicons';
+import CellThematicsPanel from "./CellThematicsPanel";
+import DropdownButton from "./DropdownButton";
+// import { HexColorPicker } from "react-colorful";
+import ColorPicker from "./ColorPicker";
+import RangeFilter from "./RangeFilter";
 
 const TelecomGlobalFilters = () => {
   const dispatch = useDispatch();
@@ -615,12 +16,15 @@ const TelecomGlobalFilters = () => {
   const mapConfig = useSelector(state => state.map.config);
   const syncEnabled = useSelector(state => state.map.syncEnabled);
   const rawCells = useSelector(state => state.map.rawCells || []);
-  const boundaryGroups = useSelector(
-    state => state.map.boundaryGroups || []
-  );
-  console.log("BOUNDARY GROUPS STATE:", boundaryGroups);
-  console.log("RENDERING BOUNDARY UI:", boundaryGroups);
+  const boundaryGroups = useSelector(state => state.map.boundaryGroups || []);
+  const activeThematic = useSelector(state => state.map.activeThematic);
 
+  const rfPredictionFilters = useSelector(
+    state => state.map.rfPredictionFilters || []
+  );
+
+  // const [showTools, setShowTools] = useState(false);
+  const [showRightTools, setShowRightTools] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [selected, setSelected] = useState({});
   const [siteSearch, setSiteSearch] = useState("");
@@ -629,22 +33,242 @@ const TelecomGlobalFilters = () => {
   const [selectedBoundaries, setSelectedBoundaries] = useState({});
   const [expandedLayer, setExpandedLayer] = useState(null);
 
+  const [driveThematic, setDriveThematic] = useState("RSSI");
+  const [startDateTime, setStartDateTime] = useState("");
+  const [endDateTime, setEndDateTime] = useState("");
+
+  const [rangeMin, setRangeMin] = useState("");
+  const [rangeMax, setRangeMax] = useState("");
+  const [rangeColor, setRangeColor] = useState("#ff0000");
+  const [ranges, setRanges] = useState([
+    { min: "", max: "", color: "#ff0000" }
+  ]);
+
+  const [activeColorIndex, setActiveColorIndex] = useState(null);
   const containerRef = useRef(null);
 
   const [searchMode, setSearchMode] = useState("site"); // "site" | "cell"
   const [selectedSite, setSelectedSite] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null);
 
+  const [rfParameter, setRfParameter] = useState("RSRP");
+  const [rfRangeColors, setRfRangeColors] = useState({});
+
+  const rfParameterOptions = useMemo(() => {
+    return [...new Set(
+      rfPredictionFilters.map(p => p.parameter_name)
+    )];
+  }, [rfPredictionFilters]);
+
+  const rfRanges = [
+    ...new Set(
+      rfPredictionFilters
+        .filter(f => f.parameter_name === rfParameter)
+        .map(f => f.range_label)
+    )
+  ];
+
+  const rfRegions = [
+    ...new Set(rfPredictionFilters.map(item => item.name))
+  ];
+
+  const updateRfRangeColor = (range, color) => {
+
+  setRfRangeColors(prev => ({
+    ...prev,
+    [range]: color
+  }));
+
+};
+
+  const driveThematicOptions = [
+    "RSSI",
+    "RSRP",
+    "DL Thrp",
+    "Frequency",
+    "Band",
+    "Technology"
+  ];
+
+  const addRange = () => {
+    setRanges(prev => [
+      ...prev,
+      { min: "", max: "", color: "#ff0000" }
+    ]);
+  };
+
+  const updateRange = (index, field, value) => {
+    setRanges(prev => {
+      const updated = [...prev];
+      updated[index][field] = value;
+      return updated;
+    });
+  };
+
+  const removeRange = (index) => {
+      setRanges(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const mapNames = [
+  "Telkom",
+  "China Mobile",
+  "Airtel",
+  "Jio",
+  "Safaricom",
+  "Zain"
+];
+
+const [syncMaps, setSyncMaps] = useState({
+  Telkom: true,
+  "China Mobile": true,
+  Airtel: true,
+  Jio: true,
+  Safaricom: true,
+  Zain: true
+});
+
+const toggleSyncMap = (name) => {
+  setSyncMaps(prev => ({
+    ...prev,
+    [name]: !prev[name]
+  }));
+};
+
+  // drive test layer
+  const driveTestData = useSelector(
+    state => state.map.driveTestData || []
+  );
+  const [selectedDriveSessions, setSelectedDriveSessions] = useState([]);
+  const sessionIds = [
+    ...new Set(driveTestData.map(d => d.session_id))
+  ];
+//   const sessionIds = useSelector(
+//   state => state.map.driveTestSessions || []
+// );
+
+  const toggleDriveSession = (session) => {
+    setSelectedDriveSessions(prev => {
+      if (prev.includes(session)) {
+        return prev.filter(s => s !== session);
+      }
+      return [...prev, session];
+
+    });
+
+  };
+
+  const selectAllSessions = () => {
+
+  if (selectedDriveSessions.length === sessionIds.length) {
+    setSelectedDriveSessions([]);
+  } else {
+    setSelectedDriveSessions(sessionIds);
+  }
+
+};
+
+const applyDriveTestLayer = () => {
+  dispatch(
+    MapActions.setDriveTestFilters({
+      sessions: selectedDriveSessions,
+      startDateTime,
+      endDateTime,
+      thematic: driveThematic,
+      ranges,
+    })
+  );
+
+  dispatch(
+    MapActions.setActiveDriveSessions(selectedDriveSessions)
+  );
+
+  dispatch(
+    MapActions.getDriveTestData({
+      sessions: selectedDriveSessions,
+      startDateTime,
+      endDateTime
+    })
+  );
+  
+  setOpenDropdown(null);
+};
+
+const clearDriveTestLayer = () => {
+  setSelectedDriveSessions([]);
+  dispatch(
+    MapActions.setActiveDriveSessions([])
+  );
+  setOpenDropdown(null);
+};
+
+const selectAllRfRegions = () => {
+
+  if (selectedRfPredictions.length === rfRegions.length) {
+    setSelectedRfPredictions([]);
+  } else {
+    setSelectedRfPredictions(rfRegions);
+  }
+
+};
+
+const toggleRfLayer = () => {
+
+  setRfLayerEnabled(prev => !prev);
+
+  if (!rfLayerEnabled) {
+    setSelectedRfPredictions(rfRegions);
+  } else {
+    setSelectedRfPredictions([]);
+  }
+
+};
+const toggleRfPrediction = (name) => {
+
+  setSelectedRfPredictions(prev => {
+
+    if (prev.includes(name)) {
+      return prev.filter(n => n !== name);
+    }
+
+    return [...prev, name];
+
+  });
+
+};
   /* ---------------- LOAD DATA ---------------- */
+  // const didLoad = useRef(false);
   useEffect(() => {
+    // if (didLoad.current) return;
+   // didLoad.current = true;
+
     dispatch(MapActions.getTelecomFilterMeta());
+    dispatch(MapActions.getTelecomTechMeta());   //
+    // dispatch(MapActions.getUserMapSetup());
     dispatch(MapActions.getMultiVendorCells({}));
+    dispatch(MapActions.getRfPredictionFilters());
   }, []);
 
   /* ----------- CLOSE DROPDOWN ON OUTSIDE CLICK ----------- */
+  // useEffect(() => {
+  //   const handleClickOutside = (e) => {
+  //     // Ignore clicks inside color picker
+  //     // if (e.target.closest(".color-picker-root")) return;
+
+  //     if (containerRef.current && !containerRef.current.contains(e.target)) {
+  //       setOpenDropdown(null);
+  //     }
+  //   };
+
+  //   document.addEventListener("mousedown", handleClickOutside);
+  //   return () =>
+  //     document.removeEventListener("mousedown", handleClickOutside);
+  // }, []);
+
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
+      const inside = containerRef.current?.contains(e.target);
+      if (!inside) {
+        console.log("Closing dropdown due to outside click");
         setOpenDropdown(null);
       }
     };
@@ -658,7 +282,7 @@ const TelecomGlobalFilters = () => {
     setOpenDropdown(openDropdown === name ? null : name);
   };
 
-  // const handleBoundaryCheck = (group, name) => {
+  // const toggleChildLayerSelection = (group, name) => {
 
   //   setSelectedBoundaries(prev => {
 
@@ -680,42 +304,136 @@ const TelecomGlobalFilters = () => {
 
   // };
 
-  const toggleLayer = (group) => {
+  // const toggleParentLayerSelection = (group) => {
 
-    setSelectedLayers(prev => ({
-      ...prev,
-      [group]: !prev[group]
-    }));
+  //   setSelectedLayers(prev => ({
+  //     ...prev,
+  //     [group]: !prev[group]
+  //   }));
 
-    setExpandedLayer(prev =>
-      prev === group ? null : group
-    );
+  //   setExpandedLayer(prev =>
+  //     prev === group ? null : group
+  //   );
 
+  // };
+
+  // const toggleParentLayerSelection = (group) => {
+
+  //   setSelectedLayers(prev => {
+  //     const newValue = !prev[group];
+
+  //     // handle RF Predictions separately
+  //     if (group === "RF") {
+  //       setSelectedBoundaries(boundaries => ({
+  //         ...boundaries,
+  //         RF: newValue ? rfRegions : []
+  //       }));
+  //     }
+
+  //     return {
+  //       ...prev,
+  //       [group]: newValue
+  //     };
+  //   });
+
+  //   setExpandedLayer(prev =>
+  //     prev === group ? null : group
+  //   );
+
+  // };
+
+  //  ADD MAP LAYERS (Selection UI --Parent/Group of geojson boundaries )
+  const toggleParentLayerSelection = (group) => {
+
+    const isSelected = selectedLayers[group];
+
+    // toggle parent checkbox
+    setSelectedLayers(prev => {
+        const newState = {
+        ...prev,
+        [group]: !prev[group]
+        };
+
+        if (group === "DRIVE_TEST") {
+
+        if (!prev[group]) {
+            // selecting parent → select all sessions
+            setSelectedDriveSessions(sessionIds);
+        } else {
+            // unselecting parent → clear sessions
+            setSelectedDriveSessions([]);
+        }
+
+        }
+        return newState;
+  });
+
+    // select/deselect children
+    if (group === "RF") {
+      setSelectedBoundaries(prev => ({
+        ...prev,
+        RF: !isSelected ? rfRegions : []
+      }));
+    }
+    else {
+      const groupObj = boundaryGroups.find(
+        g => g.shapegroup === group
+      );
+
+      setSelectedBoundaries(prev => ({
+        ...prev,
+        [group]: !isSelected ? groupObj?.shapenames || [] : []
+      }));
+    }
+
+    // ⭐ OPEN CHILD LIST when selecting parent
+    if (!isSelected) {
+      setExpandedLayer(group);
+    }
   };
 
-  const handleBoundaryCheck = (group, name) => {
+ //  ADD MAP LAYERS (Selection UI --Child Toggle of geojson boundaries )
+  const toggleChildLayerSelection = (group, name) => {
 
     setSelectedBoundaries(prev => {
 
       const existing = prev[group] || [];
 
+      let updated;
+
       if (existing.includes(name)) {
-        return {
-          ...prev,
-          [group]: existing.filter(n => n !== name)
-        };
+        updated = existing.filter(n => n !== name);
+      } else {
+        updated = [...existing, name];
       }
+
+      // find total children count
+      let totalChildren = 0;
+
+      if (group === "RF") {
+        totalChildren = rfRegions.length;
+      } else {
+        const groupObj = boundaryGroups.find(
+          g => g.shapegroup === group
+        );
+        totalChildren = groupObj?.shapenames?.length || 0;
+      }
+
+      // update parent checkbox state
+      setSelectedLayers(prevLayers => ({
+        ...prevLayers,
+        [group]: updated.length === totalChildren
+      }));
 
       return {
         ...prev,
-        [group]: [...existing, name]
+        [group]: updated
       };
 
     });
 
   };
-
-  // const applyBoundaryLayers = () => {
+  // const applySelectedMapLayers = () => {
 
   //   Object.keys(selectedBoundaries).forEach(group => {
 
@@ -735,54 +453,180 @@ const TelecomGlobalFilters = () => {
 
   // };
 
-  const applyBoundaryLayers = () => {
+//   const applySelectedMapLayers = () => {
+//     boundaryGroups.forEach(group => {
 
-    boundaryGroups.forEach(group => {
+//       const parentSelected = selectedLayers[group.shapegroup];
+//       const children = selectedBoundaries[group.shapegroup] || [];
 
-      const parentSelected = selectedLayers[group.shapegroup];
-      const children = selectedBoundaries[group.shapegroup] || [];
+//       if (parentSelected) {
 
-      if (parentSelected) {
+//         dispatch(
+//           MapActions.getBoundaryGeoJson(
+//             group.shapegroup,
+//             group.shapetypes[0],
+//             []
+//           )
+//         );
 
+//       }
+
+//       else if (children.length > 0) {
+
+//         dispatch(
+//           MapActions.getBoundaryGeoJson(
+//             group.shapegroup,
+//             group.shapetypes[0],
+//             children
+//           )
+//         );
+
+//       }
+
+//     });
+
+//   // RF PREDICTIONS
+  
+//     const rfRegionsSelected = selectedBoundaries["RF"] || [];
+//     dispatch(MapActions.clearRfPredictionLayer());
+//     if (rfRegionsSelected.length > 0) {
+//       rfRegionsSelected.forEach(region => {
+//         dispatch(
+//           MapActions.getRfPredictionLayer(
+//             region,
+//             rfParameter
+//           )
+//         );
+//       });
+//     }
+//   //  if (rfLayerEnabled && selectedRfPredictions.length > 0) {
+//   //   selectedRfPredictions.forEach(region => {
+//   //     dispatch(
+//   //       MapActions.getRfPredictionLayer(
+//   //         region,
+//   //         rfParameter
+//   //       )
+//   //     );
+//   //   });
+//   // }
+
+// // if (rfLayerEnabled && selectedRfPredictions.length > 0) {
+
+// //   selectedRfPredictions.forEach(region => {
+
+// //     const regionFilters = rfPredictionFilters.filter(
+// //       f =>
+// //         f.name === region &&
+// //         f.parameter_name === rfParameter
+// //     );
+
+// //     regionFilters.forEach(filter => {
+
+// //       dispatch(
+// //         MapActions.getRfPredictionLayer(
+// //           filter.name,
+// //           filter.parameter_name,
+// //           filter.range_label
+// //         )
+// //       );
+
+// //     });
+
+// //   });
+
+// // }
+//     setOpenDropdown(null);
+//   };
+
+const applySelectedMapLayers = () => {
+
+  // clear existing layers first
+  dispatch(MapActions.clearBoundaryLayer());
+  dispatch(MapActions.clearRfPredictionLayer());
+
+  boundaryGroups.forEach(group => {
+    const parentSelected = selectedLayers[group.shapegroup];
+    const children = selectedBoundaries[group.shapegroup] || [];
+    if (parentSelected) {
+
+      dispatch(
+        MapActions.getBoundaryGeoJson(
+          group.shapegroup,
+          group.shapetypes[0],
+          []
+        )
+      );
+
+    }
+    else if (children.length > 0) {
+
+      dispatch(
+        MapActions.getBoundaryGeoJson(
+          group.shapegroup,
+          group.shapetypes[0],
+          children
+        )
+      );
+
+    }
+  });
+
+  //   RF PRedictions
+  const rfRegionsSelected = selectedBoundaries["RF"] || [];
+  rfRegionsSelected.forEach(region => {
+
+    dispatch(
+      MapActions.getRfPredictionLayer(
+        region,
+        rfParameter
+      )
+    );
+
+  });
+
+  if (selectedLayers["DRIVE_TEST"]) {
         dispatch(
-          MapActions.getBoundaryGeoJson(
-            group.shapegroup,
-            group.shapetypes[0],
-            []
-          )
+            MapActions.setDriveTestFilters({
+            sessions: selectedDriveSessions,
+            startDateTime,
+            endDateTime,
+            thematic: driveThematic,
+            ranges,
+            })
         );
-
-      }
-
-      else if (children.length > 0) {
-
         dispatch(
-          MapActions.getBoundaryGeoJson(
-            group.shapegroup,
-            group.shapetypes[0],
-            children
-          )
+            MapActions.setActiveDriveSessions(selectedDriveSessions)
         );
+        dispatch(
+            MapActions.getDriveTestData({
+            sessions: selectedDriveSessions,
+            startDateTime,
+            endDateTime
+            })
+        );
+    }
 
-      }
+  setOpenDropdown(null);
 
-    });
+};
 
-    setOpenDropdown(null);
-
-  };
-
-  const clearBoundaryLayers = () => {
+  const clearAllMapLayers = () => {
 
     setSelectedLayers({});
     setSelectedBoundaries({});
     setExpandedLayer(null);
 
     dispatch(MapActions.clearBoundaryLayer());
+    dispatch(MapActions.clearRfPredictionLayer());
+
+    setSelectedDriveSessions([]);
+    dispatch(MapActions.setActiveDriveSessions([]));
+
     setOpenDropdown(null);
 
   };
 
+  // Technology / Region filters (top-left dropdowns)
   const handleCheck = (parent, value) => {
     setSelected(prev => {
       const existing = prev[parent] || [];
@@ -793,6 +637,7 @@ const TelecomGlobalFilters = () => {
     });
   };
 
+  // For Technology / Region filters (top-left dropdowns)
   const handleSubmit = () => {
     const payload = { ...selected };
     if (siteSearch.trim()) {
@@ -804,7 +649,8 @@ const TelecomGlobalFilters = () => {
     dispatch(AuthActions.setupConf(true, {
       mapScale: mapConfig.mapScale,
       mapView: mapConfig.mapView,
-      saveMapFilters: JSON.stringify(payload)
+      saveMapFilters: JSON.stringify(payload),
+      saveThematics: JSON.stringify(activeThematic)
     }));
   };
 
@@ -815,31 +661,16 @@ const TelecomGlobalFilters = () => {
 
   // };
 
-  const handleClear = () => {
+ const clearGlobalFilters = () => {
 
-    setSelected({});
-    setSiteSearch("");
-    setSelectedSite(null);
-    setSelectedCell(null);
-    // setHighlightedCell(null);
-    setOpenDropdown(null);
+  setSelected({});
+  setSiteSearch("");
 
-    dispatch(MapActions.setHighlightedCell(null));
-    dispatch(MapActions.setSelectedCell(null));
+  dispatch(
+    MapActions.getMultiVendorCells({})
+  );
 
-    dispatch(
-      MapActions.setViewState({
-        longitude: 77.209,
-        latitude: 28.6139,
-        zoom: 6,
-        pitch: 0,
-        bearing: 0
-      })
-    );
-
-    dispatch(MapActions.getMultiVendorCells({}));
-
-  };
+};
 
   const handleResetSearch = () => {
 
@@ -870,692 +701,836 @@ const TelecomGlobalFilters = () => {
     )
     .slice(0, 50); // limit for performance
   
+    const RightToolbarItems = () => (
+      <>
+        {/* RIGHT side navigation panel*/}
+        <div className="flex flex-col md:flex-row gap-3">
 
-  return (
-    <div
-      ref={containerRef}
-  className="flex flex-wrap items-start
- gap-3 bg-[#0b1c38] px-4 py-3 text-white text-sm  w-full"
-    >
-
-       {/* ----------- SCALE ----------- */}
-      <div className="relative">
-        <button
-          onClick={() => toggleDropdown("scale")}
-              className="px-4 py-2 bg-[#162a52] hover:bg-[#1e3a70] text-white text-sm rounded-lg border border-[#2c4a85] transition min-w-[120px] flex items-center justify-center"
-        >
-           Scale ▾
-        </button>
-
-        {openDropdown === "scale" && (
-          <div className="absolute right-0 mt-3 bg-[#1b2f55] p-4 rounded-xl shadow-xl z-50 w-[120px]">
-            <div className="flex flex-col items-center gap-3">
-              <input
-                type="range"
-                min={0.5}
-                max={3}
-                step={0.1}
-                value={mapConfig.mapScale}
-                onChange={(e) =>
-                  dispatch(
-                    MapActions.setMapConfig({
-                      mapScale: parseFloat(e.target.value)
-                    })
-                  )
-                }
-                className="h-24 cursor-pointer"
-                style={{
-                  writingMode: "vertical-lr",
-                  direction: "rtl",
-                  appearance: "slider-vertical",
-                  WebkitAppearance: "slider-vertical"
-                }}
-              />
-
-              <span className="text-xs text-white font-medium">
-                {mapConfig.mapScale}x
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ----------- DYNAMIC FILTERS ----------- */}
-      {Array.isArray(allFilters?.d1) &&
-        allFilters.d1.map((group, groupIndex) => (
-          <div key={groupIndex} className="relative">
-
-            <button
-              onClick={() => toggleDropdown(group.parent)}
-              className="px-4 py-2 bg-[#162a52] hover:bg-[#1e3a70] text-white text-sm rounded-lg border border-[#2c4a85] transition min-w-[120px] flex justify-between items-center"
+            {/* ADD MAP layers (GeoJSON map Layers) */}
+             <DropdownButton
+              id="layers" 
+              label="Add MapLayer" 
+              openDropdown={openDropdown}
+              toggleDropdown={toggleDropdown}
             >
-              {group.parent} ▾
-            </button>
+              <div className="absolute right-0 sm:right-0 sm:left-auto top-full mt-2 bg-white text-black p-4 rounded-xl shadow-xl z-50 w-[280px] sm:w-[320px] max-w-[90vw] max-h-[70vh] overflow-y-auto">
+                  <div className="flex gap-3 mb-2 ml-auto flex-shrink-0">
+                    <button
+                      onClick={applySelectedMapLayers}
+                      className="flex-1 bg-blue-600 text-white py-1 rounded"
+                    >
+                      Apply
+                    </button>
 
-            {openDropdown === group.parent && (
-              // <div className="absolute right-0 mt-3 bg-[#f8fafc] text-black p-5 rounded-xl shadow-2xl border border-gray-300 z-50 w-[300px] max-w-[90vw] max-h-[70vh] overflow-y-auto">
-<div className="absolute left-0 mt-3 bg-white text-black p-5 rounded-xl shadow-2xl z-50
-w-[260px] sm:w-[320px] max-w-[90vw] max-h-[70vh] overflow-y-auto">              {group.child?.map((techBlock, techIndex) => {
+                    <button
+                      onClick={clearAllMapLayers}
+                      className="flex-1 bg-gray-400 text-white py-1 rounded"
+                    >
+                      Clear
+                    </button>
 
-                  const isTechSelected =
-                    selected[techBlock.name]?.length ===
-                    techBlock.columnName?.length;
+                  </div>
 
-                  return (
-                    <div key={techIndex} className="mb-4 border-b pb-3">
+                  {/* Kenya Boundary LAYER GROUPS */}
+                  {boundaryGroups.map((group, index) => (
 
-                      {/* Parent Technology */}
-                      <div className="flex items-center justify-between mb-2">
+                    <div key={index} className="border rounded p-2 mb-2">
 
-                        <label className="flex items-center gap-2 font-semibold cursor-pointer">
+                      <div
+                        onClick={() =>
+                          setExpandedLayer(
+                            expandedLayer === group.shapegroup
+                              ? null
+                              : group.shapegroup
+                          )
+                        }
+                        className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
+                      >
+
+                        {/* LEFT SIDE */}
+
+                        <div className="flex items-center gap-2">
+
                           <input
                             type="checkbox"
-                            checked={isTechSelected}
-                            onChange={() => {
-                              const allBands =
-                                techBlock.columnName.map(b => b.name);
-                              setSelected(prev => ({
-                                ...prev,
-                                [techBlock.name]:
-                                  isTechSelected ? [] : allBands
-                              }));
-                            }}
+                            checked={selectedLayers[group.shapegroup] || false}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={() => toggleParentLayerSelection(group.shapegroup)}
                           />
-                          {techBlock.name}
-                        </label>
 
-                        <input
-                          type="color"
-                          className="w-6 h-6 cursor-pointer"
-                          onChange={(e) =>
-                            console.log("Tech Color:", techBlock.name, e.target.value)
+                          <span className="font-medium">
+                            {group.shapegroup} boundaries
+                          </span>
+
+                        </div>
+
+                        {/* DROPDOWN ARROW */}
+
+                        <span className="text-xl select-none">
+                          {expandedLayer === group.shapegroup 
+                            ? <UilAngleUp size={22} />
+                            : <UilAngleDown size={22} />
                           }
-                        />
+                        </span>
+
                       </div>
 
-                      {/* Bands */}
-                      <div className="pl-5 space-y-1">
-                        {techBlock.columnName?.map((band, bandIndex) => (
-                          <div
-                            key={bandIndex}
-                            className="flex items-center justify-between"
-                          >
-                            <label className="flex items-center gap-2 text-sm">
+                      {/* CHILD LIST */}
+
+                      {expandedLayer === group.shapegroup && (
+
+                        <div className="mt-2 ml-4 max-h-[200px] overflow-y-auto border rounded p-2">
+
+                          {group.shapenames.map((name, idx) => (
+
+                            <label
+                              key={idx}
+                              className="flex items-center gap-2 text-sm mb-1 cursor-pointer"
+                            >
+
                               <input
                                 type="checkbox"
                                 checked={
-                                  selected[techBlock.name]?.includes(band.name) || false
+                                  selectedBoundaries[group.shapegroup]?.includes(name) || false
                                 }
                                 onChange={() =>
-                                  handleCheck(techBlock.name, band.name)
+                                  toggleChildLayerSelection(group.shapegroup, name)
                                 }
                               />
-                              {band.name}
+
+                              {name}
+
                             </label>
 
+                          ))}
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  ))}
+
+                  {/* RF PREDICTIONS */}
+                  <div className="border rounded p-2 mb-2">
+
+                    <div
+                      onClick={() =>
+                        setExpandedLayer(
+                          expandedLayer === "RF"
+                            ? null
+                            : "RF"
+                        )
+                      }
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
+                    >
+
+                      <div className="flex items-center gap-2">
+
+                        <input
+                          type="checkbox"
+                          checked={selectedLayers["RF"] || false}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleParentLayerSelection("RF")}
+                        />
+
+                        <span className="font-medium">
+                          RF Predictions
+                        </span>
+
+                      </div>
+
+                      <span className="text-xl select-none">
+                        {expandedLayer === "RF"
+                          ? <UilAngleUp size={22}/>
+                          : <UilAngleDown size={22}/>
+                        }
+                      </span>
+
+                    </div>
+
+                    {expandedLayer === "RF" && (
+                    <div>
+                      <div className="mt-2 ml-4 max-h-[200px] overflow-y-auto border rounded p-2">
+
+                        {rfRegions.map((name, idx) => (
+
+                          <label
+                            key={idx}
+                            className="flex items-center gap-2 text-sm mb-1 cursor-pointer"
+                          >
+
                             <input
-                              type="color"
-                              className="w-5 h-5 cursor-pointer"
-                              onChange={(e) =>
-                                console.log("Band Color:", band.name, e.target.value)
+                              type="checkbox"
+                              checked={
+                                selectedBoundaries["RF"]?.includes(name) || false
+                              }
+                              onChange={() =>
+                                toggleChildLayerSelection("RF", name)
                               }
                             />
-                          </div>
+
+                            {name}
+
+                          </label>
+
                         ))}
+
+                          </div>
+
+                        {/* THEMATIC */}
+                        <div className="mt-3">
+
+                          <div className="text-xs font-semibold text-gray-500 mb-1">
+                            Thematic
+                          </div>
+
+                          <select
+                            value={rfParameter}
+                            onChange={(e) => setRfParameter(e.target.value)}
+                            className="w-full border rounded px-2 py-1 text-sm"
+                          >
+
+                            {rfParameterOptions.map(opt => (
+                              <option key={opt}>{opt}</option>
+                            ))}
+
+                          </select>
+
+                        </div>
+
+                        {/* RANGE & COLORS */}
+                        <div className="mt-3">
+                          <div className="text-xs font-semibold text-gray-500 mb-1">
+                            Range & Colors
+                          </div>
+
+                          <div className="space-y-2">
+
+                            {rfRanges.map(range => (
+
+                              <div
+                                key={range}
+                                className="flex items-center justify-between border rounded px-2 py-1"
+                              >
+
+                                <span className="text-sm">
+                                  {range}
+                                </span>
+
+                                <ColorPicker
+                                  value={rfRangeColors[range] || "#ff0000"}
+                                  onChange={(color) =>
+                                    updateRfRangeColor(range, color)
+                                  }
+                                />
+
+                              </div>
+
+                            ))}
+
+                          </div>
+                      </div>
+
+                      </div>
+
+                    )}
+
+                  </div>
+
+                  {/* DRIVE TEST LAYER */}
+                <div className="border rounded p-2 mb-2">
+
+                  <div
+                    onClick={() =>
+                      setExpandedLayer(
+                        expandedLayer === "DRIVE_TEST"
+                          ? null
+                          : "DRIVE_TEST"
+                      )
+                    }
+                    className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
+                  >
+
+                    <div className="flex items-center gap-2">
+
+                      <input
+                        type="checkbox"
+                        checked={selectedLayers["DRIVE_TEST"] || false}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleParentLayerSelection("DRIVE_TEST")}
+                      />
+
+                      <span className="font-medium">
+                        Drive Test Layer
+                      </span>
+
+                    </div>
+
+                    <span className="text-xl select-none">
+                      {expandedLayer === "DRIVE_TEST"
+                        ? <UilAngleUp size={22}/>
+                        : <UilAngleDown size={22}/>
+                      }
+                    </span>
+
+                  </div>
+
+                  {expandedLayer === "DRIVE_TEST" && (
+
+                    <div className="mt-3 border rounded p-3 space-y-3">
+
+                      {/* Date */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="datetime-local"
+                          value={startDateTime}
+                          onChange={(e) => setStartDateTime(e.target.value)}
+                          className="border rounded px-2 py-1 text-xs"
+                        />
+
+                        <input
+                          type="datetime-local"
+                          value={endDateTime}
+                          onChange={(e) => setEndDateTime(e.target.value)}
+                          className="border rounded px-2 py-1 text-xs"
+                        />
+                      </div>
+
+                      {/* Thematic */}
+                      <select
+                        value={driveThematic}
+                        onChange={(e) => setDriveThematic(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        {driveThematicOptions.map((opt) => (
+                          <option key={opt}>{opt}</option>
+                        ))}
+                      </select>
+
+                      {/* Range Filter */}
+                      <RangeFilter
+                        value={ranges}
+                        onChange={setRanges}
+                      />
+
+                      {/* Sessions */}
+                      <div>
+                        <label className="flex items-center gap-2 mb-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedDriveSessions.length === sessionIds.length}
+                            onChange={selectAllSessions}
+                          />
+                          Select All Sessions
+                        </label>
+
+                        <div className="max-h-[160px] overflow-y-auto border rounded p-2">
+                          {sessionIds.map((session) => (
+                            <label
+                              key={session}
+                              className="flex items-center gap-2 text-sm mb-1"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedDriveSessions.includes(session)}
+                                onChange={() => toggleDriveSession(session)}
+                              />
+                              {session}
+                            </label>
+                          ))}
+                        </div>
                       </div>
 
                     </div>
-                  );
-                })}
 
+                  )}
+
+                </div>
+
+                </div>
+            </DropdownButton>
+
+            <CellThematicsPanel   
+              openDropdown={openDropdown}
+              toggleDropdown={toggleDropdown}
+            />
+
+            {/* ----------- MAP Style ----------- */}
+            <DropdownButton
+              id="mapStyle" 
+              label="Map Style" 
+              openDropdown={openDropdown}
+              toggleDropdown={toggleDropdown}
+            >
+              <div className="absolute right-0 mt-3 bg-white text-black p-5 rounded-xl shadow-2xl z-50
+              w-[280px] sm:w-[320px] max-w-[90vw]">
+                    {[
+                    { label: "Standard", value: "mapbox://styles/mapbox/standard" },
+                    { label: "Streets", value: "mapbox://styles/mapbox/streets-v11" },
+                    { label: "Satellite", value: "mapbox://styles/mapbox/satellite-v9" },
+                    { label: "Dark", value: "mapbox://styles/mapbox/dark-v10" },
+                    { label: "Outdoors", value: "mapbox://styles/mapbox/outdoors-v11" },
+                    { label: "Light", value: "mapbox://styles/mapbox/light-v10" },
+                    { label: "Satellite Streets", value: "mapbox://styles/mapbox/satellite-streets-v11" },
+                    { label: "Navigation Day", value: "mapbox://styles/mapbox/navigation-day-v1" },
+                  ].map((option) => (
+                    <div
+                      key={option.value}
+                      onClick={() => {
+                        dispatch(
+                          MapActions.setMapConfig({
+                            mapView: option.value
+                          })
+                        );
+                        setOpenDropdown(null);
+                      }}
+                      className="px-2 py-1 hover:bg-gray-200 cursor-pointer text-sm"
+                    >
+                      {option.label}
+                    </div>
+                  ))}
               </div>
-            )}
-          </div>
-        ))}
+            </DropdownButton>
 
-      {/* ADD GeoJSON map Layers(Boundary Groups) */}
-      {/* {boundaryGroups?.map((group, index) => (
+            {/* ----------- SCALE ----------- */}
+            <DropdownButton
+              id="cellScale"
+              label="Cell Scale"
+              openDropdown={openDropdown}
+              toggleDropdown={toggleDropdown}
+            >
+              <div className="absolute right-0 mt-3 bg-[#1b2f55] p-4 rounded-xl shadow-xl z-50 w-[120px]">
 
-        <div key={index} className="relative">
-
-          <button
-            onClick={() => toggleDropdown(group.shapegroup)}
-            className="px-4 py-2 bg-[#162a52] hover:bg-[#1e3a70] text-white text-sm rounded-lg border border-[#2c4a85]"
-          >
-            {group.shapegroup} Boundaries ▾
-          </button>
-
-          {openDropdown === group.shapegroup && (
-
-            <div className="absolute left-0 mt-3 bg-white text-black p-5 rounded-xl shadow-xl z-50 w-[320px] max-h-[400px] overflow-y-auto">
-
-              {group.shapenames.map((name, idx) => (
-
-                <label key={idx} className="flex items-center gap-2 text-sm">
+                <div className="flex flex-col items-center gap-3">
 
                   <input
-                    type="checkbox"
-                    checked={
-                      selectedBoundaries[group.shapegroup]?.includes(name) || false
+                    type="range"
+                    min={0.5}
+                    max={3}
+                    step={0.1}
+                    value={mapConfig.mapScale}
+                    onChange={(e) =>
+                      dispatch(
+                        MapActions.setMapConfig({
+                          mapScale: parseFloat(e.target.value)
+                        })
+                      )
                     }
-                    onChange={() =>
-                      handleBoundaryCheck(group.shapegroup, name)
-                    }
+                    className="h-24 cursor-pointer"
+                    style={{
+                      writingMode: "vertical-lr",
+                      direction: "rtl",
+                      appearance: "slider-vertical",
+                      WebkitAppearance: "slider-vertical"
+                    }}
                   />
 
-                  {name}
-
-                </label>
-
-              ))}
-
-              <button
-                onClick={() => {
-
-                  dispatch(
-                    MapActions.getBoundaryGeoJson(
-                      group.shapegroup,
-                      group.shapetypes[0],
-                      selectedBoundaries[group.shapegroup] || []
-                    )
-                  );
-
-                  setOpenDropdown(null);
-
-                }}
-                className="mt-4 w-full bg-blue-600 text-white py-2 rounded"
-              >
-                Apply Layer
-              </button>
-
-            </div>
-
-          )}
-
-        </div>
-
-      ))} */}
-
-      {/* ----------- MAP VIEW ----------- */}
-      <div className="relative">
-        <button
-          onClick={() => toggleDropdown("mapView")}
-          className="
-          px-3 py-2
-          bg-[#162a52]
-          hover:bg-[#1e3a70]
-          text-white text-sm
-          rounded-lg
-          border border-[#2c4a85]
-          transition
-          min-w-[80px]
-          w-auto"        
-        >
-          Map View ▾
-        </button>
-
-        {openDropdown === "mapView" && (
-        <div className="absolute left-0 mt-3 bg-white text-black p-2 rounded-xl shadow-xl z-50
-          w-[200px] sm:w-[220px] max-w-[90vw]">
-              {[
-              { label: "Standard", value: "mapbox://styles/mapbox/standard" },
-              { label: "Streets", value: "mapbox://styles/mapbox/streets-v11" },
-              { label: "Satellite", value: "mapbox://styles/mapbox/satellite-v9" },
-              { label: "Dark", value: "mapbox://styles/mapbox/dark-v10" },
-              { label: "Outdoors", value: "mapbox://styles/mapbox/outdoors-v11" },
-              { label: "Light", value: "mapbox://styles/mapbox/light-v10" },
-              { label: "Satellite Streets", value: "mapbox://styles/mapbox/satellite-streets-v11" },
-              { label: "Navigation Day", value: "mapbox://styles/mapbox/navigation-day-v1" },
-              { label: "Navigation Night", value: "mapbox://styles/mapbox/navigation-night-v1" }
-            ].map((option) => (
-              <div
-                key={option.value}
-                onClick={() => {
-                  dispatch(
-                    MapActions.setMapConfig({
-                      mapView: option.value
-                    })
-                  );
-                  setOpenDropdown(null);
-                }}
-                className="px-2 py-1 hover:bg-gray-200 cursor-pointer text-sm"
-              >
-                {option.label}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      
-      {/* ----------- SMART SEARCH ----------- */}
-      <div className="relative">
-
-        <button
-          onClick={() => toggleDropdown("site")}
-          className="
-          px-3 py-2
-          bg-[#162a52]
-          hover:bg-[#1e3a70]
-          text-white text-sm
-          rounded-lg
-          border border-[#2c4a85]
-          transition
-          min-w-[110px]
-          w-auto
-          "        >
-          Search ▾
-        </button>
-
-        {openDropdown === "site" && (
-        <div className="absolute left-0 mt-3 bg-white text-black p-5 rounded-xl shadow-2xl z-50
-        w-[280px] sm:w-[320px] max-w-[90vw]">
-            {/* Toggle Site / Cell Mode */}
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setSearchMode("site")}
-                className={`px-3 py-1 rounded-md text-sm ${
-                  searchMode === "site"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200"
-                }`}
-              >
-                Site
-              </button>
-
-              <button
-                onClick={() => setSearchMode("cell")}
-                className={`px-3 py-1 rounded-md text-sm ${
-                  searchMode === "cell"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200"
-                }`}
-              >
-                Cell
-              </button>
-            </div>
-
-            {/* Search Input */}
-            <input
-              type="text"
-              value={siteSearch}
-              onChange={(e) => setSiteSearch(e.target.value)}
-              placeholder={`Search ${searchMode}...`}
-              className="w-full border border-gray-300 px-3 py-2 rounded-lg mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-
-            {/* Suggestions */}
-            <div className="max-h-48 overflow-y-auto border rounded-md">
-
-              {searchMode === "site" &&
-                filteredSites.map((site, index) => (
-                  <div
-                    key={index}
-                    onClick={() => {
-                      setSelectedSite(site);
-                      setSiteSearch(site);
-                    }}
-                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                  >
-                    {site}
-                  </div>
-                ))}
-
-              {searchMode === "cell" &&
-                filteredCells.map((cell, index) => (
-                  <div
-                    key={index}
-                    onClick={() => {
-                      setSelectedCell(cell);
-                      setSiteSearch(cell.cell_id);
-                    }}
-                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                  >
-                    {cell.cell_id}
-                    <span className="text-xs text-gray-500 ml-2">
-                      ({cell.site_name})
-                    </span>
-                  </div>
-                ))}
-
-            </div>
-
-            {/* Submit Button */}
-            {/* <button
-              onClick={() => {
-
-                let payload = {};
-
-                if (searchMode === "site" && selectedSite) {
-                  payload.site_name = [selectedSite];
-                }
-
-                if (searchMode === "cell" && selectedCell) {
-                  payload.cell_id = [selectedCell.cell_id];
-                }
-
-                dispatch(MapActions.getMultiVendorCells(payload));
-
-                // Zoom logic
-                if (selectedCell) {
-                  dispatch(
-                    MapActions.setViewState({
-                      longitude: Number(selectedCell.longitude),
-                      latitude: Number(selectedCell.latitude),
-                      zoom: 12,
-                      pitch: 0,
-                      bearing: 0
-                    })
-                  );
-                }
-
-                setOpenDropdown(null);
-
-              }}
-              className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm"
-            >
-              Apply & Zoom
-            </button> */}
-
-            {/* <button
-              onClick={() => {
-
-                let target = null;
-
-                if (searchMode === "site" && selectedSite) {
-                  target = rawCells.find(c => c.site_name === selectedSite);
-                }
-
-                if (searchMode === "cell" && selectedCell) {
-                  target = selectedCell;
-                }
-
-              if (target) {
-
-                dispatch(MapActions.setHighlightedCell(target.cell_id));
-
-                dispatch(
-                  MapActions.setViewState({
-                    longitude: Number(target.longitude),
-                    latitude: Number(target.latitude),
-                    zoom: searchMode === "cell" ? 18 : 16,
-                    transitionDuration: 1200
-                  })
-                );
-
-              }
-
-                setOpenDropdown(null);
-
-              }}
-              className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm"
-              >
-              Apply & Zoom
-            </button> */}
-
-            <div className="mt-4 flex gap-2">
-
-  <button
-    onClick={() => {
-
-      let target = null;
-
-      if (searchMode === "site" && selectedSite) {
-        target = rawCells.find(c => c.site_name === selectedSite);
-      }
-
-      if (searchMode === "cell" && selectedCell) {
-        target = selectedCell;
-      }
-
-      if (target) {
-
-        dispatch(MapActions.setHighlightedCell(target.cell_id));
-
-        dispatch(
-          MapActions.setViewState({
-            longitude: Number(target.longitude),
-            latitude: Number(target.latitude),
-            zoom: searchMode === "cell" ? 18 : 16,
-            transitionDuration: 1200
-          })
-        );
-
-      }
-
-      setOpenDropdown(null);
-
-    }}
-    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm"
-  >
-    Apply & Zoom
-  </button>
-
-  <button
-    onClick={handleResetSearch}
-    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 rounded-lg text-sm"
-  >
-    Reset Search
-  </button>
-
-</div>
-          </div>
-        )}
-      </div>
-
-      {/* ----------- ACTION BUTTONS ----------- */}
-      <div className="flex gap-2 flex-wrap ml-auto">
-          <button
-          onClick={handleClear}
-          className="bg-gray-500 px-4 py-2 rounded-lg text-sm"
-        >
-          Clear
-        </button>
-        <button
-          onClick={handleSubmit}
-          className="bg-blue-600 px-5 py-2 rounded-lg text-sm"
-        >
-          Submit
-        </button>
-      </div>
-
-
-      {/* ----------- Search SITE bar----------- */}
-      {/* <div className="relative">
-        <button
-          onClick={() => toggleDropdown("site")}
-          className="
-          px-3 py-2
-          bg-[#162a52]
-          hover:bg-[#1e3a70]
-          text-white text-sm
-          rounded-lg
-          border border-[#2c4a85]
-          transition
-          min-w-[110px]
-          w-auto
-          "        >
-          Site ▾
-        </button>
-
-        {openDropdown === "site" && (
-          <div className="absolute left-0 mt-3 bg-white text-black p-4 rounded-xl shadow-xl z-50 w-[280px] max-w-[90vw]">
-            <input
-              type="text"
-              value={siteSearch}
-              onChange={(e) => setSiteSearch(e.target.value)}
-              placeholder="Search site..."
-              className="w-full border px-2 py-1 rounded mb-2 text-sm"
-            />
-
-            <div className="max-h-48 overflow-y-auto">
-              {siteSuggestions.map((site, index) => (
-                <div
-                  key={index}
-                  onClick={() => {
-                    setSiteSearch(site);
-                    setOpenDropdown(null);
-                  }}
-                  className="px-2 py-1 hover:bg-gray-200 cursor-pointer text-sm"
-                >
-                  {site}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div> */}
-
-    {/* MAp layers */}
-    <div className="relative">
-
-        {/* BUTTON */}
-
-        <button
-          onClick={() => toggleDropdown("layers")}
-          className="px-4 py-2 bg-[#162a52] hover:bg-[#1e3a70] text-white text-sm rounded-lg border border-[#2c4a85]"
-        >
-          Add Map Layer ▾
-        </button>
-
-        {openDropdown === "layers" && (
-<div className="absolute left-0 sm:right-0 sm:left-auto top-full mt-2 bg-white text-black p-4 rounded-xl shadow-xl z-50 w-[300px] sm:w-[340px] max-w-[90vw] max-h-[70vh] overflow-y-auto">
-            <div className="flex gap-3 mb-2 ml-auto flex-shrink-0">
-
-              <button
-                onClick={applyBoundaryLayers}
-                className="flex-1 bg-blue-600 text-white py-1 rounded"
-              >
-                Apply
-              </button>
-
-              <button
-                onClick={clearBoundaryLayers}
-                className="flex-1 bg-gray-400 text-white py-1 rounded"
-              >
-                Clear
-              </button>
-
-            </div>
-
-
-            {/* LAYER GROUPS */}
-
-            {boundaryGroups.map((group, index) => (
-
-              <div key={index} className="border rounded p-2 mb-2">
-
-                <div
-                  onClick={() =>
-                    setExpandedLayer(
-                      expandedLayer === group.shapegroup
-                        ? null
-                        : group.shapegroup
-                    )
-                  }
-                  className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
-                >
-
-                  {/* LEFT SIDE */}
-
-                  <div className="flex items-center gap-2">
-
-                    <input
-                      type="checkbox"
-                      checked={selectedLayers[group.shapegroup] || false}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={() => toggleLayer(group.shapegroup)}
-                    />
-
-                    <span className="font-medium">
-                      {group.shapegroup} boundaries
-                    </span>
-
-                  </div>
-
-                  {/* DROPDOWN ARROW */}
-
-                  <span className="text-xl select-none">
-                    {expandedLayer === group.shapegroup 
-                      ? <UilAngleUp size={22} />
-                      : <UilAngleDown size={22} />
-                    }
+                  <span className="text-xs text-white font-medium">
+                    {mapConfig.mapScale}x
                   </span>
 
                 </div>
 
-                {/* CHILD LIST */}
+              </div>
+          </DropdownButton>
 
-                {expandedLayer === group.shapegroup && (
+          {/* ----------- SMART SEARCH ----------- */}
+            <DropdownButton
+              id="site"
+              label="Search"
+              openDropdown={openDropdown}
+              toggleDropdown={toggleDropdown}
+            >
+              <div className="absolute right-0 mt-3 bg-white text-black p-5 rounded-xl shadow-2xl z-50
+              w-[280px] sm:w-[320px] max-w-[90vw]">
+                  {/* Toggle Site / Cell Mode */}
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={() => setSearchMode("site")}
+                      className={`px-3 py-1 rounded-md text-sm ${
+                        searchMode === "site"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-200"
+                      }`}
+                    >
+                      Site
+                    </button>
 
-                  <div className="mt-2 ml-4 max-h-[200px] overflow-y-auto border rounded p-2">
+                    <button
+                      onClick={() => setSearchMode("cell")}
+                      className={`px-3 py-1 rounded-md text-sm ${
+                        searchMode === "cell"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-200"
+                      }`}
+                    >
+                      Cell
+                    </button>
+                  </div>
 
-                    {group.shapenames.map((name, idx) => (
+                  {/* Search Input */}
+                  <input
+                    type="text"
+                    value={siteSearch}
+                    onChange={(e) => setSiteSearch(e.target.value)}
+                    placeholder={`Search ${searchMode}...`}
+                    className="w-full border border-gray-300 px-3 py-2 rounded-lg mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
 
-                      <label
-                        key={idx}
-                        className="flex items-center gap-2 text-sm mb-1 cursor-pointer"
-                      >
+                  {/* Suggestions */}
+                  <div className="max-h-48 overflow-y-auto border rounded-md">
 
-                        <input
-                          type="checkbox"
-                          checked={
-                            selectedBoundaries[group.shapegroup]?.includes(name) || false
-                          }
-                          onChange={() =>
-                            handleBoundaryCheck(group.shapegroup, name)
-                          }
-                        />
+                    {searchMode === "site" &&
+                      filteredSites.map((site, index) => (
+                        <div
+                          key={index}
+                          onClick={() => {
+                            setSelectedSite(site);
+                            setSiteSearch(site);
+                          }}
+                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                        >
+                          {site}
+                        </div>
+                      ))}
 
-                        {name}
-
-                      </label>
-
-                    ))}
+                    {searchMode === "cell" &&
+                      filteredCells.map((cell, index) => (
+                        <div
+                          key={index}
+                          onClick={() => {
+                            setSelectedCell(cell);
+                            setSiteSearch(cell.cell_id);
+                          }}
+                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                        >
+                          {cell.cell_id}
+                          <span className="text-xs text-gray-500 ml-2">
+                            ({cell.site_name})
+                          </span>
+                        </div>
+                      ))}
 
                   </div>
 
-                )}
+                  <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => {
+
+                      let target = null;
+
+                      if (searchMode === "site" && selectedSite) {
+                        target = rawCells.find(c => c.site_name === selectedSite);
+                      }
+
+                      if (searchMode === "cell" && selectedCell) {
+                        target = selectedCell;
+                      }
+
+                      if (target) {
+
+                        dispatch(MapActions.setHighlightedCell(target.cell_id));
+
+                        dispatch(
+                          MapActions.setViewState({
+                            longitude: Number(target.longitude),
+                            latitude: Number(target.latitude),
+                            zoom: searchMode === "cell" ? 18 : 16,
+                            transitionDuration: 1200
+                          })
+                        );
+
+                      }
+
+                      setOpenDropdown(null);
+
+                    }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm"
+                  >
+                    Apply & Zoom
+                  </button>
+
+                  <button
+                    onClick={handleResetSearch}
+                    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 rounded-lg text-sm"
+                  >
+                    Reset Search
+                  </button>
+
+                </div>
+              </div>
+            </DropdownButton>      
+
+          {/* ----------- MAPSYNC ----------- */}
+          {/* <div className="flex items-center justify-between gap-2 w-full md:w-auto">
+            <span className="text-sm text-gray-300 ">Sync Maps</span>
+
+            <button
+              onClick={() =>
+                dispatch(MapActions.setSyncEnabled(!syncEnabled))
+              }
+              className={`
+                relative
+                w-14 h-7
+                rounded-full
+                transition-colors duration-300
+                ${syncEnabled ? "bg-blue-500" : "bg-gray-500"}
+              `}
+            >
+              <span
+                className={`
+                  absolute top-0 left-0
+                  w-7 h-7
+                  bg-white
+                  rounded-full
+                  shadow-md
+                  transform transition-transform duration-300
+                  ${syncEnabled ? "translate-x-7" : "translate-x-0"}
+                `}
+              />
+            </button>
+          </div> */}
+
+          <DropdownButton
+            id="syncMaps"
+            label={`Sync Maps ${syncEnabled ? "ON" : "OFF"}`}
+            openDropdown={openDropdown}
+            toggleDropdown={toggleDropdown}
+          >
+            <div className="absolute right-0 mt-3 bg-white text-black p-5 rounded-xl shadow-2xl z-50 w-[240px]">
+
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-semibold">Sync Control</span>
+
+                <button
+                  onClick={() =>
+                    dispatch(MapActions.setSyncEnabled(!syncEnabled))
+                  }
+                  className={`
+                    relative w-12 h-6 rounded-full transition-colors
+                    ${syncEnabled ? "bg-blue-500" : "bg-gray-400"}
+                  `}
+                >
+                  <span
+                    className={`
+                      absolute top-0 left-0 w-6 h-6 bg-white rounded-full shadow
+                      transform transition-transform
+                      ${syncEnabled ? "translate-x-6" : ""}
+                    `}
+                  />
+                </button>
+              </div>
+
+              <div className="border-t pt-3 space-y-2 max-h-[200px] overflow-y-auto">
+
+                {mapNames.map((name) => (
+                  <label
+                    key={name}
+                    className="flex items-center gap-2 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={syncMaps[name]}
+                      onChange={() => toggleSyncMap(name)}
+                    />
+                    {name}
+                  </label>
+                ))}
 
               </div>
 
-            ))}
+            </div>
+          </DropdownButton>
+        </div>
+      </>
+    );
 
-          </div>
+  return (
+    <div
+      ref={containerRef}
+      className="
+      relative  
+      flex items-center
+      bg-[#0b1c38]
+      px-3 sm:px-4
+      py-3
+      text-white text-sm
+      w-full
+      "
+    >
+      {/* LEFT FILTERS PaNEL wrap */}
+      {/* <div className="flex flex-wrap gap-2 md:gap-3"> */}
+        {/* LEFT FILTERS */}
+        <div className="flex items-center gap-2 sm:gap-3">
 
-        )}
+          {/* RIGHT TOOL PANEL (MOBILE) */}
+          {showRightTools && (
+            <div
+              className="
+              absolute
+              right-0
+              top-full
+              mt-2
+              w-[280px]
+              bg-[#0b1c38]
+              p-4
+              rounded-xl
+              shadow-xl
+              border border-[#2c4a85]
+              z-50
+              md:hidden
+              "
+            >
+              {/* CLOSE BUTTON */}
+              <button
+                onClick={() => setShowRightTools(false)}
+                className="absolute top-1 right-2 text-white text-lg"
+              >
+                ✕
+              </button>
 
-      </div>
+              {/* TOOLBAR ITEMS */}
+              <RightToolbarItems />
+            </div>
+          )}
 
-        {/* ----------- MAPSYNC ----------- */}
-        <div className="flex items-center gap-2">
+            {/* Technology & Region Data Filters */}
+            {Array.isArray(allFilters?.d1) &&
+              allFilters.d1.map((group, groupIndex) => (
+                <div key={groupIndex} className="relative">
+                  <button
+                    onClick={() => toggleDropdown(group.parent)}
+                    className="px-4 py-2 bg-[#162a52] hover:bg-[#1e3a70] text-white text-sm rounded-lg border border-[#2c4a85]"
+                  >
+                    {group.parent} ▾
+                  </button>
 
-          <span className="text-sm text-gray-300">Sync Maps</span>
+                    {/* dropdown code */}
+                    {openDropdown === group.parent && (
+                      <div className="absolute left-0 mt-3 bg-white text-black p-5 rounded-xl shadow-2xl z-50
+                        w-[280px] sm:w-[320px] max-w-[90vw]">
+                            
+                        {group.child?.map((techBlock, techIndex) => {
+
+                          const isTechSelected =
+                            selected[techBlock.name]?.length ===
+                            techBlock.columnName?.length;
+
+                          return (
+                            <div key={techIndex} className="mb-4 border-b pb-3">
+
+                              {/* Parent Technology */}
+                              <div className="flex items-center justify-between mb-2">
+
+                                <label className="flex items-center gap-2 font-semibold cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={isTechSelected}
+                                    onChange={() => {
+                                      const allBands =
+                                        techBlock.columnName.map(b => b.name);
+                                      setSelected(prev => ({
+                                        ...prev,
+                                        [techBlock.name]:
+                                          isTechSelected ? [] : allBands
+                                      }));
+                                    }}
+                                  />
+                                  {techBlock.name}
+                                </label>
+
+                                {/* <input
+                                  type="color"
+                                  className="w-6 h-6 cursor-pointer"
+                                  onChange={(e) =>
+                                    console.log("Tech Color:", techBlock.name, e.target.value)
+                                  }
+                                /> */}
+                              </div>
+
+                              {/* Bands */}
+                              <div className="pl-5 space-y-1">
+                                {techBlock.columnName?.map((band, bandIndex) => (
+                                  <div
+                                    key={bandIndex}
+                                    className="flex items-center justify-between"
+                                  >
+                                    <label className="flex items-center gap-2 text-sm">
+                                      <input
+                                        type="checkbox"
+                                        checked={
+                                          selected[techBlock.name]?.includes(band.name) || false
+                                        }
+                                        onChange={() =>
+                                          handleCheck(techBlock.name, band.name)
+                                        }
+                                      />
+                                      {band.name}
+                                    </label>
+
+                                    {/* <input
+                                      type="color"
+                                      className="w-5 h-5 cursor-pointer"
+                                      onChange={(e) =>
+                                        console.log("Band Color:", band.name, e.target.value)
+                                      }
+                                    /> */}
+                                  </div>
+                                ))}
+                              </div>
+
+                            </div>
+                          );
+                        })}
+
+                      </div>
+                    )}
+                </div>
+              ))
+            }
+        </div>
+
+        {/* CLEAR + SUBMIT for LEft filters*/}
+        <div className="flex gap-2 ml-3">
+          <button
+            onClick={clearGlobalFilters}
+            className="bg-gray-500 px-4 py-2 rounded-lg text-sm"
+          >
+            Clear
+          </button>
 
           <button
-            onClick={() =>
-              dispatch(MapActions.setSyncEnabled(!syncEnabled))
-            }
-            className={`
-              relative
-              w-14 h-7
-              rounded-full
-              transition-colors duration-300
-              ${syncEnabled ? "bg-blue-500" : "bg-gray-500"}
-            `}
+            onClick={handleSubmit}
+            className="bg-blue-600 px-5 py-2 rounded-lg text-sm"
           >
-            <span
-              className={`
-                absolute top-0 left-0
-                w-7 h-7
-                bg-white
-                rounded-full
-                shadow-md
-                transform transition-transform duration-300
-                ${syncEnabled ? "translate-x-7" : "translate-x-0"}
-              `}
-            />
+            Submit
           </button>
         </div>
+      {/* </div> */}
+
+      {/* RIGHT PANEL (DESKTOP) */}
+      <div className="hidden md:flex items-center gap-2 sm:gap-3 ml-auto relative">
+        <RightToolbarItems />
+      </div>
+
+      {/* MOBILE SIDEBAR BUTTON */}
+      <button
+        onClick={() => setShowRightTools(true)}
+        className="
+        md:hidden
+        ml-auto
+        px-4 py-2
+        bg-[#162a52]
+        hover:bg-[#1e3a70]
+        text-white text-sm
+        rounded-lg
+        border border-[#2c4a85]
+        "
+      >
+        ☰
+      </button>
 
     </div>
   );
@@ -1563,102 +1538,205 @@ w-[260px] sm:w-[320px] max-w-[90vw] max-h-[70vh] overflow-y-auto">              
 
 export default TelecomGlobalFilters;
 
-  // <div className="relative">
+          // {/* DRIVE TEST LAYER */}
+          // <DropdownButton
+          //   id="driveTest"
+          //   label="Drive Test Layer"
+          //   openDropdown={openDropdown}
+          //   toggleDropdown={toggleDropdown}
+          // >
+          // <div className="absolute right-0 sm:right-0 sm:left-auto top-full mt-2 
+          //   bg-white text-black p-4 rounded-xl shadow-xl z-50 
+          //   w-[280px] sm:w-[320px] max-w-[90vw] max-h-[70vh] 
+          //   overflow-x-visible">
+          //     {/*  Apply / Clear (DRIVE TEST LAYER) */}
+          //     <div className="flex gap-2 mb-4">
+          //       <button
+          //         onClick={applyDriveTestLayer}
+          //         className="flex-1 bg-blue-600 text-white py-1.5 rounded-md text-sm font-medium"
+          //       >
+          //         Apply
+          //       </button>
 
-  //       {/* Button */}
+          //       <button
+          //         onClick={clearDriveTestLayer}
+          //         className="flex-1 bg-gray-400 text-white py-1.5 rounded-md text-sm font-medium"
+          //       >
+          //         Clear
+          //       </button>
+          //     </div>
 
-  //       <button
-  //         onClick={() => toggleDropdown("layers")}
-  //         className="px-4 py-2 bg-[#162a52] hover:bg-[#1e3a70] text-white text-sm rounded-lg border border-[#2c4a85] transition min-w-[140px]"
-  //       >
-  //         Add Map Layer ▾
-  //       </button>
+          //     {/* Date/Time Section (DRIVE TEST LAYER)*/}
+          //    <div className="mb-4">
+          //     <div className="grid grid-cols-2 gap-3">
+          //       <div className="flex flex-col">
+          //         <label className="text-xs font-semibold text-gray-500 mb-2">
+          //           Start: Date/Time
+          //         </label>
 
-  //       {/* Dropdown */}
+          //         <input
+          //           type="datetime-local"
+          //           value={startDateTime}
+          //           onChange={(e) => setStartDateTime(e.target.value)}
+          //           className="border rounded px-2 py-1 text-xs w-full"
+          //         />
+          //       </div>
 
-  //       {openDropdown === "layers" && (
+          //       <div className="flex flex-col">
+          //         <label className="text-xs font-semibold text-gray-500 mb-2">
+          //           End: Date/Time
+          //         </label>
 
-  //         <div className="absolute left-0 mt-3 bg-white text-black p-4 rounded-xl shadow-xl z-50 w-[320px] max-h-[500px] overflow-y-auto">
+          //         <input
+          //           type="datetime-local"
+          //           value={endDateTime}
+          //           onChange={(e) => setEndDateTime(e.target.value)}
+          //           className="border rounded px-2 py-1 text-xs w-full"
+          //         />
+          //       </div>
+          //     </div>
+          //   </div>
+          //     {/* Thematic Section (DRIVE TEST LAYER)*/}
+          //     <div className="mb-4">
+          //       <div className="text-xs font-semibold text-gray-500 mb-1">
+          //         Thematic
+          //       </div>
 
-  //           {/* Apply / Clear */}
+          //       <select
+          //         value={driveThematic}
+          //         onChange={(e) => setDriveThematic(e.target.value)}
+          //         className="w-full border rounded px-2 py-1 text-sm"
+          //       >
+          //         {driveThematicOptions.map((opt) => (
+          //           <option key={opt}>{opt}</option>
+          //         ))}
+          //       </select>
+          //     </div>
 
-  //           <div className="flex gap-2 mb-3">
+          //     {/* Range Filter (DRIVE TEST LAYER) */}
+          //    <div className="mb-4">
+          //       <div className="text-xs font-semibold text-gray-500 mb-1">
+          //         Range Filter
+          //       </div>
 
-  //             <button
-  //               onClick={applyBoundaryLayers}
-  //               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1 rounded"
-  //             >
-  //               Apply
-  //             </button>
+          //       <div className="flex items-center gap-2">
 
-  //             <button
-  //               onClick={clearBoundaryLayers}
-  //               className="flex-1 bg-gray-400 hover:bg-gray-500 text-white py-1 rounded"
-  //             >
-  //               Clear
-  //             </button>
+          //         <span className="text-xs">Min</span>
 
-  //           </div>
+          //         <input
+          //           type="number"
+          //           value={rangeMin}
+          //           onChange={(e) => setRangeMin(e.target.value)}
+          //           className="border rounded px-2 py-1 w-20 text-sm"
+          //         />
 
-  //           {/* Boundary Groups */}
+          //         <span className="text-xs">Max</span>
 
-  //           {boundaryGroups.map((group, index) => (
+          //         <input
+          //           type="number"
+          //           value={rangeMax}
+          //           onChange={(e) => setRangeMax(e.target.value)}
+          //           className="border rounded px-2 py-1 w-20 text-sm"
+          //         />
 
-  //             <div key={index} className="mb-3 border rounded p-2">
+          //         <input
+          //           type="color"
+          //           value={rangeColor}
+          //           onChange={(e) => setRangeColor(e.target.value)}
+          //           className="w-8 h-8 border rounded cursor-pointer"
+          //         />
+          //       </div>
+          //     </div> 
+          //        <div className="mb-4">
 
-  //               {/* Parent Layer */}
+          //         <div className="flex items-center justify-between mb-2">
+          //           <span className="text-xs font-semibold text-gray-500">
+          //             Range Filter
+          //           </span>
 
-  //               <label className="flex items-center gap-2 font-semibold cursor-pointer">
+          //           <button
+          //             onClick={addRange}
+          //             className="text-blue-600 font-bold text-lg"
+          //           >
+          //             +
+          //           </button>
 
-  //                 <input
-  //                   type="checkbox"
-  //                   checked={selectedLayers[group.shapegroup] || false}
-  //                   onChange={() => toggleLayer(group.shapegroup)}
-  //                 />
+          //         </div>
 
-  //                 {group.shapegroup} boundaries
+          //         {ranges.map((range, index) => (
+          //           <div key={index} className="flex items-center gap-2 mb-2">
+          //             <input
+          //               type="number"
+          //               placeholder="Min"
+          //               value={range.min}
+          //               onChange={(e) =>
+          //                 updateRange(index, "min", e.target.value)
+          //               }
+          //               className="border rounded px-2 py-1 w-20 text-sm"
+          //             />
 
-  //               </label>
+          //             <input
+          //               type="number"
+          //               placeholder="Max"
+          //               value={range.max}
+          //               onChange={(e) =>
+          //                 updateRange(index, "max", e.target.value)
+          //               }
+          //               className="border rounded px-2 py-1 w-20 text-sm"
+          //             />
 
-  //               {/* Child Dropdown */}
+          //             <ColorPicker
+          //               value={range.color}
+          //               onChange={(color) => updateRange(index, "color", color)}
+          //             />
 
-  //               {expandedLayer === group.shapegroup && (
+          //             {ranges.length > 1 && (
+          //               <button
+          //                 onClick={() => removeRange(index)}
+          //                 className="text-red-500 text-sm"
+          //               >
+          //                 ✕
+          //               </button>
+          //             )}
+          //           </div>
+          //         ))}
+          //       </div> 
+          //       <RangeFilter 
+          //         key="drive-test-range"
+          //         value={ranges} 
+          //         onChange={setRanges} 
+          //       />
 
-  //                 <div className="mt-2 ml-4 max-h-[200px] overflow-y-auto border rounded p-2">
+          //     {/* Session section(DRIVE TEST LAYER) */}
+          //     <div>
+          //       <div className="text-xs font-semibold text-gray-500 mb-2">
+          //         Sessions
+          //       </div>
 
-  //                   {group.shapenames.map((name, idx) => (
+          //       <label className="flex items-center gap-2 mb-2 font-medium text-sm">
+          //         <input
+          //           type="checkbox"
+          //           checked={selectedDriveSessions.length === sessionIds.length}
+          //           onChange={selectAllSessions}
+          //         />
+          //         Select All Sessions
+          //       </label>
 
-  //                     <label
-  //                       key={idx}
-  //                       className="flex items-center gap-2 text-sm mb-1 cursor-pointer"
-  //                     >
-
-  //                       <input
-  //                         type="checkbox"
-  //                         checked={
-  //                           selectedBoundaries[group.shapegroup]?.includes(name) || false
-  //                         }
-  //                         onChange={() =>
-  //                           handleBoundaryCheck(group.shapegroup, name)
-  //                         }
-  //                       />
-
-  //                       {name}
-
-  //                     </label>
-
-  //                   ))}
-
-  //                 </div>
-
-  //               )}
-
-  //             </div>
-
-  //           ))}
-
-  //         </div>
-
-  //       )}
-
-  //     </div>
+          //       <div className="max-h-[180px] overflow-y-auto border rounded p-2">
+          //         {sessionIds.map((session, idx) => (
+          //           <label
+          //             key={idx}
+          //             className="flex items-center gap-2 text-sm mb-1 cursor-pointer"
+          //           >
+          //             <input
+          //               type="checkbox"
+          //               checked={selectedDriveSessions.includes(session)}
+          //               onChange={() => toggleDriveSession(session)}
+          //             />
+          //             {session}
+          //           </label>
+          //         ))}
+          //       </div>
+          //     </div>
+          //   </div>
+          // </DropdownButton>

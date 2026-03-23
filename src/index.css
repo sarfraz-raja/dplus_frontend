@@ -326,3 +326,8 @@ svg {
 .telecom-popup .mapboxgl-popup-tip {
   display: none;
 }
+
+/* to lay mapbox controls above all deckgl layers */
+/* .mapboxgl-control-container {
+  z-index: 1000 !important;
+} */

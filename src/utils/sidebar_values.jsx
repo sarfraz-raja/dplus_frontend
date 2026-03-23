@@ -39,17 +39,20 @@ import CellProRulesQueryOutput from '../pages/ProRules/CellProRulesQueryOutput';
 import Home from '../pages/Home';
 import SupersetDashboard from '../pages/SuperSet/SupersetDashboard';
 import NetworkDashboard from '../pages/InsightsEngine/NetworkDashboard.jsx';
-// import DiscussionPage from '../pages/DiscussionForum/DiscussionPage.jsx';
+import ParameterAuditDashboard from '../pages/InsightsEngine/ParameterAuditDashboard.jsx';
 
 import MssDashboard from '../pages/InsightsEngine/CoreDashboards/MssDashboard.jsx';
 import UgwDashboard from '../pages/InsightsEngine/CoreDashboards/UgwDashboard.jsx';
 import MgwDashboard from '../pages/InsightsEngine/CoreDashboards/MgwDashboard.jsx';
 
+import WorstCellsDashboard from '../pages/InsightsEngine/RanDashboards/WorstCellsDashboard.jsx';
 import Huawei4GDashboard from '../pages/InsightsEngine/RanDashboards/Huawei4GDashboard.jsx';
 import Huawei5GDashboard from '../pages/InsightsEngine/RanDashboards/Huawei5GDashboard.jsx';
 // import MapTesting from '../pages/InsightsEngine/MapTesting.jsx';
 import TelecomMapsPage from '../pages/TelecomMapsPage.jsx';
 import SupportDesk from '../pages/SupportDesk.jsx';
+import TicketsPage from '../pages/Tickets/index.jsx';
+import DiscussionPage from '../pages/DiscussionForum/DiscussionPage.jsx';
 
 export const Sidebar_content = {
     temp: [],
@@ -306,7 +309,6 @@ export const Sidebar_content = {
                     }, 
                 ],
                 // component:  ,
-                // component: <CommonPowerBI reportId={"971a078b-5783-41e8-a676-fd154fe0e597"} src={"https://app.powerbi.com/reportEmbed?reportId=971a078b-5783-41e8-a676-fd154fe0e597&autoAuth=true&ctid=8d2d9b81-d0ec-49f4-9466-732d6e42831c"} />,
                 icon: <Unicons.UilLayerGroup size="16" />
             }, 
             {
@@ -314,21 +316,27 @@ export const Sidebar_content = {
                 link: "/insights-engine/ran-dashboard",
                  subMenu: [
                     {
-                        name: "Huawei 4G Dashboard",
+                        name: "Worst Cells Dashboard",
+                        link: "/insights-engine/ran-dashboard/worstcells",
+                        subMenu: [],
+                        component:  <WorstCellsDashboard/>,
+                        icon: <Unicons.UilChartLine size="16" />
+                    }, 
+                    {
+                        name: "4G Dashboard",
                         link: "/insights-engine/ran-dashboard/huawei4g",
                         subMenu: [],
                         component:  <Huawei4GDashboard/>,
                         icon: <Unicons.UilChartLine size="16" />
                     }, 
                      {
-                        name: "Huawei 5G Dashboard",
+                        name: "5G Dashboard",
                         link: "/insights-engine/ran-dashboard/huawei5g",
                         subMenu: [],
                         component:  <Huawei5GDashboard/>,
                         icon: <Unicons.UilChartLine size="16" />
                     }, 
                 ],
-                //  <CommonPowerBI reportId={"971a078b-5783-41e8-a676-fd154fe0e597"} src={"https://app.powerbi.com/reportEmbed?reportId=971a078b-5783-41e8-a676-fd154fe0e597&autoAuth=true&ctid=8d2d9b81-d0ec-49f4-9466-732d6e42831c"} />,
                 icon: <Unicons.UilLayerGroup size="16" />
             },
             {
@@ -336,7 +344,13 @@ export const Sidebar_content = {
                 link: "/insights-engine/network-dashboard",
                 subMenu: [],
                 component:  <NetworkDashboard /> ,
-                //  <CommonPowerBI reportId={"971a078b-5783-41e8-a676-fd154fe0e597"} src={"https://app.powerbi.com/reportEmbed?reportId=971a078b-5783-41e8-a676-fd154fe0e597&autoAuth=true&ctid=8d2d9b81-d0ec-49f4-9466-732d6e42831c"} />,
+                icon: <Unicons.UilChartLine size="16" />
+            },
+             {
+                name: "Parameter Audit Dashboard",
+                link: "/insights-engine/parameter-audit-dashboard",
+                subMenu: [],
+                component:  <ParameterAuditDashboard /> ,
                 icon: <Unicons.UilChartLine size="16" />
             },
             // {
@@ -377,18 +391,21 @@ export const Sidebar_content = {
         //     link: "/discussions",
         //     // icon: <Unicons.UilComment size="16" />,
         //     icon: <Unicons.UilReact />,
-        //     // component: <DiscussionPage />,
-        //     component: <SupportDesk />,
+        //     component: <DiscussionPage />,
+        //     // component: <SupportDesk />,
         //     subMenu: [],
         // },
         {
-            name: "Support",
-            link: "/support",
+            name: "Discussions",
+            link: "/discussions",
             // icon: <Unicons.UilComment size="16" />,
             icon: <Unicons.UilReact />,
-            component: <SupportDesk  />,
+            component: <TicketsPage />,
+            // component: <DiscussionPage />,
+            // component: <SupportDesk />,
             subMenu: [],
         },
+        
         {
             name: "Telecom Maps",
             link: "/telecom-maps",

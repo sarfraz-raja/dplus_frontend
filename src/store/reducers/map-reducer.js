@@ -1,5 +1,14 @@
 import { createSlice } from "@reduxjs/toolkit";
 
+// initialising redux states
+
+const DEFAULT_LAYER_OPACITY = {
+  CELLS: 1,
+  BOUNDARY: 1,
+  RF: 1,
+  DRIVE_TEST: 1
+};
+
 const initialState = {
 
     //  OLD STATE (EXISTING LOGIC)
@@ -43,14 +52,43 @@ const initialState = {
     selectedCell: null,
 
     // 🔹 TELECOM FILTER METADATA
-    telecomFilterMeta: {},
-    telecomTechMeta: {},
+    // telecomFilterMeta: {},
+    // telecomTechMeta: {},
+
+    telecomTechMeta: [],
+    telecomFilterMeta: { d1: [] },
 
     boundaryGroups: [],
     boundaryGeoJson: null,
+    selectedBoundaries: {},
 
     highlightedCell: null,
 
+    activeThematic: {
+        type: "Default",
+        colors: {}
+    },
+
+    driveTestData: [],
+    driveTestFilters: {
+        sessions: [],
+        thematic: "RSSI",
+        ranges: []
+    },
+    activeDriveSessions: [],
+
+    rfPredictionFilters: [],
+    rfPredictionGeoJson: null,
+    rfPredictionSelection: [],
+    layerOpacity: DEFAULT_LAYER_OPACITY,
+    defaultLayerOpacity: DEFAULT_LAYER_OPACITY,
+
+    layerVisibility: {
+        CELLS: false,
+        BOUNDARY: false,
+        RF: false,
+        DRIVE_TEST: false
+    },
 }
 
 
@@ -119,6 +157,7 @@ const mapQuery = createSlice({
 
         // 🔹 Set full telecom dataset
         SET_RAW_CELLS: (state, { payload }) => {
+             console.log("SET_RAW_CELLS CALLED 🚨");
             state.rawCells = payload;
         },
 
@@ -174,10 +213,83 @@ const mapQuery = createSlice({
             state.boundaryGeoJson = null;
         },
 
+        SET_SELECTED_BOUNDARIES: (state, { payload }) => {
+            state.selectedBoundaries = payload;
+        },
+
         SET_HIGHLIGHTED_CELL: (state, { payload }) => {
             state.highlightedCell = payload;
         },
+
+        SET_ACTIVE_THEMATIC: (state, { payload }) => {
+            state.activeThematic = payload;
+        },
+
+        // RF test Drive layer plotting
+        SET_DRIVE_TEST_DATA: (state, { payload }) => {
+            state.driveTestData = payload;
+
+            console.log("Set state drive test data",  state.driveTestData)
+        },
+
+        SET_ACTIVE_DRIVE_SESSIONS: (state, { payload }) => {
+            state.activeDriveSessions = payload;
+        },
+
+        SET_DRIVE_TEST_FILTERS: (state, { payload }) => {
+        state.driveTestFilters = payload;
+        },
+
+        //  add map layer (RF predictions)
+        SET_RF_PREDICTION_FILTERS: (state, { payload }) => {
+        state.rfPredictionFilters = payload;
+        },
+
+        SET_RF_PREDICTION_GEOJSON: (state, { payload }) => {
+        state.rfPredictionGeoJson = payload;
+        },
+
+        SET_RF_PREDICTION_SELECTION: (state, { payload }) => {
+        state.rfPredictionSelection = payload;
+        },
+
+        CLEAR_RF_PREDICTION_GEOJSON: (state) => {
+            state.rfPredictionGeoJson = null;
+        },
         
+        SET_LAYER_OPACITY: (state, { payload }) => {
+            const { layer, value } = payload;
+
+            state.layerOpacity = {
+                ...state.layerOpacity,
+                [layer]: value
+            };
+        },
+
+       RESET_LAYER_OPACITY: (state) => {
+            state.layerOpacity = { ...state.defaultLayerOpacity };
+        },
+
+        SET_LAYER_VISIBILITY: (state, { payload }) => {
+            // const { layer } = payload;
+
+            //   console.log("BEFORE:", state.layerVisibility[layer]);
+            // state.layerVisibility[layer] = !state.layerVisibility[layer];
+
+            // console.log("AFTER:", state.layerVisibility[layer]);
+
+        const { layer, value } = payload;
+                state.layerVisibility[layer] = value;
+        },
+
+        RESET_LAYER_VISIBILITY: (state) => {
+            state.layerVisibility = {
+                CELLS: false,
+                BOUNDARY: false,
+                RF: false,
+                DRIVE_TEST: false
+            };
+        },
     }
 })
 
@@ -204,7 +316,23 @@ export const {
     SET_BOUNDARY_GROUPS,
     SET_BOUNDARY_GEOJSON,
     CLEAR_BOUNDARY_GEOJSON,
+    SET_SELECTED_BOUNDARIES,
     SET_HIGHLIGHTED_CELL,
+
+    SET_ACTIVE_THEMATIC,
+    SET_DRIVE_TEST_DATA, 
+    SET_ACTIVE_DRIVE_SESSIONS, 
+    SET_DRIVE_TEST_FILTERS,
+
+    SET_RF_PREDICTION_FILTERS,
+    SET_RF_PREDICTION_GEOJSON,
+    SET_RF_PREDICTION_SELECTION,
+    CLEAR_RF_PREDICTION_GEOJSON,
+
+    SET_LAYER_OPACITY,
+    RESET_LAYER_OPACITY,
+    SET_LAYER_VISIBILITY,
+    RESET_LAYER_VISIBILITY,
 
 } = mapQuery.actions
 

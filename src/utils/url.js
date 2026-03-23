@@ -63,6 +63,10 @@ export const Urls={
     multiVendor: "/map/multiVendor",
     boundary_groups: "/map/boundary-groups",
     boundaries: "/map/boundaries",
+    drive_test: "/map/drive-test",
+
+    rf_prediction_filters: "/map/rf-predictions/filters",
+    rf_prediction_data: "/map/rf-predictions/data",
     
     cxix_scripting:"/cxix_scripting",
     cxix_audit:"/cxix_audit",

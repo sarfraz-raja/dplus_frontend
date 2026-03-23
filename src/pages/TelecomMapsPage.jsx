@@ -68,19 +68,27 @@ import { useDispatch, useSelector } from "react-redux";
 import TelecomMapsContainer from "../components/MapsUsingDeckgl/TelecomMapsContainer";
 import TelecomMap from "../components/MapsUsingDeckgl/TelecomMap";
 import TelecomGlobalFilters from "../components/MapsUsingDeckgl/TelecomGlobalFilters ";
+import GlobalFilters from "../components/MapsUsingDeckgl/GlobalFilters";
 import MapActions from "../store/actions/map-actions";
+
+import LeftFilters from "../components/MapsUsingDeckgl/LeftFilters";
+import RightFilters from "../components/MapsUsingDeckgl/RightFilters";
 
 const TelecomMapsPage = () => {
 
   const dispatch = useDispatch();
   const rawCells = useSelector(state => state.map.rawCells);
 
-  useEffect(() => {
+useEffect(() => {
+    dispatch(MapActions.getBoundaryGroups()).then(() => {
+        dispatch(MapActions.getUserMapSetup());
+    });
+
     dispatch(MapActions.getMultiVendorCells({}));
     dispatch(MapActions.getTelecomFilterMeta());
     dispatch(MapActions.getTelecomTechMeta());
-    dispatch(MapActions.getBoundaryGroups()); 
-  }, [dispatch]);
+    dispatch(MapActions.getRfPredictionFilters());
+}, [dispatch]);
 
 // const [kenyaGeoJson, setKenyaGeoJson] = useState(null);
 
@@ -109,7 +117,12 @@ const TelecomMapsPage = () => {
 
     // 🔥 For testing single map with filters
     <div className="w-full h-screen flex flex-col">
-      <TelecomGlobalFilters />
+      {/* <TelecomGlobalFilters /> */}
+      {/* <GlobalFilters />  */}
+      <div className="relative flex items-center gap-2 p-2 bg-[#0b1c38]">
+        <LeftFilters />
+        <RightFilters />
+    </div>
 
       <div className="flex-1 min-h-0">
         {/* <TelecomMap operator="Huawei"  geojsonLayer={kenyaGeoJson} /> */}

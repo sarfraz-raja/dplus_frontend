@@ -1027,7 +1027,7 @@
 
 
 import React, { useEffect, useRef, useState } from 'react';
-import ReactMapGL, { Layer, Source } from 'react-map-gl';
+// import ReactMapGL, { Layer, Source } from 'react-map-gl';
 import mapboxgl from 'mapbox-gl';
 import { useDispatch, useSelector } from 'react-redux';
 import MapActions from '../../store/actions/map-actions';
@@ -1049,7 +1049,7 @@ import CommonActions from '../../store/actions/common-actions';
 // import Signal from "react-lucide/dist/icons/signal";
 import SupersetDashboard from '../SuperSet/SupersetDashboard';
 
-mapboxgl.accessToken =  "";
+mapboxgl.accessToken =  "pk.eyJ1Ijoic2FyZnJhenJhamEiLCJhIjoiY21sNjkxNzl3MDNydjNocXhwZTY3ZmdzMCJ9.gs-RAIXJTV-TFUvl__vcLg";
 
 const MapBoxView = () => {
     // Calculate the coordinates of the triangle vertices

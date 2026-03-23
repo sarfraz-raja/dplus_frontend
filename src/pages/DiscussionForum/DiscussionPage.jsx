@@ -335,7 +335,7 @@ export default function DiscussionPage() {
             onAction={() => setCreateModalOpen(true)}
           />
         ) : (
-          <TopicsTable topics={topics} onViewTopic={handleViewTopic} />
+          <TopicsTable topics={[]} onViewTopic={handleViewTopic} />
         )}
       </div>
 

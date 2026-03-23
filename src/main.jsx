@@ -5,6 +5,8 @@ import './index.css'
 
 import 'mapbox-gl/dist/mapbox-gl.css'
 
+import "maplibre-gl/dist/maplibre-gl.css";
+
 import { BrowserRouter } from 'react-router-dom'  
 import { Provider } from 'react-redux'
 import store from './store'

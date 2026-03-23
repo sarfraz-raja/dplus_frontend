@@ -17,6 +17,7 @@ const UrlDashboard = ({
     if (!dashboardId) return null;
 
     let url = `${SUPERSET_BASE}/superset/dashboard/${dashboardId}/`;
+    // let url = `${SUPERSET_BASE}/superset/dashboard/${dashboardId}/?standalone=${standalone}&reset_filters=1`;
 
     if (filterId && filterColumn && filterValue) {
       const encoded = encodeURIComponent(filterValue);
@@ -39,10 +40,13 @@ const UrlDashboard = ({
     return url;
   }, [dashboardId, filterId, filterColumn, filterValue, standalone]);
 
+  console.log("Superset URL:", buildUrl);
+
   if (!buildUrl) return null;
 
   return (
     <iframe
+      key={buildUrl}
       src={buildUrl}
       title="Superset Dashboard"
       style={{

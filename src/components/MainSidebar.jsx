@@ -135,7 +135,7 @@ const Sidebar = ({ sidebarOpen, setsidebarOpenn }) => {
     let user=JSON.parse(localStorage.getItem("user"))
     let rolename=user?.rolename
 
-
+console.log("FULL SIDEBAR CONFIG:", Sidebar_content.all_routes);
 
     // const nestSidebar = (itm) => {
     //     return <li>
