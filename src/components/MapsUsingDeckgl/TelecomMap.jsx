@@ -30,9 +30,13 @@ import { FIXED_COLORS, getDriveTestColor } from "./Utils/colorEngine";
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const MAP_STYLES = {
+  // outdoors: {
+  //   tiles: ['https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}@2x.png'],
+  //   attribution: '© Stadia Maps © OpenStreetMap'
+  // },
   outdoors: {
-    tiles: ['https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}@2x.png'],
-    attribution: '© Stadia Maps © OpenStreetMap'
+    tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'], // ← use voyager as fallback
+    attribution: '© CARTO © OpenStreetMap'
   },
   voyager: {
     tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],  // ← @2x
@@ -170,12 +174,15 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
   const layerOpacity = useSelector(state => state.map.layerOpacity);
   const layerVisibility = useSelector(state => state.map.layerVisibility);
 
+  const rawSites = useSelector(state => state.map.rawSites);
+  const activeSiteThematic = useSelector(state => state.map.activeSiteThematic);
+
   const [localViewState, setLocalViewState] = useState(viewState);
 
   const activeViewState =
   (syncEnabled ? viewState : localViewState) || {
-    longitude: 77.209,
-    latitude: 28.6139,
+     longitude: 37.9062,
+    latitude: 0.0236,
     zoom: 6,
     pitch: 0,
     bearing: 0
@@ -188,6 +195,8 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
     Band: "band",
     Region: "region"
   };
+
+
 
   // useEffect(() => {
   //   if (!activeThematic || !activeThematic.type) {
@@ -481,7 +490,7 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     return coords;
 };
   /* ============================================================
-     🔹 MARKER LAYER (deck.gl)
+     🔹 MARKER LAYER (deck.gl) for CELLS
   ============================================================ */
   const markerLayer = useMemo(() => {
     // console.log(
@@ -606,7 +615,7 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     ]);
 
   /* ============================================================
-     🔹 SECTOR LAYER (deck.gl)
+     🔹 SECTOR LAYER (deck.gl) for CELLS
   ============================================================ */
   const sortedCells = useMemo(() => {
 
@@ -800,6 +809,73 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
 //   getFillColor: [255, 0, 0, 200],
 // });
 
+
+const siteLayer = useMemo(() => {
+    if (!layerVisibility.SITES) return null;
+    if (!rawSites || rawSites.length === 0) return null;
+
+    return new ScatterplotLayer({
+        id: `site-layer-${operator}`,
+        data: rawSites.filter(
+            d => !isNaN(Number(d.longitude)) && !isNaN(Number(d.latitude))
+        ),
+        pickable: true,
+        getPosition: d => [Number(d.longitude), Number(d.latitude)],
+        radiusUnits: "pixels",
+        getRadius: 6,
+        radiusScale: config.siteScale || 1,
+        radiusMinPixels: 4,
+        radiusMaxPixels: 14,
+        getFillColor: d => {
+            if (selectedCell && d.site_name === selectedCell.site_name)
+                return [255, 255, 0, 255];
+
+            const opacity = activeSiteThematic?.opacity ?? 1;
+
+            const field = THEMATIC_FIELD_MAP[activeSiteThematic?.type];
+            if (field) {
+                const hex = activeSiteThematic.colors?.[d[field]];
+                if (hex) return hexToRgba(hex, opacity);
+            }
+
+            if (d.status === "Deactivated") return [255, 0, 0, 180];
+            return [255, 140, 0, 220];
+        },
+        getLineColor: [255, 255, 255, 200],
+        getLineWidth: 1,
+        lineWidthUnits: "pixels",
+        updateTriggers: {
+            getFillColor: [
+                selectedCell,
+                activeSiteThematic?.type,
+                activeSiteThematic?.colors,
+                activeSiteThematic?.opacity,
+            ]
+        },
+        onClick: info => {
+            if (info.object) {
+                dispatch(MapActions.setViewState({
+                    longitude: Number(info.object.longitude),
+                    latitude: Number(info.object.latitude),
+                    zoom: 14,
+                    transitionDuration: 800
+                }));
+            }
+        }
+    });
+}, [
+    rawSites,
+    operator,
+    dispatch,
+    selectedCell,
+    layerVisibility.SITES,
+    config.siteScale,
+    activeSiteThematic?.type,
+    activeSiteThematic?.colors,
+    activeSiteThematic?.opacity,
+]);
+
+
   /* ============================================================
      🔹 Highlight LAYER (deck.gl) - highlighting cell/site
   ============================================================ */
@@ -951,13 +1027,15 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     }
     // if (highlightLayer) baseLayers.push(highlightLayer);  // highlight always visible
 
+    if (siteLayer) baseLayers.push(siteLayer);
+
      // NON-CELL layers
     if (customGeoJsonLayer) baseLayers.push(customGeoJsonLayer); // kenya and other boundaries (when selected)
     if (rfPredictionLayer) baseLayers.push(rfPredictionLayer); // RF PRediction Layer (when selected)
     if (drivetestLayer) baseLayers.push(drivetestLayer); // RF drive test layer (when selected)
 
     return baseLayers;
-  }, [ currentZoom, markerLayer, sectorLayer, highlightLayer, customGeoJsonLayer, rfPredictionLayer, drivetestLayer, layerVisibility.CELLS ]);
+  }, [ currentZoom, markerLayer, sectorLayer, highlightLayer, customGeoJsonLayer, rfPredictionLayer, drivetestLayer, layerVisibility.CELLS, siteLayer ]);
 
   const sameSite = operatorFiltered.filter(
     c => c.site_name === operatorFiltered[0]?.site_name
@@ -1291,9 +1369,9 @@ const moveToCellProrulesWindow = (data, from) => {
         /> */}
 
           <Map
-            mapStyle={getMapStyle(config.mapView)}
+              mapStyle={getMapStyle(config.mapView || "voyager")}
             style={{ pointerEvents: "auto" }}
-            language="en"
+            // language="en"
           />
         </DeckGL>
 

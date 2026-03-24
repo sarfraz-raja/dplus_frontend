@@ -67,8 +67,6 @@ import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import TelecomMapsContainer from "../components/MapsUsingDeckgl/TelecomMapsContainer";
 import TelecomMap from "../components/MapsUsingDeckgl/TelecomMap";
-import TelecomGlobalFilters from "../components/MapsUsingDeckgl/TelecomGlobalFilters ";
-import GlobalFilters from "../components/MapsUsingDeckgl/GlobalFilters";
 import MapActions from "../store/actions/map-actions";
 
 import LeftFilters from "../components/MapsUsingDeckgl/LeftFilters";
@@ -85,8 +83,9 @@ useEffect(() => {
     });
 
     dispatch(MapActions.getMultiVendorCells({}));
-    dispatch(MapActions.getTelecomFilterMeta());
-    dispatch(MapActions.getTelecomTechMeta());
+    dispatch(MapActions.getSites());
+    // dispatch(MapActions.getTelecomFilterMeta());
+    // dispatch(MapActions.getTelecomTechMeta());
     dispatch(MapActions.getRfPredictionFilters());
 }, [dispatch]);
 
@@ -117,8 +116,6 @@ useEffect(() => {
 
     // 🔥 For testing single map with filters
     <div className="w-full h-screen flex flex-col">
-      {/* <TelecomGlobalFilters /> */}
-      {/* <GlobalFilters />  */}
       <div className="relative flex items-center gap-2 p-2 bg-[#0b1c38]">
         <LeftFilters />
         <RightFilters />

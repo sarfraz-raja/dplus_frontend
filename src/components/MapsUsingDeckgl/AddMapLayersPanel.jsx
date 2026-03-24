@@ -1427,6 +1427,7 @@ import CellThematicsPanel from "./CellThematicsPanel";
 import ColorPicker from "./ColorPicker";
 import RangeFilter from "./RangeFilter";
 import OpacitySlider from "./OpacitySlider";
+import SiteThematicsPanel from "./SiteThematicsPanel";
 import { KPI_RANGE_DEFAULTS, deepCopyRanges } from "./Utils/colorEngine";
 
 const AddMapLayersPanel = ({ onClose }) => {
@@ -1470,6 +1471,7 @@ const AddMapLayersPanel = ({ onClose }) => {
     // ── PENDING STATE ─────────────────────────────────────────────
     const [pendingVisibility, setPendingVisibility] = useState({
         CELLS: false,
+        SITES: false,   
         RF: false,
         DRIVE_TEST: false,
         ...boundaryGroups.reduce((acc, g) => ({ ...acc, [g.shapegroup]: false }), {})
@@ -1495,10 +1497,13 @@ const AddMapLayersPanel = ({ onClose }) => {
     const [expandedLayer, setExpandedLayer]         = useState(null);
     const [cellThematicsConfig, setCellThematicsConfig] = useState(null);
 
+    const [siteThematicsConfig, setSiteThematicsConfig] = useState(null);
+
     // ── SYNC PENDING FROM REDUX ───────────────────────────────────
     useEffect(() => {
         setPendingVisibility({
             CELLS: layerVisibility.CELLS || false,
+            SITES: layerVisibility.SITES || false, 
             RF: layerVisibility.RF || false,
             DRIVE_TEST: layerVisibility.DRIVE_TEST || false,
             ...boundaryGroups.reduce((acc, g) => ({
@@ -1506,6 +1511,18 @@ const AddMapLayersPanel = ({ onClose }) => {
                 [g.shapegroup]: layerVisibility[g.shapegroup] || false
             }), {})
         });
+
+          // ← normalize "ALL" string back to array, never let raw "ALL" bleed into pending
+        const normalizedBoundaries = { ...selectedBoundaries };
+        if (normalizedBoundaries["RF"] === "ALL") {
+            normalizedBoundaries["RF"] = rfRegions;   // expand "ALL" → actual array
+        }
+        boundaryGroups.forEach(g => {
+            if (normalizedBoundaries[g.shapegroup] === "ALL") {
+                normalizedBoundaries[g.shapegroup] = g.shapenames;
+            }
+        });
+
         setPendingBoundaries({ ...selectedBoundaries });
         setSelectedDriveSessions(driveTestFilters?.sessions || []);
     }, [layerVisibility, selectedBoundaries]);
@@ -1538,15 +1555,15 @@ const AddMapLayersPanel = ({ onClose }) => {
         }
 
         if (group === "RF") {
-            const newValue = !pendingVisibility.RF;
-            setPendingVisibility(prev => ({ ...prev, RF: newValue }));
-            setPendingBoundaries(prev => ({
-                ...prev,
-                RF: newValue ? rfRegions : []
-            }));
-            if (newValue) setExpandedLayer(group);
-            return;
-        }
+    const newValue = !pendingVisibility.RF;
+    setPendingVisibility(prev => ({ ...prev, RF: newValue }));
+    setPendingBoundaries(prev => ({
+        ...prev,
+        RF: newValue ? rfRegions : []   // all on, or all off
+    }));
+    if (newValue) setExpandedLayer(group);
+    return;
+}
 
         // boundary groups (KEN etc)
         const newValue = !pendingVisibility[group];
@@ -1596,12 +1613,15 @@ const AddMapLayersPanel = ({ onClose }) => {
     const applySelectedMapLayers = () => {
 
         // normalize — guard against "ALL" string from Redux restore
+        // normalize — if SITES is checked but RF parent checkbox is NOT checked,
+   
         const rfSelected = Array.isArray(pendingBoundaries["RF"])
             ? pendingBoundaries["RF"]
-            : rfRegions;
+            : [];   
 
         // commit visibility to Redux
         dispatch(MapActions.setLayerVisibility("CELLS", pendingVisibility.CELLS || false));
+        dispatch(MapActions.setLayerVisibility("SITES", pendingVisibility.SITES || false));
         dispatch(MapActions.setLayerVisibility("RF", rfSelected.length > 0));
         dispatch(MapActions.setLayerVisibility("DRIVE_TEST", selectedDriveSessions.length > 0));
         boundaryGroups.forEach(group => {
@@ -1695,11 +1715,20 @@ const AddMapLayersPanel = ({ onClose }) => {
             dispatch(MapActions.setMapConfig({ mapScale: cellThematicsConfig.scale }));
         }
 
+        // site thematics
+        if (siteThematicsConfig) {
+            dispatch(MapActions.setActiveSiteThematic(siteThematicsConfig));
+        }
+        if (siteThematicsConfig?.scale !== undefined) {
+            dispatch(MapActions.setMapConfig({ siteScale: siteThematicsConfig.scale }));
+        }
+
         // save to backend
         // RF saved inside saveBoundaries — no extra backend column needed
         dispatch(AuthActions.setupConf(true, {
             saveLayerVisibility: JSON.stringify({
                 CELLS: pendingVisibility.CELLS || false,
+                SITES: pendingVisibility.SITES || false,
                 BOUNDARY: anyBoundarySelected,
                 RF: rfSelected.length > 0,
                 DRIVE_TEST: selectedDriveSessions.length > 0
@@ -1724,6 +1753,9 @@ const AddMapLayersPanel = ({ onClose }) => {
             ...(cellThematicsConfig?.scale !== undefined && {
                 mapScale: cellThematicsConfig.scale
             }),
+            ...(siteThematicsConfig && {
+                saveSiteThematics: JSON.stringify(siteThematicsConfig)
+            }),
             saveDriveTestFilters: JSON.stringify({
                 sessions: selectedDriveSessions,
                 startDateTime,
@@ -1741,6 +1773,7 @@ const AddMapLayersPanel = ({ onClose }) => {
 
         setPendingVisibility({
             CELLS: false,
+             SITES: false,  
             RF: false,
             DRIVE_TEST: false,
             ...boundaryGroups.reduce((acc, g) => ({ ...acc, [g.shapegroup]: false }), {})
@@ -1753,6 +1786,7 @@ const AddMapLayersPanel = ({ onClose }) => {
         dispatch(MapActions.setActiveDriveSessions([]));
         dispatch(MapActions.resetLayerOpacity());
         dispatch(MapActions.setActiveThematic({ type: "Band", colors: {}, opacity: 1 }));
+        dispatch(MapActions.setActiveSiteThematic({ type: "Technology", colors: {} }));
         dispatch(MapActions.setMapConfig({ mapScale: 1 }));
         dispatch(MapActions.resetLayerVisibility());
         dispatch(MapActions.setRfParameter("RSRP"));
@@ -1783,6 +1817,7 @@ const AddMapLayersPanel = ({ onClose }) => {
                 thematic: "RSSI", thematicMode: "Default",
             }),
             saveThematics: JSON.stringify({ type: "Band", colors: {}, opacity: 1 }),
+            saveSiteThematics: JSON.stringify({ type: "Technology", colors: {} }),
             mapScale: 1,
         }));
 
@@ -1811,6 +1846,36 @@ const AddMapLayersPanel = ({ onClose }) => {
                 </button>
             </div>
 
+            {/* SITES */}
+            <div className="border rounded p-2 mb-2">
+                <div
+                    onClick={() => setExpandedLayer(expandedLayer === "SITE" ? null : "SITE")}
+                    className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
+                >
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            checked={pendingVisibility.SITES || false}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={() => {
+                                const newVal = !pendingVisibility.SITES;
+                                setPendingVisibility(prev => ({ ...prev, SITES: newVal }));
+                                if (newVal) setExpandedLayer("SITE");
+                            }}
+                        />
+                        <span className="font-medium">Sites (Towers)</span>
+                    </div>
+                    <span className="text-xl select-none">
+                        {expandedLayer === "SITE" ? <UilAngleUp size={22}/> : <UilAngleDown size={22}/>}
+                    </span>
+                </div>
+                {expandedLayer === "SITE" && (
+                    <div className="mt-3 border rounded p-3 space-y-3">
+                        <SiteThematicsPanel setSiteThematicsConfig={setSiteThematicsConfig} />
+                    </div>
+                )}
+            </div>
+
             {/* CELLS */}
             <div className="border rounded p-2 mb-2">
                 <div
@@ -1836,7 +1901,7 @@ const AddMapLayersPanel = ({ onClose }) => {
                 )}
             </div>
 
-            {/* BOUNDARY GROUPS */}
+            {/* BOUNDARY GROUPS(KEN) */}
             {boundaryGroups.map((group, index) => (
                 <div key={index} className="border rounded p-2 mb-2">
                     <div

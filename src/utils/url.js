@@ -61,6 +61,8 @@ export const Urls={
     // MAP USING DECK.GL
     telecom_getCells: "/telecom/cells",
     multiVendor: "/map/multiVendor",
+    towers: "/map/towers",
+    
     boundary_groups: "/map/boundary-groups",
     boundaries: "/map/boundaries",
     drive_test: "/map/drive-test",

@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useDispatch, useSelector  } from "react-redux";
 import MapActions from "../../store/actions/map-actions";
 import * as Unicons from '@iconscout/react-unicons';
-
 import DropdownButton from "./DropdownButton";
 import AddMapLayersPanel from "./AddMapLayersPanel";
+import AuthActions from "../../store/actions/auth-actions";
 
 const RightFilters = () => {
 
@@ -12,6 +12,7 @@ const RightFilters = () => {
 
   /* ---------------- GLOBAL DATA ---------------- */
   const rawCells = useSelector(state => state.map.rawCells || []);
+  const config = useSelector(state => state.map.config);
 
   /* ---------------- STATE ---------------- */
 
@@ -126,9 +127,15 @@ const RightFilters = () => {
               key={option.value}
               onClick={() => {
                 dispatch(MapActions.setMapConfig({ mapView: option.value }));
+                // save to backend
+                dispatch(AuthActions.setupConf(true, { mapView: option.value }));
                 setOpenDropdown(null);
               }}
-              className="px-2 py-1 hover:bg-gray-200 cursor-pointer text-sm"
+              className={`px-2 py-1 cursor-pointer text-sm rounded ${
+                config.mapView === option.value
+                    ? "bg-blue-600 text-white"
+                    : "hover:bg-gray-200"
+              }`}
             >
               {option.label}
             </div>
@@ -172,24 +179,47 @@ const RightFilters = () => {
                 </div>
 
                 {/* Search Input */}
-                <input
+                {/* <input
                 type="text"
                 value={siteSearch}
                 onChange={(e) => setSiteSearch(e.target.value)}
                 placeholder={`Search ${searchMode}...`}
                 className="w-full border border-gray-300 px-3 py-2 rounded-lg mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                /> */}
+
+                <div className="relative mb-3">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                    <Unicons.UilSearch size={16} />
+                  </span>
+                  <input
+                    type="text"
+                    value={siteSearch}
+                    onChange={(e) => setSiteSearch(e.target.value)}
+                    placeholder={selectedSite || selectedCell ? `Filter further...` : `Search ${searchMode}...`}
+                    className="w-full border border-gray-300 pl-9 pr-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Selected chip - only shows when selected */}
+                  {(selectedSite || selectedCell) && (
+                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 
+                      rounded-lg px-3 py-2 mb-3 text-sm text-blue-700">
+                      <Unicons.UilCheckCircle size={16} className="text-blue-500 shrink-0" />
+                      <span className="font-medium truncate">{selectedSite || selectedCell?.cell_id}</span>
+                      <Unicons.UilTimes size={14} className="ml-auto cursor-pointer hover:text-blue-600" 
+                        onClick={handleResetSearch} />
+                    </div>
+                  )}
 
                 {/* Suggestions */}
                 <div className="max-h-48 overflow-y-auto border rounded-md">
-
                 {searchMode === "site" &&
                     filteredSites.map((site, index) => (
                     <div
                         key={index}
                         onClick={() => {
-                        setSelectedSite(site);
-                        setSiteSearch(site);
+                          setSelectedSite(site);
+                          setSiteSearch("");
                         }}
                         className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                     >
@@ -202,8 +232,8 @@ const RightFilters = () => {
                     <div
                         key={index}
                         onClick={() => {
-                        setSelectedCell(cell);
-                        setSiteSearch(cell.cell_id);
+                          setSelectedCell(cell);
+                          setSiteSearch("");
                         }}
                         className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                     >
@@ -217,50 +247,49 @@ const RightFilters = () => {
                 </div>
 
                 <div className="mt-4 flex gap-2">
-                <button
-                onClick={() => {
+                  <button
+                    onClick={() => {
 
-                    let target = null;
+                        let target = null;
 
-                    if (searchMode === "site" && selectedSite) {
-                    target = rawCells.find(c => c.site_name === selectedSite);
-                    }
+                        if (searchMode === "site" && selectedSite) {
+                        target = rawCells.find(c => c.site_name === selectedSite);
+                        }
 
-                    if (searchMode === "cell" && selectedCell) {
-                    target = selectedCell;
-                    }
+                        if (searchMode === "cell" && selectedCell) {
+                        target = selectedCell;
+                        }
 
-                    if (target) {
+                        if (target) {
 
-                    dispatch(MapActions.setHighlightedCell(target.cell_id));
+                        dispatch(MapActions.setHighlightedCell(target.cell_id));
 
-                    dispatch(
-                        MapActions.setViewState({
-                        longitude: Number(target.longitude),
-                        latitude: Number(target.latitude),
-                        zoom: searchMode === "cell" ? 18 : 16,
-                        transitionDuration: 1200
-                        })
-                    );
+                        dispatch(
+                            MapActions.setViewState({
+                            longitude: Number(target.longitude),
+                            latitude: Number(target.latitude),
+                            zoom: searchMode === "cell" ? 18 : 16,
+                            transitionDuration: 1200
+                            })
+                        );
 
-                    }
+                        }
 
-                    setOpenDropdown(null);
+                        setOpenDropdown(null);
 
-                }}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm"
-                >
-                Apply & Zoom
-                </button>
+                    }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm"
+                    >
+                    Apply & Zoom
+                  </button>
 
-                <button
-                onClick={handleResetSearch}
-                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 rounded-lg text-sm"
-                >
-                Reset Search
-                </button>
-
-            </div>
+                  <button
+                    onClick={handleResetSearch}
+                    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 rounded-lg text-sm"
+                    >
+                    Reset Search
+                  </button>
+                </div>
             </div>
         </DropdownButton>      
 

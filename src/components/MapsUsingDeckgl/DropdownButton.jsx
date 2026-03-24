@@ -11,7 +11,7 @@ const DropdownButton = ({
   const isOpen = openDropdown === id;
 
   return (
-    <div className="relative">
+    <div className="relative" onClick={(e) => e.stopPropagation()}>
 
       {/* BUTTON */}
       <button

@@ -22,6 +22,7 @@ const initialState = {
     // 🔹 NEW TELECOM MAP STATE(FOR NEW ARCHITECTURE-> mapbox + deckgl)
     // 🔹 Raw telecom dataset from backend
     rawCells: [],
+    rawSites: [],
 
     // 🔹 UI Filters (shared across all maps)
     filters: {
@@ -34,6 +35,7 @@ const initialState = {
     config: {
         mapScale: 1,
         mapView: "mapbox://styles/mapbox/light-v10",
+        siteScale: 1,  
     },
 
     // 🔹 Shared camera state (for sync behavior)
@@ -64,8 +66,14 @@ const initialState = {
 
     highlightedCell: null,
 
+    // cell thematics
     activeThematic: {
         type: "Default",
+        colors: {}
+    },
+
+    activeSiteThematic: {
+        type: "Technology",
         colors: {}
     },
 
@@ -85,6 +93,7 @@ const initialState = {
 
     layerVisibility: {
         CELLS: false,
+        SITES: false, 
         BOUNDARY: false,
         RF: false,
         DRIVE_TEST: false
@@ -285,11 +294,21 @@ const mapQuery = createSlice({
         RESET_LAYER_VISIBILITY: (state) => {
             state.layerVisibility = {
                 CELLS: false,
+                 SITES: false,
                 BOUNDARY: false,
                 RF: false,
                 DRIVE_TEST: false
             };
         },
+
+        SET_RAW_SITES: (state, { payload }) => {
+            state.rawSites = payload;
+        },
+
+        SET_ACTIVE_SITE_THEMATIC: (state, { payload }) => {
+            state.activeSiteThematic = payload;
+        },
+
     }
 })
 
@@ -333,6 +352,8 @@ export const {
     RESET_LAYER_OPACITY,
     SET_LAYER_VISIBILITY,
     RESET_LAYER_VISIBILITY,
+    SET_RAW_SITES,
+    SET_ACTIVE_SITE_THEMATIC,
 
 } = mapQuery.actions
 

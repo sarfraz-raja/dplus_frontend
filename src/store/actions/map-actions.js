@@ -866,7 +866,7 @@ import Api from "../../utils/api"
 import { Urls } from "../../utils/url"
 import { SET_AUTHENTICATED, SET_COMMON_CONFIG, SET_TOKEN, SET_USER } from "../reducers/auth-reducer"
 import { ALERTS } from "../reducers/component-reducer"
-import { deepCopyRanges, KPI_RANGE_DEFAULTS } from "../../components/MapsUsingDeckgl/Utils/colorEngine";
+import { deepCopyRanges, KPI_RANGE_DEFAULTS, generatePaletteColors, COLOR_SCHEMES, FIXED_COLORS } from "../../components/MapsUsingDeckgl/Utils/colorEngine";
 import { 
     // OLD TELECOM REDUCER IMPORTS
     GET_ALL_FILTER, 
@@ -889,7 +889,8 @@ import {
     SET_SELECTED_BOUNDARIES,
     SET_HIGHLIGHTED_CELL,
 
-    SET_ACTIVE_THEMATIC,
+    SET_ACTIVE_THEMATIC, //cell
+    SET_ACTIVE_SITE_THEMATIC,  //site
     SET_DRIVE_TEST_DATA,
     SET_DRIVE_TEST_FILTERS,
     SET_ACTIVE_DRIVE_SESSIONS,
@@ -903,6 +904,7 @@ import {
     RESET_LAYER_OPACITY,
     SET_LAYER_VISIBILITY,
     RESET_LAYER_VISIBILITY,
+    SET_RAW_SITES,
 
 } from "../reducers/map-reducer"
 
@@ -1036,9 +1038,10 @@ const MapActions = {
     },
 
     /* ============================================================
-       NEW TELECOM MAP LOGIC
+       ADD MAP LAYER
     ============================================================ */
 
+    // Cell Layer
     getMultiVendorCells: (filters = {}) => async (dispatch) => {
         try {
             const res = await Api.post({
@@ -1087,24 +1090,161 @@ const MapActions = {
         }
     },
 
+    // SITE Layer
+    getSites: () => async (dispatch) => {
+        try {
+            const res = await Api.get({ url: Urls.towers, inst: 0 });
+
+            console.log("GET sites raw res.data:", res.data);
+console.log("res.data.data:", res.data.data);
+console.log("res.data.data length:", res.data.data?.length);
+
+            if (res?.status !== 200) return;
+            const adapted = (res.data.data || []).map(item => ({
+                tower_id:  item.tower_id,
+                site_name: item.site_name,        // ← was item.atoll_site_name, use site_name to match rawCells
+                latitude:  Number(item.latitude),
+                longitude: Number(item.longitude),
+                vendor:    item.vendor,
+                region:    item.region,
+                technology: item.technology,
+                band:      item.band,
+                status:    item.status,
+            }));
+            dispatch(SET_RAW_SITES(adapted));
+        } catch (err) {
+            console.log("sites error", err);
+        }
+    },
+
+    // Boundary Layer(KEN)
+    getBoundaryGroups: () => async (dispatch) => {
+        try {
+            const res = await Api.get({ url: Urls.boundary_groups, inst: 0 });
+            if (res?.status !== 200) return;
+            const groups = res?.data?.data || [];
+            dispatch(SET_BOUNDARY_GROUPS(groups));
+        } catch (err) {
+            console.log("boundary groups error", err);
+        }
+    },
+
+    getBoundaryGeoJson: (country, level, names=[]) => async (dispatch) => {
+        try {
+            const query = `?country=${country}&level=${level}`;
+            const res = await Api.get({ url: `${Urls.boundaries}${query}`, inst: 0 }); 
+            if (res?.status !== 200) return;
+            let geojson = res.data.data;
+            if (names.length > 0) {
+                geojson.features = geojson.features.filter(
+                    f => names.includes(f.properties.name)
+                );
+            }
+            dispatch(SET_BOUNDARY_GEOJSON(geojson));
+        } catch (err) {
+            console.log("boundary geojson error", err);
+        }
+    },
+
+    // Drive Test Layer
+    getDriveTestData: () => async (dispatch) => {
+        try {
+            const res = await Api.get({ url: Urls.drive_test, inst: 0 });
+            if (res?.status !== 200) return;
+            const sessions = res?.data?.data || [];
+            const allPoints = [];
+            sessions.forEach(session => {
+                const { lat = [], lon = [], rssi = [], session_id } = session;
+                lat.forEach((latVal, i) => {
+                    allPoints.push({
+                        latitude: Number(latVal),
+                        longitude: Number(lon[i]),
+                        rssi: Number(rssi[i]),
+                        session_id
+                    });
+                });
+            });
+            dispatch(SET_DRIVE_TEST_DATA(allPoints));
+        } catch (err) {
+            console.log("drive test data error", err);
+        }
+    },
+
+    // RF Prediction Layer
+    getRfPredictionFilters: () => async (dispatch) => {
+        try {
+            const res = await Api.get({ url: Urls.rf_prediction_filters, inst: 0 });
+            console.log("RF FILTERS API RESPONSE", res.data.data)
+            if (res?.status !== 200) return;
+            dispatch(SET_RF_PREDICTION_FILTERS(res.data.data));
+        } catch (err) {
+            console.log("RF filters error", err);
+        }
+    },
+
+    getRfPredictionLayer: (region, parameter, range_label) => async (dispatch) => {
+        console.log("Fetching RF layer for", region)
+        try {
+            const query = `?region=${encodeURIComponent(region)}&parameter=${parameter}`;
+            const res = await Api.get({ url: `${Urls.rf_prediction_data}${query}`, inst: 0 });
+            console.log("FULL RESPONSE RF Prediction", res);
+            if (res?.status !== 200) return;
+            dispatch(SET_RF_PREDICTION_GEOJSON(res.data.data));
+        } catch (err) {
+            console.log("RF prediction error", err);
+        }
+    },
+
+    // Per user map configurations 
     getUserMapSetup: () => async (dispatch, getState) => {
         try {
-            const res = await Api.get({ url: Urls.setupConf, inst: 0 });
-            if (res?.status !== 200) return;
-            const data = res?.data?.data || {};
+            const [setupRes, techRes, filterRes] = await Promise.all([
+                Api.get({ url: Urls.setupConf, inst: 0 }),
+                Api.get({ url: Urls.techwithband, inst: 0 }),
+                Api.get({ url: Urls.getAllFilterList, inst: 0 })
+            ]);
+
+            if (setupRes?.status !== 200) return;
+            const data = setupRes?.data?.data || {};
+
+            if (techRes?.status === 200) {
+                dispatch(SET_TELECOM_TECH_META(techRes.data.data || []));
+            }
+            if (filterRes?.status === 200) {
+                dispatch(SET_TELECOM_FILTER_META(filterRes.data.data));
+            }
+
+            const techMeta = techRes?.data?.data || [];
 
             /* ---------------- PARSE LAT LONG ---------------- */
-            let viewState = null;
-            if (data.saveLatLong) {
-                const parsed = JSON.parse(data.saveLatLong);
-                viewState = {
-                    longitude: Number(parsed.lng),
-                    latitude: Number(parsed.lat),
-                    zoom: Number(parsed.zoom),
-                    pitch: 0,
-                    bearing: 0
-                };
-            }
+            const KENYA_DEFAULT = {
+                longitude: 37.9062,
+                latitude: 0.0236,
+                zoom: 6,
+                pitch: 0,
+                bearing: 0
+            };
+
+            // let viewState = KENYA_DEFAULT;
+            // if (data.saveLatLong) {
+            //     const parsed = JSON.parse(data.saveLatLong);
+            //     const lat = Number(parsed.lat);
+            //     const lng = Number(parsed.lng);
+            //     const zoom = Number(parsed.zoom);
+            //     // only restore if it looks like a valid Kenya-region coordinate
+            //     if (!isNaN(lat) && !isNaN(lng) && zoom > 0) {
+            //         viewState = { longitude: lng, latitude: lat, zoom, pitch: 0, bearing: 0 };
+            //     }
+            // }
+
+            // ← ignore saveLatLong entirely, always start at Kenya
+            const viewState = {
+                longitude: 37.9062,
+                latitude: 0.0236,
+                zoom: 6,
+                pitch: 0,
+                bearing: 0
+            };
 
             /* ---------------- PARSE FILTERS ---------------- */
             const filters = data.saveMapFilters ? JSON.parse(data.saveMapFilters) : {};
@@ -1112,19 +1252,42 @@ const MapActions = {
             /* ---------------- PARSE THEMATICS ---------------- */
             const thematics = data.saveThematics
                 ? JSON.parse(data.saveThematics)
-                : { type: "Default", colors: {} };
+                : null;
+
+            const hasColors = thematics?.colors && Object.keys(thematics.colors).length > 0;
 
             /* ---------------- MAP CONFIG ---------------- */
+            // const config = {
+            //     mapScale: Number(data.mapScale) || 1,
+            //     mapView: data.mapView || "voyager"
+            //     // mapView:  "voyager"  // ← hardcode, ignore saved valu
+            // };
+
+            // normalize old mapbox URLs to new short keys
+            const rawMapView = data.mapView || "voyager";
+            const mapViewNormalized = rawMapView.startsWith("mapbox://") ? "voyager" : rawMapView;
+
             const config = {
                 mapScale: Number(data.mapScale) || 1,
-                mapView: data.mapView || "mapbox://styles/mapbox/streets-v11"
+                mapView: mapViewNormalized
             };
 
             /* ---------------- DISPATCH BASE CONFIG ---------------- */
             if (viewState) dispatch(SET_VIEW_STATE(viewState));
             dispatch(SET_FILTERS(filters));
             dispatch(SET_MAP_CONFIG(config));
-            dispatch(SET_ACTIVE_THEMATIC(thematics));
+            
+            if (hasColors) {
+                dispatch(SET_ACTIVE_THEMATIC(thematics));
+            } else {
+                const bandValues = [...new Set(techMeta.map(t => t.name))];
+                const bandColors = generatePaletteColors(bandValues, COLOR_SCHEMES.Default);
+                dispatch(SET_ACTIVE_THEMATIC({
+                    type: "Band",
+                    colors: bandColors,
+                    opacity: 0.9
+                }));
+            }
 
             /* ---------------- LAYER VISIBILITY ---------------- */
             const layerVisibility = data.saveLayerVisibility
@@ -1133,6 +1296,7 @@ const MapActions = {
 
             if (layerVisibility) {
                 dispatch(SET_LAYER_VISIBILITY({ layer: "CELLS", value: layerVisibility.CELLS }));
+                dispatch(SET_LAYER_VISIBILITY({ layer: "SITES", value: layerVisibility.SITES }));
                 dispatch(SET_LAYER_VISIBILITY({ layer: "BOUNDARY", value: layerVisibility.BOUNDARY }));
                 dispatch(SET_LAYER_VISIBILITY({ layer: "RF", value: layerVisibility.RF }));
                 dispatch(SET_LAYER_VISIBILITY({ layer: "DRIVE_TEST", value: layerVisibility.DRIVE_TEST }));
@@ -1225,87 +1389,15 @@ const MapActions = {
                 }
             }
 
+              /* ---------------- RESTORE SITE THEMATICS ---------------- */
+            const siteThematics = data.saveSiteThematics
+                ? JSON.parse(data.saveSiteThematics)
+                : { type: "Technology", colors: {} };
+
+            dispatch(SET_ACTIVE_SITE_THEMATIC(siteThematics));
+
         } catch (err) {
             console.log("setup config error", err);
-        }
-    },
-
-    /* ============================================================
-       ADD MAP LAYER
-    ============================================================ */
-
-    getBoundaryGroups: () => async (dispatch) => {
-        try {
-            const res = await Api.get({ url: Urls.boundary_groups, inst: 0 });
-            if (res?.status !== 200) return;
-            const groups = res?.data?.data || [];
-            dispatch(SET_BOUNDARY_GROUPS(groups));
-        } catch (err) {
-            console.log("boundary groups error", err);
-        }
-    },
-
-    getBoundaryGeoJson: (country, level, names=[]) => async (dispatch) => {
-        try {
-            const query = `?country=${country}&level=${level}`;
-            const res = await Api.get({ url: `${Urls.boundaries}${query}`, inst: 0 }); 
-            if (res?.status !== 200) return;
-            let geojson = res.data.data;
-            if (names.length > 0) {
-                geojson.features = geojson.features.filter(
-                    f => names.includes(f.properties.name)
-                );
-            }
-            dispatch(SET_BOUNDARY_GEOJSON(geojson));
-        } catch (err) {
-            console.log("boundary geojson error", err);
-        }
-    },
-
-    getDriveTestData: () => async (dispatch) => {
-        try {
-            const res = await Api.get({ url: Urls.drive_test, inst: 0 });
-            if (res?.status !== 200) return;
-            const sessions = res?.data?.data || [];
-            const allPoints = [];
-            sessions.forEach(session => {
-                const { lat = [], lon = [], rssi = [], session_id } = session;
-                lat.forEach((latVal, i) => {
-                    allPoints.push({
-                        latitude: Number(latVal),
-                        longitude: Number(lon[i]),
-                        rssi: Number(rssi[i]),
-                        session_id
-                    });
-                });
-            });
-            dispatch(SET_DRIVE_TEST_DATA(allPoints));
-        } catch (err) {
-            console.log("drive test data error", err);
-        }
-    },
-
-    getRfPredictionFilters: () => async (dispatch) => {
-        try {
-            const res = await Api.get({ url: Urls.rf_prediction_filters, inst: 0 });
-            console.log("RF FILTERS API RESPONSE", res.data.data)
-            if (res?.status !== 200) return;
-            dispatch(SET_RF_PREDICTION_FILTERS(res.data.data));
-        } catch (err) {
-            console.log("RF filters error", err);
-        }
-    },
-
-    getRfPredictionLayer: (region, parameter, range_label) => async (dispatch) => {
-        console.log("Fetching RF layer for", region)
-        try {
-            const query = `?region=${encodeURIComponent(region)}&parameter=${parameter}`;
-            const res = await Api.get({ url: `${Urls.rf_prediction_data}${query}`, inst: 0 });
-            console.log("FULL RESPONSE RF Prediction", res);
-            if (res?.status !== 200) return;
-            dispatch(SET_RF_PREDICTION_GEOJSON(res.data.data));
-        } catch (err) {
-            console.log("RF prediction error", err);
         }
     },
 
@@ -1345,6 +1437,10 @@ const MapActions = {
         dispatch(SET_ACTIVE_THEMATIC(payload));
     },
 
+    setActiveSiteThematic: (payload) => (dispatch) => { //site thematics
+        dispatch(SET_ACTIVE_SITE_THEMATIC(payload));
+    },
+
     setActiveDriveSessions: (sessions) => (dispatch) => {
         dispatch(SET_ACTIVE_DRIVE_SESSIONS(sessions));
     },
@@ -1376,6 +1472,8 @@ const MapActions = {
     resetLayerVisibility: () => (dispatch) => {
         dispatch(RESET_LAYER_VISIBILITY());
     },
+
+
 }
 
 export default MapActions;
