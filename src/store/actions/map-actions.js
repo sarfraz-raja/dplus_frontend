@@ -886,6 +886,8 @@ import {
     SET_BOUNDARY_GROUPS,
     SET_BOUNDARY_GEOJSON,
     CLEAR_BOUNDARY_GEOJSON,
+    CLEAR_BOUNDARY_GROUP,
+
     SET_SELECTED_BOUNDARIES,
     SET_HIGHLIGHTED_CELL,
 
@@ -900,11 +902,18 @@ import {
     SET_RF_PREDICTION_SELECTION,
 
     CLEAR_RF_PREDICTION_GEOJSON,
+    CLEAR_RF_PREDICTION_REGION,
+
     SET_LAYER_OPACITY,
     RESET_LAYER_OPACITY,
     SET_LAYER_VISIBILITY,
     RESET_LAYER_VISIBILITY,
     SET_RAW_SITES,
+    SET_RULER_MODE,
+    SET_RULER_POINTS,
+    SET_LAYER_LEGEND,
+    SET_BOUNDARY_COLORS,
+
 
 } from "../reducers/map-reducer"
 
@@ -1140,6 +1149,12 @@ console.log("res.data.data length:", res.data.data?.length);
                     f => names.includes(f.properties.name)
                 );
             }
+
+            // tag each feature with the group name
+            geojson.features = geojson.features.map(f => ({
+                ...f,
+                properties: { ...f.properties, shapegroup: country }
+            }));
             dispatch(SET_BOUNDARY_GEOJSON(geojson));
         } catch (err) {
             console.log("boundary geojson error", err);
@@ -1289,6 +1304,17 @@ console.log("res.data.data length:", res.data.data?.length);
                 }));
             }
 
+            /* ---------------- RESTORE LAYER OPACITY ---------------- */
+            const savedLayerOpacity = data.saveLayerOpacity
+                ? JSON.parse(data.saveLayerOpacity)
+                : null;
+
+            if (savedLayerOpacity) {
+                Object.entries(savedLayerOpacity).forEach(([layer, value]) => {
+                    dispatch(SET_LAYER_OPACITY({ layer, value }));
+                });
+            }
+
             /* ---------------- LAYER VISIBILITY ---------------- */
             const layerVisibility = data.saveLayerVisibility
                 ? JSON.parse(data.saveLayerVisibility)
@@ -1319,17 +1345,28 @@ console.log("res.data.data length:", res.data.data?.length);
             const boundaryGroups = getState().map.boundaryGroups;
             const savedRfParameter = data.saveRfParameter || "RSRP";
 
+            const savedBoundaryColors = data.saveBoundaryColors
+                ? JSON.parse(data.saveBoundaryColors)
+                : data.saveBoundaryColor
+                    ? { [boundaryGroups[0]?.shapegroup]: data.saveBoundaryColor }
+                    : {};
+
+                dispatch(SET_BOUNDARY_COLORS(savedBoundaryColors));
+            
             // RF is saved inside saveBoundaries["RF"]
-            const savedRfRaw = savedBoundaries["RF"];
+          // ✅ RF is now saved in SEPARATE column (not inside saveBoundaries)
+            const savedRfRegions = data.saveRfRegions
+                ? JSON.parse(data.saveRfRegions)
+                : [];
             const allRfRegions = [...new Set(getState().map.rfPredictionFilters.map(f => f.name))];
-            const rfToRestore = savedRfRaw === "ALL"
+            const rfToRestore = savedRfRegions === "ALL"
                 ? allRfRegions
-                : (Array.isArray(savedRfRaw) ? savedRfRaw : []);
+                : (Array.isArray(savedRfRegions) ? savedRfRegions : []);
 
             // normalize boundaries — convert "ALL" string back to full arrays
+           // ✅ saveBoundaries now ONLY has Kenya groups (RF removed from here)
             const normalizedBoundaries = Object.fromEntries(
                 Object.entries(savedBoundaries)
-                    .filter(([key]) => key !== "RF") // RF handled separately
                     .map(([group, value]) => {
                         if (value === "ALL") {
                             const groupObj = boundaryGroups.find(g => g.shapegroup === group);
@@ -1339,12 +1376,15 @@ console.log("res.data.data length:", res.data.data?.length);
                     })
             );
 
-            // store everything in selectedBoundaries including RF and DRIVE_TEST
+            // store everything in selected Boundaries including RF and DRIVE_TEST
             dispatch(SET_SELECTED_BOUNDARIES({
                 ...normalizedBoundaries,
-                RF: rfToRestore,
-                DRIVE_TEST: savedDriveTestFilters?.sessions || []
+                RF: rfToRestore, 
+                DRIVE_TEST: savedDriveTestFilters?.sessions || [] //may need to be deleted
             }));
+
+            // ✅ Store RF selection separately (you'll need to add this to Redux later)
+            // For now, just restore the layers
 
             /* ---------------- RESTORE BOUNDARY LAYERS ---------------- */
             boundaryGroups.forEach(group => {
@@ -1378,9 +1418,15 @@ console.log("res.data.data length:", res.data.data?.length);
 
             /* ---------------- RESTORE DRIVE TEST ---------------- */
             if (savedDriveTestFilters) {
+                // dispatch(SET_DRIVE_TEST_FILTERS({
+                //     ...savedDriveTestFilters,
+                //     ranges: deepCopyRanges(KPI_RANGE_DEFAULTS[savedDriveTestFilters.thematic || "RSSI"])
+                // }));
                 dispatch(SET_DRIVE_TEST_FILTERS({
                     ...savedDriveTestFilters,
-                    ranges: deepCopyRanges(KPI_RANGE_DEFAULTS[savedDriveTestFilters.thematic || "RSSI"])
+                    ranges: savedDriveTestFilters.ranges?.length
+                        ? savedDriveTestFilters.ranges.map(r => ({ ...r }))
+                        : deepCopyRanges(KPI_RANGE_DEFAULTS[savedDriveTestFilters.thematic || "RSSI"])
                 }));
                 const sessions = savedDriveTestFilters.sessions || [];
                 dispatch(SET_ACTIVE_DRIVE_SESSIONS(sessions));
@@ -1396,6 +1442,15 @@ console.log("res.data.data length:", res.data.data?.length);
 
             dispatch(SET_ACTIVE_SITE_THEMATIC(siteThematics));
 
+            /* ---------------- RESTORE LEGENDs ---------------- */
+            const legends = data.saveLayerLegends
+                ? JSON.parse(data.saveLayerLegends)
+                : {};
+            dispatch(MapActions.setLayerLegend("SITES", legends.SITES));
+            dispatch(MapActions.setLayerLegend("CELLS", legends.CELLS));
+            dispatch(MapActions.setLayerLegend("BOUNDARY",    legends.BOUNDARY));
+            dispatch(MapActions.setLayerLegend("DRIVE_TEST", legends.DRIVE_TEST));
+            
         } catch (err) {
             console.log("setup config error", err);
         }
@@ -1456,6 +1511,9 @@ console.log("res.data.data length:", res.data.data?.length);
     clearRfPredictionLayer: () => (dispatch) => {
         dispatch(CLEAR_RF_PREDICTION_GEOJSON());
     },
+    clearRfPredictionRegion: (regionName) => (dispatch) => {
+        dispatch(CLEAR_RF_PREDICTION_REGION(regionName));
+    },
 
     setLayerOpacity: (layer, value) => (dispatch) => {
         dispatch(SET_LAYER_OPACITY({layer, value}));
@@ -1472,7 +1530,21 @@ console.log("res.data.data length:", res.data.data?.length);
     resetLayerVisibility: () => (dispatch) => {
         dispatch(RESET_LAYER_VISIBILITY());
     },
-
+    setRulerMode: (val) => (dispatch) => {
+        dispatch(SET_RULER_MODE(val));
+    },
+    setRulerPoints: (points) => (dispatch) => {
+        dispatch(SET_RULER_POINTS(points));
+    },
+    setLayerLegend: (layer, value) => (dispatch) => {
+        dispatch(SET_LAYER_LEGEND({ layer, value }));
+    },
+    setBoundaryColors: (colors) => (dispatch) => {
+        dispatch(SET_BOUNDARY_COLORS(colors));
+    },
+    clearBoundaryGroup: (shapegroup) => (dispatch) => {
+        dispatch(CLEAR_BOUNDARY_GROUP(shapegroup));
+    },
 
 }
 

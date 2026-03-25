@@ -78,15 +78,15 @@ const TelecomMapsPage = () => {
   const rawCells = useSelector(state => state.map.rawCells);
 
 useEffect(() => {
-    dispatch(MapActions.getBoundaryGroups()).then(() => {
-        dispatch(MapActions.getUserMapSetup());
-    });
+     const init = async () => {
+        await dispatch(MapActions.getBoundaryGroups());
+        await dispatch(MapActions.getRfPredictionFilters()); // ← wait for RF filters first
+        dispatch(MapActions.getUserMapSetup());              // ← now rfPredictionFilters is populated
+    };
+    init();
 
     dispatch(MapActions.getMultiVendorCells({}));
     dispatch(MapActions.getSites());
-    // dispatch(MapActions.getTelecomFilterMeta());
-    // dispatch(MapActions.getTelecomTechMeta());
-    dispatch(MapActions.getRfPredictionFilters());
 }, [dispatch]);
 
 // const [kenyaGeoJson, setKenyaGeoJson] = useState(null);

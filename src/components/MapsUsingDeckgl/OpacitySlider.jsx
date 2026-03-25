@@ -25,9 +25,9 @@ const OpacitySlider = ({ layer }) => {
 
       <input
         type="range"
-        min="0.1"
+        min="0.01"
         max="1"
-        step="0.05"
+        step="0.01"
         value={opacity}
         onChange={(e) =>
           dispatch(

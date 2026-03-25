@@ -4,6 +4,7 @@ import MapActions from "../../store/actions/map-actions";
 import AuthActions from "../../store/actions/auth-actions";
 // import { generateColorMap } from "./Utils/generateColorMap";
 import ColorPicker from "./ColorPicker";
+import OpacitySlider from "./OpacitySlider";
 import {
   COLOR_SCHEMES,
   FIXED_COLORS,
@@ -29,7 +30,9 @@ const kpiThematicOptions = [
 ];
 
 // const CellThematicsPanel = ({ openDropdown, toggleDropdown }) => {
-const CellThematicsPanel = ({ setCellThematicsConfig }) => {
+const CellThematicsPanel = ({ setCellThematicsConfig,
+  tempLegend,
+  setTempLegend }) => {
 
     const dispatch = useDispatch();
 
@@ -41,9 +44,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig }) => {
 
     const type = activeThematic?.type || "Default";
     const colors = activeThematic?.colors || {};
-    const [opacity, setOpacity] = useState(
-        activeThematic?.opacity ?? 0.9
-    );
+    // const [opacity, setOpacity] = useState(
+    //     activeThematic?.opacity ?? 0.9
+    // );
 
     const [tempType, setTempType] = useState(type);
     
@@ -399,7 +402,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig }) => {
     useEffect(() => {
         setTempType(type);
         setTempColors(colors);
-        setOpacity(activeThematic?.opacity ?? 0.9);
+        // setOpacity(activeThematic?.opacity ?? 0.9);
 
         // reset ref if colors are empty (after Clear)
         if (!colors || Object.keys(colors).length === 0) {
@@ -443,7 +446,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig }) => {
             colors: Object.keys(tempColors).length > 0 
                 ? tempColors 
                 : defaultColors[tempType] || {},
-            opacity,
+            // opacity,
             scale: cellScale,  
             kpiConfig: {
                 startDateTime: kpiStartDateTime,
@@ -459,7 +462,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig }) => {
         }, [
         tempType,
         tempColors,
-        opacity,
+        // opacity,
         kpiStartDateTime,
         kpiEndDateTime,
         selectedKpi,
@@ -484,7 +487,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig }) => {
 
         {/* KPI Themactics  */}
             {/* OPACITY */}
-            <div className="mb-3 border-b pb-3">
+            {/* <div className="mb-3 border-b pb-3">
 
                 <div className="flex justify-between items-center mb-1">
 
@@ -508,6 +511,24 @@ const CellThematicsPanel = ({ setCellThematicsConfig }) => {
                     className="w-full"
                 />
 
+            </div> */}
+
+            {/*  LEGENDS  */}
+            <div className="flex items-center justify-between mb-3 border-b pb-3 mt-3">
+                <span className="text-xs font-semibold text-gray-500">
+                    Show Legend
+                </span>
+
+                <input
+                    type="checkbox"
+                    checked={!!tempLegend}
+                    onChange={(e) => setTempLegend(e.target.checked)}
+                />
+            </div>
+
+            {/* OPACITY */}
+            <div className="border-b pb-3">
+                <OpacitySlider layer="CELLS" />
             </div>
 
             {/* Cell Scale */}
@@ -525,8 +546,8 @@ const CellThematicsPanel = ({ setCellThematicsConfig }) => {
 
             <input
                 type="range"
-                min={0.5}
-                max={3}
+                min={0.1}
+                max={10}
                 step={0.1}
                 value={cellScale}
                 // onChange={(e) =>

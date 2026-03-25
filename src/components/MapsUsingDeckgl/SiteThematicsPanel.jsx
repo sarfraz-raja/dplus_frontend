@@ -29,7 +29,8 @@ const kpiThematicOptions = [
     "Frequency",
 ];
 
-const SiteThematicsPanel = ({ setSiteThematicsConfig }) => {
+const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
+  setTempLegend }) => {
 
     const dispatch = useDispatch();
 
@@ -45,9 +46,11 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig }) => {
         activeSiteThematic?.opacity ?? 0.9
     );
 
+    const layerLegends = useSelector(state => state.map.layerLegends);
+
     const [tempType, setTempType] = useState(type);
-    
     const [tempColors, setTempColors] = useState(colors);
+    
     const [selectedScheme, setSelectedScheme] = useState();
     const [selectedBandPalette, setSelectedBandPalette] = useState("Telecom20");
     const [selectedRegionPalette, setSelectedRegionPalette] = useState("Telecom20");
@@ -483,6 +486,21 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig }) => {
     <div className="relative">
 
         {/* KPI Themactics  */}
+
+        
+            {/* Legend Visibility */}
+            <div className="flex items-center justify-between mb-3 border-b pb-3 mt-3">
+                <span className="text-xs font-semibold text-gray-500">
+                    Show Legend
+                </span>
+
+                <input
+                    type="checkbox"
+                    checked={tempLegend}
+                    onChange={(e) => setTempLegend(e.target.checked)}
+                />
+            </div>
+            
             {/* OPACITY */}
             <div className="mb-3 border-b pb-3">
 
@@ -511,7 +529,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig }) => {
             </div>
 
             {/* Site Scale */}
-            <div className=" pb-3 mt-3">
+            <div className="mb-3 border-b pb-3 mt-3">
 
             <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-semibold text-gray-500">
@@ -525,8 +543,8 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig }) => {
 
             <input
                 type="range"
-                min={0.5}
-                max={3}
+                min={0.1}
+                max={10}
                 step={0.1}
                 value={siteScale}
                 // onChange={(e) =>
@@ -632,18 +650,33 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig }) => {
                     onChange={(e) => {
                         const thematic = e.target.value;
                         setTempType(thematic);
+
+                        if (thematic === "Alarms") {
+                            setTempColors({});   // ✅ VERY IMPORTANT
+                            return;
+                        }
+
+                        if (thematic === "KPIs") {
+                            setTempColors({});   // ✅ VERY IMPORTANT
+                            return;
+                        }
+
                         if (thematic === "Technology") {
                             setSelectedScheme("Default");
                             setTempColors(FIXED_COLORS.Technology);
+                            return;
                         }
                         if (thematic === "Band") {
                             setSelectedBandPalette("Default");
                             setTempColors(defaultColors.Band);
+                            return;
                         }
                         if (thematic === "Region") {
                             setSelectedRegionPalette("Default");
                             setTempColors(defaultColors.Region);
+                            return;
                         }
+
                     }}
                     className="w-full border rounded px-2 py-1 text-sm"
                 >

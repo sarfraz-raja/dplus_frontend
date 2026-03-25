@@ -1,13 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import DeckGL from "@deck.gl/react";
-import { PolygonLayer, ScatterplotLayer, GeoJsonLayer } from "@deck.gl/layers";
-import { WebMercatorViewport } from "@deck.gl/core";
-// import Map from "react-map-gl";
-// import { Popup } from "react-map-gl";
 
 import Map from "react-map-gl/maplibre";
-import { Popup } from "react-map-gl/maplibre";
+import DeckGL from "@deck.gl/react";
+import { WebMercatorViewport } from "@deck.gl/core";
+import { PolygonLayer, ScatterplotLayer, GeoJsonLayer,LineLayer, TextLayer  } from "@deck.gl/layers";
 import { CompassWidget, ZoomWidget, FullscreenWidget } from '@deck.gl/widgets';
 import '@deck.gl/widgets/stylesheet.css';
 
@@ -26,6 +23,7 @@ import CommonActions from '../../store/actions/common-actions';
 import { ALERTS } from '../../store/reducers/component-reducer';
 import { rsrpColorScale } from "./Utils/colorEngine";
 import { FIXED_COLORS, getDriveTestColor } from "./Utils/colorEngine";
+import LegendBox from "./LegendBox";
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -105,45 +103,17 @@ const hexToRgba = (hex, opacity = 1) => {
 
 };
 
+const haversineKm = ([lng1, lat1], [lng2, lat2]) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+              Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+};
+
 const TelecomMap = ({ operator, geojsonLayer = null }) => {
-
-  console.log("RENDER TELECOM MAP");
-
-  // const mapContainer = useRef(null);
-  // const mapRef = useRef(null);
-
-  // useEffect(() => {
-  //   if (mapRef.current) return; // prevent re-initializing
-
-  //   mapRef.current = new mapboxgl.Map({
-  //     container: mapContainer.current,
-  //     style: "mapbox://styles/mapbox/streets-v11",
-  //     center: [77.2090, 28.6139],
-  //     zoom: 10,
-  //     pitch: 0,
-  //     bearing: 0
-  //   });
-
-  //   // Zoom + Compass
-  //   mapRef.current.addControl(
-  //     new mapboxgl.NavigationControl(),
-  //     "top-right"
-  //   );
-
-  //   // Fullscreen
-  //   mapRef.current.addControl(
-  //     new mapboxgl.FullscreenControl(),
-  //     "top-right"
-  //   );
-
-  //   // Scale bar
-  //   mapRef.current.addControl(
-  //     new mapboxgl.ScaleControl({ unit: "metric"}),
-  //     "bottom-right"
-  //   );
-
-  //   return () => mapRef.current?.remove();
-  // }, []);
 
   const dispatch = useDispatch();
   const deckRef = useRef(null);
@@ -177,7 +147,42 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
   const rawSites = useSelector(state => state.map.rawSites);
   const activeSiteThematic = useSelector(state => state.map.activeSiteThematic);
 
+  const rulerMode = useSelector(state => state.map.rulerMode);
+  const rulerPoints = useSelector(state => state.map.rulerPoints);
+
   const [localViewState, setLocalViewState] = useState(viewState);
+  const [rulerHover, setRulerHover] = useState(null);
+
+  const layerLegends = useSelector(state => state.map.layerLegends);
+  const boundaryGroups = useSelector(state => state.map.boundaryGroups || []);
+  const boundaryColors = useSelector(state => state.map.boundaryColors || {});
+
+  const driveTestThematic = driveTestFilters
+    ? {
+        type: "KPIs",
+        kpiConfig: {
+          kpi: driveTestFilters.thematic,
+          ranges: driveTestFilters.ranges
+        }
+      }
+    : null;
+    
+const selectedBoundaries = useSelector(state => state.map.selectedBoundaries || {});
+
+const boundaryLegendThematic = useMemo(() => {
+    // Build colors object: one entry per group that has selections
+    const colors = {};
+    boundaryGroups.forEach(group => {
+        const selections = selectedBoundaries[group.shapegroup];
+        const hasSelections = Array.isArray(selections) && selections.length > 0;
+        if (hasSelections) {
+            colors[group.shapegroup] = boundaryColors[group.shapegroup] || "#000000";
+        }
+    });
+    if (Object.keys(colors).length === 0) return null;
+    return { type: "Boundary", colors };
+}, [boundaryGroups, selectedBoundaries, boundaryColors]);
+
 
   const activeViewState =
   (syncEnabled ? viewState : localViewState) || {
@@ -196,18 +201,6 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
     Region: "region"
   };
 
-
-
-  // useEffect(() => {
-  //   if (!activeThematic || !activeThematic.type) {
-  //     dispatch(MapActions.setActiveThematic({
-  //       type: "Technology",
-  //       colors: FIXED_COLORS.Technology,
-  //       opacity: 0.9
-  //     }));
-  //   }
-
-  // }, [activeThematic, dispatch]);
   useEffect(() => {
   if (!activeThematic?.colors || Object.keys(activeThematic.colors).length === 0) {
     dispatch(MapActions.setActiveThematic({
@@ -222,54 +215,6 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
   /* ============================================================
      🔹 LOCAL VIEW STATE (used only if sync disabled)
   ============================================================ */
-
-  // useEffect(() => {
-  //   if (rawCells.length > 0) {
-  //     fitToData();
-  //   }
-  // }, [rawCells]);
-
-  // ------Geojson layer zoom based filtering  of data-------
-  // useEffect(() => {
-  //   const initialView = activeViewState;
-
-  //   const viewport = new WebMercatorViewport({
-  //     ...initialView,
-  //     width: window.innerWidth,
-  //     height: window.innerHeight
-  //   });
-
-  //   const bounds = viewport.getBounds();
-
-  //   dispatch(MapActions.getMultiVendorCells({
-  //     bounds: {
-  //       west: bounds[0][0],
-  //       south: bounds[0][1],
-  //       east: bounds[1][0],
-  //       north: bounds[1][1]
-  //     },
-  //     zoom: initialView.zoom
-  //   }));
-
-  // }, []);   // 🔥 only once on mount
-
-//  useEffect(() => {
-//   dispatch(MapActions.getMultiVendorCells({
-//     vendor: [operator]
-//     }));
-//   }, [operator]);
-
-// useEffect(() => {
-//   dispatch(MapActions.getMultiVendorCells({}));
-// }, []);
-
-// const hasFitted = useRef(false);
-// useEffect(() => {
-//   if (rawCells.length > 0 && !hasFitted.current) {
-//     hasFitted.current = true;
-//     fitToData();
-//   }
-// }, [rawCells]);
 
   useEffect(() => {
   // Only fit on initial load
@@ -287,20 +232,6 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
   useEffect(() => {
     dispatch(MapActions.getDriveTestData());
   }, []);
-
-//   useEffect(() => {
-
-//   if (!driveTestData.length) return;
-
-//   const first = driveTestData[0];
-
-//   dispatch(MapActions.setViewState({
-//     longitude: parseFloat(first.longitude),
-//     latitude: parseFloat(first.latitude),
-//     zoom: 12
-//   }));
-
-// }, [driveTestData]);
 /* ============================================================
      🔹 APPLY GLOBAL FILTERS
   ============================================================ */
@@ -340,7 +271,6 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
    /* ============================================================
    🔹 SITE AGGREGATION (1 marker per site)  -> siet datacet
 ============================================================ */
-
   const siteAggregated = useMemo(() => {
 
     const siteMap = {};
@@ -363,116 +293,9 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
 
   }, [operatorFiltered]);
 
-
-   /* ============================================================
-   🔹 Generate Path layer along with Drive testing layer
-============================================================ */
-
-  const drivePath = useMemo(() => {
-
-    const filtered = driveTestData.filter(
-      d => activeDriveSessions.length === 0 ||
-          activeDriveSessions.includes(d.session_id)
-    );
-
-    return filtered.map(d => [
-      Number(d.longitude),
-      Number(d.latitude)
-    ]);
-
-  }, [driveTestData, activeDriveSessions]);
-
    /* ============================================================
    🔹 GENERATE COORDINATES FOR DRAWING
 ============================================================ */
-
-  // const generateCoordinates = (x, y, Dir, antBW, c_length) => {
-
-  //     const newCoordinates = [];
-  //     newCoordinates.push([x, y]);
-
-  //     // const slider = config.mapScale || 50;
-  //     const scale = config.mapScale || 1;
-
-  //     for (let j = 10; j >= 1; j--) {
-
-  //         // const x1 =
-  //         //     x +
-  //         //     (Math.sin(
-  //         //         (Dir - antBW / 2 + (antBW / 10) * j) * 0.01745329252
-  //         //     ) /
-  //         //         (69.093 / c_length) /
-  //         //         ((110 - slider) * 100));
-
-  //         // const y1 =
-  //         //     y +
-  //         //     (Math.cos(
-  //         //         (Dir - antBW / 2 + (antBW / 10) * j) * 0.01745329252
-  //         //     ) /
-  //         //         (69.093 / c_length) /
-  //         //         ((110 - slider) * 100));
-  //         const factor = scale * 0.0005; // tune this
-
-  //         const x1 =
-  //           x +
-  //           Math.sin((Dir - antBW / 2 + (antBW / 10) * j) * 0.01745329252) *
-  //           factor;
-
-  //         const y1 =
-  //           y +
-  //           Math.cos((Dir - antBW / 2 + (antBW / 10) * j) * 0.01745329252) *
-  //           factor;
-
-  //         newCoordinates.push([x1, y1]);
-  //     }
-
-  //     newCoordinates.push([x, y]);
-
-  //     return newCoordinates;
-  // };
-
-  // const operatorFiltered = useMemo(() => {
-  //   return rawCells.filter(cell => cell.operator === operator);
-  // }, [rawCells, operator]);
-
-// const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 1) => {
-
-//   const coords = [];
-//   coords.push([x, y]);
-
-//   const EARTH_SCALE = 0.00001; // base conversion
-//   const factor = EARTH_SCALE * c_length * scale;
-
-//   for (let j = 10; j >= 1; j--) {
-
-//     const angle = (Dir - antBW / 2 + (antBW / 10) * j) * (Math.PI / 180);
-
-//     const x1 = x + Math.sin(angle) * factor;
-//     const y1 = y + Math.cos(angle) * factor;
-
-//     coords.push([x1, y1]);
-//   }
-
-//   coords.push([x, y]);
-
-//   return coords;
-// };
-
-// const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
-//     const coords = [];
-//     coords.push([x, y]);
-
-//     for (let j = 10; j >= 1; j--) {
-//         const x1 = x + (Math.sin((Dir - antBW / 2 + (antBW / 10) * j) * 0.01745329252) 
-//                    / (69.093 / c_length) / ((110 - scale) * 100));
-//         const y1 = y + (Math.cos((Dir - antBW / 2 + (antBW / 10) * j) * 0.01745329252) 
-//                    / (69.093 / c_length) / ((110 - scale) * 100));
-//         coords.push([x1, y1]);
-//     }
-
-//     coords.push([x, y]);
-//     return coords;
-// };
 const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     const coords = [];
     coords.push([x, y]);
@@ -625,7 +448,6 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
       (a,b) => (order[a.technology]||0)-(order[b.technology]||0)
     );
   }, [operatorFiltered]);
-
   
   const sectorLayer = useMemo(() => {
 
@@ -668,7 +490,7 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
             d.azimuth, // each cell has unique azimuth → no overlap
             d.radius_m,        // antBW — already mapped from backend beamwidth
             d.radius_m,         // c_length — per-cell radius already mapped from backend length
-            config.mapScale*30,
+            config.mapScale*20,
           );
         },
 
@@ -793,23 +615,6 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
       layerVisibility.CELLS,
     ]);
 
-// const sectorLayer = new PolygonLayer({
-//   id: "test-layer",
-//   data: [
-//     {
-//       polygon: [
-//         [-53.43, -26.26],
-//         [-53.42, -26.26],
-//         [-53.42, -26.25],
-//         [-53.43, -26.25]
-//       ]
-//     }
-//   ],
-//   getPolygon: d => d.polygon,
-//   getFillColor: [255, 0, 0, 200],
-// });
-
-
 const siteLayer = useMemo(() => {
     if (!layerVisibility.SITES) return null;
     if (!rawSites || rawSites.length === 0) return null;
@@ -874,8 +679,6 @@ const siteLayer = useMemo(() => {
     activeSiteThematic?.colors,
     activeSiteThematic?.opacity,
 ]);
-
-
   /* ============================================================
      🔹 Highlight LAYER (deck.gl) - highlighting cell/site
   ============================================================ */
@@ -925,22 +728,36 @@ const siteLayer = useMemo(() => {
     //     pickable: true,
     //   });
     // }, [geojsonLayer]);
-
+  
   const customGeoJsonLayer = useMemo(() => {
     if (!boundaryGeoJson) return null;
 
     return new GeoJsonLayer({
-      id: 'boundary-layer',
+      id: `boundary-layer-${Object.keys(boundaryColors).length}`,
       data: boundaryGeoJson,
+      dataComparator: () => false,
       filled: false,
       stroked: true,
-      getLineColor: [0, 0, 0, 200],
+      getFillColor: [0,0,0,0],
+      getLineColor: feature => {
+        // Get the group name from the feature properties
+        const groupName = feature.properties?.shapegroup;
+        // Look up the color for this group
+        const hex = boundaryColors[groupName] || "#000000";
+
+        const [r,g,b] = hexToRgba(hex);
+        return [r, g, b, 200];
+      },
       lineWidthUnits: 'pixels',
       lineWidthMinPixels: 2,
       pickable: true,
       opacity: layerOpacity.BOUNDARY,
+      updateTriggers: {
+        getLineColor: [boundaryColors],
+        getFillColor: [boundaryColors, layerOpacity.BOUNDARY]
+      }
     });
-  }, [boundaryGeoJson]);
+  }, [boundaryGeoJson, boundaryColors, layerOpacity.BOUNDARY]);
 
   const rfPredictionLayer = useMemo(() => {
     if (!rfPredictionGeoJson) return null;
@@ -957,7 +774,7 @@ const siteLayer = useMemo(() => {
       pickable: true,
       opacity: layerOpacity.RF,
     });
-  }, [rfPredictionGeoJson]);
+  }, [rfPredictionGeoJson, layerOpacity.RF]);
 
   /* ============================================================
      🔹 RF Drive TEST LAYER (deck.gl)
@@ -1016,6 +833,90 @@ const siteLayer = useMemo(() => {
           colorRGB: hexToRgba(color).slice(0, 3)
       };
   };
+
+  /* ============================================================
+     🔹 Ruler ---> Line LAYER (deck.gl)
+  ============================================================ */
+// Line layer — black, thick, round caps
+const rulerLineLayer = useMemo(() => {
+    if (!rulerMode || rulerPoints.length === 0) return null;
+    const end = rulerPoints[1] ?? rulerHover;
+    if (!end) return null;
+
+    return new LineLayer({
+        id: "ruler-line",
+        data: [{ from: rulerPoints[0], to: end }],
+        getSourcePosition: d => d.from,
+        getTargetPosition: d => d.to,
+        getColor: [20, 20, 20, 220],
+        getWidth: 2,
+        widthUnits: "pixels",
+    });
+}, [rulerMode, rulerPoints, rulerHover]);
+
+// Endpoint dots — white fill, black border
+const rulerDotsLayer = useMemo(() => {
+    if (!rulerMode || rulerPoints.length === 0) return null;
+    const end = rulerPoints[1] ?? rulerHover;
+    const points = end
+        ? [{ position: rulerPoints[0] }, { position: end }]
+        : [{ position: rulerPoints[0] }];
+
+    return new ScatterplotLayer({
+        id: "ruler-dots",
+        data: points,
+        getPosition: d => d.position,
+        getFillColor: [255, 255, 255, 255],
+        getLineColor: [20, 20, 20, 255],
+        getRadius: 6,
+        radiusUnits: "pixels",
+        stroked: true,
+        lineWidthUnits: "pixels",
+        getLineWidth: 2,
+        pickable: false,
+    });
+}, [rulerMode, rulerPoints, rulerHover]);
+
+// Distance label — shown at midpoint of the line
+const rulerLabelLayer = useMemo(() => {
+    if (!rulerMode || rulerPoints.length === 0) return null;
+    const end = rulerPoints[1] ?? rulerHover;
+    if (!end) return null;
+
+    const mid = [
+        (rulerPoints[0][0] + end[0]) / 2,
+        (rulerPoints[0][1] + end[1]) / 2,
+    ];
+    const dist = haversineKm(rulerPoints[0], end);
+    const label = dist >= 1
+        ? `${dist.toFixed(2)} km`
+        : `${(dist * 1000).toFixed(0)} m`;
+
+    return new TextLayer({
+        id: "ruler-label",
+        data: [{ position: mid, text: label }],
+        getPosition: d => d.position,
+        getText: d => d.text,
+        getSize: 13,
+        getColor: [20, 20, 20, 255],
+        getBackgroundColor: [255, 255, 255, 220],
+        background: true,
+        backgroundPadding: [6, 3, 6, 3],
+        getBorderColor: [20, 20, 20, 180],
+        getBorderWidth: 1,
+        fontWeight: 600,
+        getTextAnchor: "middle",
+        getAlignmentBaseline: "center",
+        pickable: false,
+        fontFamily: "sans-serif",
+    });
+}, [rulerMode, rulerPoints, rulerHover]);
+
+
+  
+  /* ============================================================
+     🔹 ALL LAyers Dispatching logic
+  ============================================================ */
   const layers = useMemo(() => {
     const baseLayers = [];
     if (layerVisibility.CELLS) {
@@ -1028,6 +929,9 @@ const siteLayer = useMemo(() => {
     // if (highlightLayer) baseLayers.push(highlightLayer);  // highlight always visible
 
     if (siteLayer) baseLayers.push(siteLayer);
+    if (rulerLineLayer) baseLayers.push(rulerLineLayer);
+    if (rulerDotsLayer) baseLayers.push(rulerDotsLayer);
+    if (rulerLabelLayer) baseLayers.push(rulerLabelLayer);
 
      // NON-CELL layers
     if (customGeoJsonLayer) baseLayers.push(customGeoJsonLayer); // kenya and other boundaries (when selected)
@@ -1035,23 +939,14 @@ const siteLayer = useMemo(() => {
     if (drivetestLayer) baseLayers.push(drivetestLayer); // RF drive test layer (when selected)
 
     return baseLayers;
-  }, [ currentZoom, markerLayer, sectorLayer, highlightLayer, customGeoJsonLayer, rfPredictionLayer, drivetestLayer, layerVisibility.CELLS, siteLayer ]);
-
-  const sameSite = operatorFiltered.filter(
-    c => c.site_name === operatorFiltered[0]?.site_name
-  );
+  }, [ currentZoom, markerLayer, sectorLayer, highlightLayer, 
+      customGeoJsonLayer, rfPredictionLayer, drivetestLayer, 
+      layerVisibility.CELLS, siteLayer, rulerLineLayer, 
+      rulerDotsLayer, rulerLabelLayer]);
 
   /* ============================================================
      🔹 VIEW STATE HANDLER (SYNC LOGIC)
   ============================================================ */
-
-  // const handleViewStateChange = ({ viewState }) => {
-  //   if (syncEnabled) {
-  //     dispatch(MapActions.setViewState(viewState));
-  //   } else {
-  //     setLocalViewState(viewState);
-  //   }
-  // };
 
   const handleViewStateChange = ({ viewState }) => {
 
@@ -1074,57 +969,42 @@ const siteLayer = useMemo(() => {
     }
   };
 
-// const handleViewStateChange = ({ viewState }) => {
-//   const cleanedViewState = {
-//     longitude: viewState.longitude,
-//     latitude: viewState.latitude,
-//     zoom: viewState.zoom,
-//     pitch: viewState.pitch,
-//     bearing: viewState.bearing
-//   };
-
-//   if (syncEnabled) {
-//     dispatch(MapActions.setViewState(cleanedViewState));
-//   } else {
-//     setLocalViewState(cleanedViewState);
-//   }
-
-//   // 🔥 Only fetch if zoom >= 9
-//   if (cleanedViewState.zoom >= 9) {
-//     fetchVisibleCells(cleanedViewState);
-//   }
-// };
-
-//   if (debounceRef.current) {
-//     clearTimeout(debounceRef.current);
-//   }
-
-//   debounceRef.current = setTimeout(() => {
-//     const viewport = new WebMercatorViewport({
-//       ...vs,
-//       width: window.innerWidth,
-//       height: window.innerHeight
-//     });
-
-//     const bounds = viewport.getBounds();
-//     // [[west, south], [east, north]]
-
-//     const payload = {
-//       bounds: {
-//         west: bounds[0][0],
-//         south: bounds[0][1],
-//         east: bounds[1][0],
-//         north: bounds[1][1]
-//       },
-//       zoom: vs.zoom
-//     };
-
-//     dispatch(MapActions.getMultiVendorCells(payload));
-//   }, 400); // 400ms debounce
-// };
-
-
 /* ============================================================
+     🔹 Go back to you dataset prefered location
+  ============================================================ */
+
+  const fitToData = () => {
+    if (!rawCells || rawCells.length === 0) return;
+
+    const bounds = rawCells.map(d => [
+      Number(d.longitude),
+      Number(d.latitude)
+    ]);
+
+    const viewport = new WebMercatorViewport({
+      width: window.innerWidth,
+      height: window.innerHeight
+    });
+
+    let { longitude, latitude, zoom } =
+      viewport.fitBounds(bounds, { padding: 40 });
+
+    // 🔥 Prevent extreme zoom
+    zoom = Math.min(zoom, 13);
+
+    const newView = {
+      longitude,
+      latitude,
+      zoom,
+      pitch: 0,
+      bearing: 0
+    };
+
+    dispatch(MapActions.setViewState(newView));
+
+  };
+
+  /* ============================================================
      🔹 Styling of popup dragger with cell details
   ============================================================ */
     // const cellStyle = {
@@ -1140,64 +1020,6 @@ const siteLayer = useMemo(() => {
     // };
 
 
-/* ============================================================
-     🔹 Go back to you dataset prefered location
-  ============================================================ */
-  //   const fitToData = () => {
-  //     if (!rawCells || rawCells.length === 0) return;
-
-  //     const bounds = rawCells.map(d => [
-  //       Number(d.longitude),
-  //       Number(d.latitude)
-  //     ]);
-
-  //     const viewport = new WebMercatorViewport({
-  //       width: window.innerWidth,
-  //       height: window.innerHeight
-  //     });
-
-  //     const { longitude, latitude, zoom } =
-  //       viewport.fitBounds(bounds, { padding: 40 });
-
-  //     dispatch(MapActions.setViewState({
-  //       longitude,
-  //       latitude,
-  //       zoom,
-  //       pitch: 0,
-  //       bearing: 0
-  //     }));
-  // };
-
-const fitToData = () => {
-  if (!rawCells || rawCells.length === 0) return;
-
-  const bounds = rawCells.map(d => [
-    Number(d.longitude),
-    Number(d.latitude)
-  ]);
-
-  const viewport = new WebMercatorViewport({
-    width: window.innerWidth,
-    height: window.innerHeight
-  });
-
-  let { longitude, latitude, zoom } =
-    viewport.fitBounds(bounds, { padding: 40 });
-
-  // 🔥 Prevent extreme zoom
-  zoom = Math.min(zoom, 13);
-
-  const newView = {
-    longitude,
-    latitude,
-    zoom,
-    pitch: 0,
-    bearing: 0
-  };
-
-  dispatch(MapActions.setViewState(newView));
-
-};
   /* ============================================================
      🔹 Draggable pop functions 
   ============================================================ */
@@ -1213,53 +1035,58 @@ const fitToData = () => {
         type: 1,
         text: 'Text copied Successfully'
     }));
-};
+  };
 
-const moveToSiteAnalyticsWindow = (data, from) => {
-    dispatch(CommonActions.setLastName(true, 'Site Analytics'));
-    if (from === 'one') {
-        navigate('/dataplus-analytics-pro/site-analytics?uniqueId=' + data.Physical_id);
-    } else {
-        const newWin = window.open('/dataplus-analytics-pro/site-analytics?uniqueId=' + data.Physical_id, '_blank', 'noopener,noreferrer');
-        if (newWin) newWin.opener = null;
-    }
-};
+  const moveToSiteAnalyticsWindow = (data, from) => {
+      dispatch(CommonActions.setLastName(true, 'Site Analytics'));
+      if (from === 'one') {
+          navigate('/dataplus-analytics-pro/site-analytics?uniqueId=' + data.Physical_id);
+      } else {
+          const newWin = window.open('/dataplus-analytics-pro/site-analytics?uniqueId=' + data.Physical_id, '_blank', 'noopener,noreferrer');
+          if (newWin) newWin.opener = null;
+      }
+  };
 
-const moveToCellAnalyticsWindow = (data, from) => {
-    dispatch(CommonActions.setLastName(true, 'Cell Analytics'));
-    if (from === 'one') {
-        navigate('/dataplus-analytics-pro/cell-analytics?uniqueId=' + data.Cell_name);
-    } else {
-        const newWin = window.open('/dataplus-analytics-pro/cell-analytics?uniqueId=' + data.Cell_name, '_blank', 'noopener,noreferrer');
-        if (newWin) newWin.opener = null;
-    }
-};
+  const moveToCellAnalyticsWindow = (data, from) => {
+      dispatch(CommonActions.setLastName(true, 'Cell Analytics'));
+      if (from === 'one') {
+          navigate('/dataplus-analytics-pro/cell-analytics?uniqueId=' + data.Cell_name);
+      } else {
+          const newWin = window.open('/dataplus-analytics-pro/cell-analytics?uniqueId=' + data.Cell_name, '_blank', 'noopener,noreferrer');
+          if (newWin) newWin.opener = null;
+      }
+  };
 
-const moveToSiteProrulesWindow = (data, from) => {
-    dispatch(CommonActions.setLastName(true, 'Site Pro Rules'));
-    if (from === 'one') {
-        navigate('/dataplus-analytics-pro/site-pro-rules?uniqueId=' + data.Physical_id);
-    } else {
-        const newWin = window.open('/dataplus-analytics-pro/site-pro-rules?uniqueId=' + data.Physical_id, '_blank', 'noopener,noreferrer');
-        if (newWin) newWin.opener = null;
-    }
-};
+  const moveToSiteProrulesWindow = (data, from) => {
+      dispatch(CommonActions.setLastName(true, 'Site Pro Rules'));
+      if (from === 'one') {
+          navigate('/dataplus-analytics-pro/site-pro-rules?uniqueId=' + data.Physical_id);
+      } else {
+          const newWin = window.open('/dataplus-analytics-pro/site-pro-rules?uniqueId=' + data.Physical_id, '_blank', 'noopener,noreferrer');
+          if (newWin) newWin.opener = null;
+      }
+  };
 
-const moveToCellProrulesWindow = (data, from) => {
-    dispatch(CommonActions.setLastName(true, 'Cell Pro Rules'));
-    if (from === 'one') {
-        navigate('/dataplus-analytics-pro/cell-pro-rules?uniqueId=' + data.Cell_name);
-    } else {
-        const newWin = window.open('/dataplus-analytics-pro/cell-pro-rules?uniqueId=' + data.Cell_name, '_blank', 'noopener,noreferrer');
-        if (newWin) newWin.opener = null;
-    }
-};
+  const moveToCellProrulesWindow = (data, from) => {
+      dispatch(CommonActions.setLastName(true, 'Cell Pro Rules'));
+      if (from === 'one') {
+          navigate('/dataplus-analytics-pro/cell-pro-rules?uniqueId=' + data.Cell_name);
+      } else {
+          const newWin = window.open('/dataplus-analytics-pro/cell-pro-rules?uniqueId=' + data.Cell_name, '_blank', 'noopener,noreferrer');
+          if (newWin) newWin.opener = null;
+      }
+  };
+
+  // Handle Closing of Legends
+  const handleLegendClose = (layer) => {
+    dispatch(MapActions.setLayerLegend(layer, false));
+  };
   /* ============================================================
      🔹 RENDER
   ============================================================ */
   return (
     <div style={{ position: "relative", width: "100%", height: "100%"}}>
-      <button
+      {/* <button
         onClick={fitToData}
         style={{
           position: "absolute",
@@ -1274,7 +1101,7 @@ const moveToCellProrulesWindow = (data, from) => {
         }}
       >
         📍
-      </button>
+      </button> */}
       <DeckGL
         viewState={{ ...activeViewState }}
         controller={true}
@@ -1298,20 +1125,21 @@ const moveToCellProrulesWindow = (data, from) => {
           height: "100%",
         }}
         widgets={[
-          new CompassWidget({ 
-            placement: 'top-right',
-            style: { marginTop: '50px', marginRight: '10px' },
-            viewId: 'default'
-          }),
           new ZoomWidget({ 
-            placement: 'top-right',
-            style: {  marginRight: '10px' }
+            placement: 'bottom-right',
+            style: {  marginRight: '12px', marginBottom: '50px' }
           }),
           new FullscreenWidget({ 
-            placement: 'top-right',
-            style: {  marginRight: '10px' }
+            placement: 'bottom-right',
+            style: {  marginRight: '12px', marginBottom: '120px' }
+          }),
+          new CompassWidget({ 
+            placement: 'bottom-right',
+            style: { marginRight: '12px', marginBottom: '148px' },
+            viewId: 'default'
           }),
         ]}
+        //  Tooltip on Drivetest layer points on hover
         getTooltip={({ object, layer }) => {
             // Only show tooltip for drive test points
           if (!object || layer?.id !== "drivetest-layer") return null;
@@ -1338,6 +1166,31 @@ const moveToCellProrulesWindow = (data, from) => {
           };
 
         }}
+
+        // Ruler Layer for Measurement of distance
+        onHover={({ coordinate }) => {
+          if (rulerMode && rulerPoints.length === 1 && coordinate) {
+              setRulerHover(coordinate);
+          }
+        }}
+        onClick={({ coordinate, object, layer }) => {
+          // let existing layer clicks (cells, sectors) still work when NOT in ruler mode
+          if (!rulerMode || !coordinate) return;
+          // in ruler mode, suppress cell selection and handle ruler clicks
+          if (rulerPoints.length === 0) {
+              dispatch(MapActions.setRulerPoints([coordinate]));
+          } else if (rulerPoints.length === 1) {
+              dispatch(MapActions.setRulerPoints([rulerPoints[0], coordinate]));
+              setRulerHover(null);
+          } else {
+              // third click = fresh measurement
+              dispatch(MapActions.setRulerPoints([coordinate]));
+              setRulerHover(null);
+          }
+        }}
+        getCursor={({ isDragging }) =>
+            rulerMode ? "crosshair" : isDragging ? "grabbing" : "grab"
+        }
       >
        {/* <Map
           mapboxAccessToken={MAPBOX_TOKEN}
@@ -1370,12 +1223,45 @@ const moveToCellProrulesWindow = (data, from) => {
 
           <Map
               mapStyle={getMapStyle(config.mapView || "voyager")}
-            style={{ pointerEvents: "auto" }}
+              style={{ pointerEvents: "auto" }}
             // language="en"
           />
         </DeckGL>
 
-        {/* ✅ ADD here, outside DeckGL */}
+        {/* ✅ LEGENDs */}
+        {layerLegends.SITES && (
+          <LegendBox
+            layer="SITES"
+            thematic={activeSiteThematic}
+            onClose={() => handleLegendClose("SITES")}
+          />
+        )}
+
+        {layerLegends?.CELLS && (
+          <LegendBox
+            layer="CELLS"
+            thematic={activeThematic}   // ⚠️ important
+            onClose={() => handleLegendClose("CELLS")}
+          />
+        )}
+
+        {layerLegends?.DRIVE_TEST && driveTestThematic && (
+          <LegendBox
+            layer="DRIVE TEST"
+            thematic={driveTestThematic}
+            onClose={() => handleLegendClose("DRIVE_TEST")}
+          />
+        )}
+
+        {layerLegends?.BOUNDARY && boundaryLegendThematic && (
+          <LegendBox
+              layer="BOUNDARY"
+              thematic={boundaryLegendThematic}
+              onClose={() => handleLegendClose("BOUNDARY")}
+          />
+        )}
+
+        {/* Cell info popup */}
         {selectedCell && selectedCell.operator === operator && (
           <CellInfoPopup
             data={{
@@ -1405,6 +1291,66 @@ const moveToCellProrulesWindow = (data, from) => {
             }}
             />
         )}
+
+      <div style={{
+          position: "absolute",
+          bottom: 270,   // sits above the 3 deck.gl widgets
+          right: 12,
+          zIndex: 10,
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: "6px",
+          overflow: "hidden",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+          border: "1px solid rgba(0,0,0,0.15)",
+        }}>
+          {/* Fit to data */}
+          <button
+            title="Fit to data"
+            onClick={fitToData}
+            style={{
+              width: 32, height: 32,
+              background: "white", border: "none",
+              borderBottom: "1px solid rgba(0,0,0,0.1)",
+              cursor: "pointer", display: "flex",
+              alignItems: "center", justifyContent: "center", padding: 0,
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "#f0f0f0"}
+            onMouseLeave={e => e.currentTarget.style.background = "white"}
+          >
+            {/* <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="10" r="3"/>
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+            </svg> */}
+            📍
+          </button>
+
+          {/* Ruler */}
+          <button
+            title={rulerMode ? "Disable ruler" : "Measure distance"}
+            onClick={() => dispatch(MapActions.setRulerMode(!rulerMode))}
+            style={{
+              width: 32, height: 32,
+              background: rulerMode ? "#1a1a1a" : "white",
+              border: "none",
+              cursor: "pointer", display: "flex",
+              alignItems: "center", justifyContent: "center", padding: 0,
+            }}
+            onMouseEnter={e => { if (!rulerMode) e.currentTarget.style.background = "#f0f0f0"; }}
+            onMouseLeave={e => { if (!rulerMode) e.currentTarget.style.background = rulerMode ? "#1a1a1a" : "white"; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke={rulerMode ? "#facc15" : "#333"}
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="7" width="20" height="10" rx="1"/>
+              <line x1="6"  y1="7"  x2="6"  y2="11"/>
+              <line x1="10" y1="7"  x2="10" y2="13"/>
+              <line x1="14" y1="7"  x2="14" y2="11"/>
+              <line x1="18" y1="7"  x2="18" y2="11"/>
+            </svg>
+          </button>
+        </div>
+
     </div>
   );
 };

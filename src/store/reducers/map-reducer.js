@@ -98,6 +98,20 @@ const initialState = {
         RF: false,
         DRIVE_TEST: false
     },
+
+    layerLegends: {
+        CELLS: false,
+        SITES: false,
+        BOUNDARY: false,
+        RF: false,
+        DRIVE_TEST: false
+    },
+
+    rulerPoints: [],      // [] | [[lng,lat]] | [[lng,lat],[lng,lat]]
+    rulerMode: false,
+
+    boundaryColors: {},  // { "Kenya County": "#ff0000", "Kenya State": "#0000ff" }
+
 }
 
 
@@ -214,12 +228,36 @@ const mapQuery = createSlice({
             state.boundaryGroups = payload;
         },
 
+        // WITH
         SET_BOUNDARY_GEOJSON: (state, { payload }) => {
-            state.boundaryGeoJson = payload;
+            if (!state.boundaryGeoJson) {
+                state.boundaryGeoJson = payload;
+                return;
+            }
+            // merge — remove old features from this shapegroup, add new ones
+            const incomingGroup = payload.features?.[0]?.properties?.shapegroup;
+            const kept = state.boundaryGeoJson.features.filter(
+                f => f.properties?.shapegroup !== incomingGroup
+            );
+            state.boundaryGeoJson = {
+                ...payload,
+                features: [...kept, ...payload.features]
+            };
         },
 
         CLEAR_BOUNDARY_GEOJSON: (state) => {
             state.boundaryGeoJson = null;
+        },
+
+        // ADD new action for clearing a single group only
+        CLEAR_BOUNDARY_GROUP: (state, { payload: shapegroup }) => {
+            if (!state.boundaryGeoJson) return;
+            const kept = state.boundaryGeoJson.features.filter(
+                f => f.properties?.shapegroup !== shapegroup
+            );
+            state.boundaryGeoJson = kept.length
+                ? { ...state.boundaryGeoJson, features: kept }
+                : null;
         },
 
         SET_SELECTED_BOUNDARIES: (state, { payload }) => {
@@ -255,7 +293,22 @@ const mapQuery = createSlice({
         },
 
         SET_RF_PREDICTION_GEOJSON: (state, { payload }) => {
-        state.rfPredictionGeoJson = payload;
+            if (!state.rfPredictionGeoJson) {
+                state.rfPredictionGeoJson = payload;
+                return;
+            }
+            // merge new features into existing, keyed by region property
+            const incomingRegion = payload.features?.[0]?.properties?.region
+                || payload.features?.[0]?.properties?.name;
+            const kept = incomingRegion
+                ? state.rfPredictionGeoJson.features.filter(
+                    f => (f.properties?.region || f.properties?.name) !== incomingRegion
+                )
+                : state.rfPredictionGeoJson.features;
+            state.rfPredictionGeoJson = {
+                ...payload,
+                features: [...kept, ...payload.features]
+            };
         },
 
         SET_RF_PREDICTION_SELECTION: (state, { payload }) => {
@@ -264,6 +317,17 @@ const mapQuery = createSlice({
 
         CLEAR_RF_PREDICTION_GEOJSON: (state) => {
             state.rfPredictionGeoJson = null;
+        },
+
+        // ADD new reducer
+        CLEAR_RF_PREDICTION_REGION: (state, { payload: regionName }) => {
+            if (!state.rfPredictionGeoJson) return;
+            const kept = state.rfPredictionGeoJson.features.filter(
+                f => (f.properties?.region || f.properties?.name) !== regionName
+            );
+            state.rfPredictionGeoJson = kept.length
+                ? { ...state.rfPredictionGeoJson, features: kept }
+                : null;
         },
         
         SET_LAYER_OPACITY: (state, { payload }) => {
@@ -309,6 +373,39 @@ const mapQuery = createSlice({
             state.activeSiteThematic = payload;
         },
 
+        SET_RULER_MODE: (state, { payload }) => {
+            state.rulerMode = payload;
+            state.rulerPoints = []; // always reset points when toggling
+        },
+        SET_RULER_POINTS: (state, { payload }) => {
+            state.rulerPoints = payload;
+        },
+
+        SET_LAYER_LEGEND: (state, { payload }) => {
+            const { layer, value } = payload;
+            state.layerLegends[layer] = value;
+        },
+
+    //    SET_BOUNDARY_COLORS: (state, { payload }) => {
+    //     const { group, colors } = payload;
+
+    //     state.boundaryColors = {
+    //         ...state.boundaryColors,
+    //         [group]: {
+    //             ...(state.boundaryColors[group] || {}),
+    //             ...colors
+    //         }
+    //     };
+    // }
+
+        SET_BOUNDARY_COLORS: (state, { payload }) => {
+            // MERGE the colors, don't replace
+            state.boundaryColors = {
+                ...state.boundaryColors,
+                ...payload
+            };
+        }
+
     }
 })
 
@@ -334,6 +431,8 @@ export const {
     SET_TELECOM_TECH_META,
     SET_BOUNDARY_GROUPS,
     SET_BOUNDARY_GEOJSON,
+    CLEAR_BOUNDARY_GROUP,
+
     CLEAR_BOUNDARY_GEOJSON,
     SET_SELECTED_BOUNDARIES,
     SET_HIGHLIGHTED_CELL,
@@ -347,6 +446,7 @@ export const {
     SET_RF_PREDICTION_GEOJSON,
     SET_RF_PREDICTION_SELECTION,
     CLEAR_RF_PREDICTION_GEOJSON,
+    CLEAR_RF_PREDICTION_REGION,
 
     SET_LAYER_OPACITY,
     RESET_LAYER_OPACITY,
@@ -354,6 +454,10 @@ export const {
     RESET_LAYER_VISIBILITY,
     SET_RAW_SITES,
     SET_ACTIVE_SITE_THEMATIC,
+    SET_RULER_MODE,
+    SET_RULER_POINTS,
+    SET_LAYER_LEGEND,
+    SET_BOUNDARY_COLORS,
 
 } = mapQuery.actions
 

@@ -53,6 +53,7 @@ import TelecomMapsPage from '../pages/TelecomMapsPage.jsx';
 import SupportDesk from '../pages/SupportDesk.jsx';
 import TicketsPage from '../pages/Tickets/index.jsx';
 import DiscussionPage from '../pages/DiscussionForum/DiscussionPage.jsx';
+import NifiViewer from '../pages/nifi/index.jsx';
 
 export const Sidebar_content = {
     temp: [],
@@ -401,6 +402,16 @@ export const Sidebar_content = {
             // icon: <Unicons.UilComment size="16" />,
             icon: <Unicons.UilReact />,
             component: <TicketsPage />,
+            // component: <DiscussionPage />,
+            // component: <SupportDesk />,
+            subMenu: [],
+        },
+        {
+            name: "NiFi",
+            link: "/nifi-app",
+            // icon: <Unicons.UilComment size="16" />,
+            icon: <Unicons.UilReact />,
+            component: <NifiViewer />,
             // component: <DiscussionPage />,
             // component: <SupportDesk />,
             subMenu: [],
