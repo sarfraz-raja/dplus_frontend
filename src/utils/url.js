@@ -69,6 +69,8 @@ export const Urls={
 
     rf_prediction_filters: "/map/rf-predictions/filters",
     rf_prediction_data: "/map/rf-predictions/data",
+
+    gis_ta: "/kpi/multi-vendor/gis-ta",
     
     cxix_scripting:"/cxix_scripting",
     cxix_audit:"/cxix_audit",

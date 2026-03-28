@@ -1451,6 +1451,7 @@ const AddMapLayersPanel = ({ onClose }) => {
     // };
 
     const rfPredictionFilters = useSelector(state => state.map.rfPredictionFilters || []);
+    const rfColorConfig       = useSelector(state => state.map.rfColorConfig || []);
 
     const driveTestData       = useSelector(state => state.map.driveTestData || []);
     const driveTestFilters    = useSelector(state => state.map.driveTestFilters);
@@ -1458,7 +1459,15 @@ const AddMapLayersPanel = ({ onClose }) => {
     const rawCells            = useSelector(state => state.map.rawCells || []);
 
     const layerVisibility     = useSelector(state => state.map.layerVisibility);
-    const layerOpacity = useSelector(state => state.map.layerOpacity);
+    const layerOpacity        = useSelector(state => state.map.layerOpacity);
+    const mapConfig           = useSelector(state => state.map.config);
+
+    // ── PENDING OPACITY (not applied until Apply is clicked) ──────
+    const [pendingOpacity, setPendingOpacity] = useState({
+        BOUNDARY:   layerOpacity?.BOUNDARY   ?? 1,
+        RF:         layerOpacity?.RF         ?? 1,
+        DRIVE_TEST: layerOpacity?.DRIVE_TEST ?? 1,
+    });
     const layerLegends = useSelector(state => state.map.layerLegends);
     
 
@@ -1471,16 +1480,7 @@ const AddMapLayersPanel = ({ onClose }) => {
         [...new Set(rfPredictionFilters.map(p => p.parameter_name))]
     ), [rfPredictionFilters]);
 
-    const [rfParameter, setRfParameter] = useState("RSRP");
-    const [rfRangeColors, setRfRangeColors] = useState({});
-
-    const rfRanges = useMemo(() => (
-        [...new Set(
-            rfPredictionFilters
-                .filter(f => f.parameter_name === rfParameter)
-                .map(f => f.range_label)
-        )]
-    ), [rfPredictionFilters, rfParameter]);
+    const [rfParameter, setRfParameter] = useState(mapConfig?.rfParameter || "RSRP");
 
     const sessionIds = [...new Set(driveTestData.map(d => d.session_id))];
 
@@ -1505,8 +1505,9 @@ const AddMapLayersPanel = ({ onClose }) => {
 
     const [pendingLegends, setPendingLegends] = useState({
         SITES: false,
-        CELLS: false ,
+        CELLS: false,
         BOUNDARY: false,
+        RF: false,
         DRIVE_TEST: false,
     });
     
@@ -1574,7 +1575,13 @@ const AddMapLayersPanel = ({ onClose }) => {
     setPendingRfRegions(normalizedRf);
 
     setSelectedDriveSessions(driveTestFilters?.sessions || []);
-}, [layerVisibility, selectedBoundaries, driveTestFilters]);
+    setRfParameter(mapConfig?.rfParameter || "RSRP");
+    setPendingOpacity({
+        BOUNDARY:   layerOpacity?.BOUNDARY   ?? 1,
+        RF:         layerOpacity?.RF         ?? 1,
+        DRIVE_TEST: layerOpacity?.DRIVE_TEST ?? 1,
+    });
+}, [layerVisibility, selectedBoundaries, driveTestFilters, mapConfig?.rfParameter, layerOpacity]);
 
     useEffect(() => {
         setThematicMode("Default");
@@ -1586,6 +1593,7 @@ const AddMapLayersPanel = ({ onClose }) => {
             SITES: layerLegends?.SITES || false,
             CELLS: layerLegends?.CELLS || false,
             BOUNDARY:   layerLegends?.BOUNDARY   || false,
+            RF:         layerLegends?.RF          || false,
             DRIVE_TEST: layerLegends?.DRIVE_TEST || false,
         });
     }, [layerLegends]);
@@ -1755,6 +1763,7 @@ const AddMapLayersPanel = ({ onClose }) => {
     dispatch(MapActions.setLayerLegend("SITES", pendingLegends.SITES));
     dispatch(MapActions.setLayerLegend("CELLS", pendingLegends.CELLS));
     dispatch(MapActions.setLayerLegend("BOUNDARY", pendingLegends.BOUNDARY));
+    dispatch(MapActions.setLayerLegend("RF", pendingLegends.RF));
     dispatch(MapActions.setLayerLegend("DRIVE_TEST", pendingLegends.DRIVE_TEST));
 
     // ── DRIVE TEST ────────────────────────────────────────────
@@ -1776,7 +1785,15 @@ const AddMapLayersPanel = ({ onClose }) => {
         dispatch(MapActions.setMapConfig({ mapScale: cellThematicsConfig.scale }));
     if (siteThematicsConfig) dispatch(MapActions.setActiveSiteThematic(siteThematicsConfig));
     if (siteThematicsConfig?.scale !== undefined)
-        dispatch(MapActions.setMapConfig({ siteScale: siteThematicsConfig.scale }));
+        dispatch(MapActions.setMapConfig({ mapScale: siteThematicsConfig.scale }));
+
+    // ── COMMIT OPACITY TO REDUX ───────────────────────────────────
+    dispatch(MapActions.setLayerOpacity("BOUNDARY",   pendingOpacity.BOUNDARY));
+    dispatch(MapActions.setLayerOpacity("RF",         pendingOpacity.RF));
+    dispatch(MapActions.setLayerOpacity("DRIVE_TEST", pendingOpacity.DRIVE_TEST));
+
+    // ── COMMIT RF PARAMETER TO REDUX ──────────────────────────────
+    dispatch(MapActions.setRfParameter(rfParameter));
 
     // ── SAVE TO BACKEND ───────────────────────────────────────
     dispatch(AuthActions.setupConf(true, {
@@ -1801,7 +1818,7 @@ const AddMapLayersPanel = ({ onClose }) => {
         saveRfParameter: rfParameter,
         ...(cellThematicsConfig && { saveThematics: JSON.stringify(cellThematicsConfig) }),
         ...(cellThematicsConfig?.scale !== undefined && { mapScale: cellThematicsConfig.scale }),
-        saveLayerOpacity: JSON.stringify(layerOpacity),
+        saveLayerOpacity: JSON.stringify(pendingOpacity),
         ...(siteThematicsConfig && { saveSiteThematics: JSON.stringify(siteThematicsConfig) }),
         saveDriveTestFilters: JSON.stringify({
             sessions: selectedDriveSessions,
@@ -1829,7 +1846,7 @@ const AddMapLayersPanel = ({ onClose }) => {
         setPendingRfRegions([]);
 
         setExpanded(null);
-        setPendingLegends({ SITES: false, CELLS: false, DRIVE_TEST: false });
+        setPendingLegends({ SITES: false, CELLS: false, BOUNDARY: false, RF: false, DRIVE_TEST: false });
         
         setSelectedDriveSessions([]);
         setSelectedThematic("RSSI");
@@ -1838,6 +1855,7 @@ const AddMapLayersPanel = ({ onClose }) => {
         setStartDateTime("");
         setEndDateTime("");
 
+        setPendingOpacity({ BOUNDARY: 1, RF: 1, DRIVE_TEST: 1 });
         dispatch(MapActions.clearBoundaryLayer());
         dispatch(MapActions.clearRfPredictionLayer());
         dispatch(MapActions.setActiveDriveSessions([]));
@@ -1856,9 +1874,10 @@ const AddMapLayersPanel = ({ onClose }) => {
             thematicMode: "Default",
             ranges: deepCopyRanges(KPI_RANGE_DEFAULTS["RSSI"]),
         }));
-        dispatch( MapActions.setLayerLegend("SITES", false));
+        dispatch(MapActions.setLayerLegend("SITES", false));
         dispatch(MapActions.setLayerLegend("CELLS", false));
         dispatch(MapActions.setLayerLegend("BOUNDARY", false));
+        dispatch(MapActions.setLayerLegend("RF", false));
         dispatch(MapActions.setLayerLegend("DRIVE_TEST", false));
 
         setBoundaryColors({});
@@ -1885,9 +1904,6 @@ const AddMapLayersPanel = ({ onClose }) => {
         onClose();
     };
 
-    const updateRfRangeColor = (range, color) => {
-        setRfRangeColors(prev => ({ ...prev, [range]: color }));
-    };
 
     // ── RENDER ────────────────────────────────────────────────────
     return (
@@ -2096,7 +2112,10 @@ const AddMapLayersPanel = ({ onClose }) => {
                 </div>
 
                 {/* Opacity — shared for all boundary groups */}
-                <OpacitySlider layer="BOUNDARY" />
+                <OpacitySlider
+                    value={pendingOpacity.BOUNDARY}
+                    onChange={(val) => setPendingOpacity(prev => ({ ...prev, BOUNDARY: val }))}
+                />
                 
                 {/* Each boundary group — independently expandable */}
                 {boundaryGroups.map((group, index) => (
@@ -2200,7 +2219,20 @@ const AddMapLayersPanel = ({ onClose }) => {
                 </div>
                 {expandedLayer === "RF" && (
                     <div className="mt-2 border rounded p-2">
-                        <OpacitySlider layer="RF" />
+                        <div className="flex items-center justify-between pt-3 mb-3 mt-3 border-b pb-3">
+                            <span className="text-xs font-semibold text-gray-500">Show Legend</span>
+                            <input
+                                type="checkbox"
+                                checked={!!pendingLegends.RF}
+                                onChange={(e) =>
+                                    setPendingLegends(prev => ({ ...prev, RF: e.target.checked }))
+                                }
+                            />
+                        </div>
+                        <OpacitySlider
+                            value={pendingOpacity.RF}
+                            onChange={(val) => setPendingOpacity(prev => ({ ...prev, RF: val }))}
+                        />
                         <span className="text-xs font-semibold text-gray-500">Select Layers</span>
                         <div className="mt-2 max-h-[200px] overflow-y-auto border rounded p-2">
                             {rfRegions.map((name, idx) => (
@@ -2227,15 +2259,19 @@ onChange={() => toggleRfRegion(name)}
                         <div className="mt-3">
                             <div className="text-xs font-semibold text-gray-500 mb-1">Range & Colors</div>
                             <div className="space-y-2">
-                                {rfRanges.map(range => (
-                                    <div key={range} className="flex items-center justify-between border rounded px-2 py-1">
-                                        <span className="text-sm">{range}</span>
-                                        <ColorPicker
-                                            value={rfRangeColors[range] || "#ff0000"}
-                                            onChange={(color) => updateRfRangeColor(range, color)}
-                                        />
-                                    </div>
-                                ))}
+                                {rfColorConfig
+                                    .filter(c => c.parameter_name === rfParameter)
+                                    .sort((a, b) => a.display_order - b.display_order)
+                                    .map(entry => (
+                                        <div key={entry.range_label} className="flex items-center justify-between border rounded px-2 py-1">
+                                            <span className="text-sm">{entry.range_label}</span>
+                                            <div
+                                                className="w-5 h-5 rounded border border-gray-300 flex-shrink-0"
+                                                style={{ backgroundColor: entry.color_hex }}
+                                            />
+                                        </div>
+                                    ))
+                                }
                             </div>
                         </div>
                     </div>
@@ -2282,7 +2318,10 @@ onChange={() => toggleRfRegion(name)}
                         </div>
                         
 
-                        <OpacitySlider layer="DRIVE_TEST" />
+                        <OpacitySlider
+                            value={pendingOpacity.DRIVE_TEST}
+                            onChange={(val) => setPendingOpacity(prev => ({ ...prev, DRIVE_TEST: val }))}
+                        />
                         <span className="text-xs font-semibold text-gray-500">Select Layers</span>
                         <div className="max-h-[160px] overflow-y-auto border rounded p-2">
                             {sessionIds.map((session) => (

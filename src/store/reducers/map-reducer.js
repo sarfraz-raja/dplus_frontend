@@ -4,6 +4,7 @@ import { createSlice } from "@reduxjs/toolkit";
 
 const DEFAULT_LAYER_OPACITY = {
   CELLS: 1,
+  SITES: 1,
   BOUNDARY: 1,
   RF: 1,
   DRIVE_TEST: 1
@@ -23,6 +24,7 @@ const initialState = {
     // 🔹 Raw telecom dataset from backend
     rawCells: [],
     rawSites: [],
+    selectedTaCells: [], // array of {cellId, cellName, taData: [...]}
 
     // 🔹 UI Filters (shared across all maps)
     filters: {
@@ -35,7 +37,6 @@ const initialState = {
     config: {
         mapScale: 1,
         mapView: "mapbox://styles/mapbox/light-v10",
-        siteScale: 1,  
     },
 
     // 🔹 Shared camera state (for sync behavior)
@@ -86,6 +87,7 @@ const initialState = {
     activeDriveSessions: [],
 
     rfPredictionFilters: [],
+    rfColorConfig: [],
     rfPredictionGeoJson: null,
     rfPredictionSelection: [],
     layerOpacity: DEFAULT_LAYER_OPACITY,
@@ -292,6 +294,10 @@ const mapQuery = createSlice({
         state.rfPredictionFilters = payload;
         },
 
+        SET_RF_COLOR_CONFIG: (state, { payload }) => {
+            state.rfColorConfig = payload;
+        },
+
         SET_RF_PREDICTION_GEOJSON: (state, { payload }) => {
             if (!state.rfPredictionGeoJson) {
                 state.rfPredictionGeoJson = payload;
@@ -358,7 +364,7 @@ const mapQuery = createSlice({
         RESET_LAYER_VISIBILITY: (state) => {
             state.layerVisibility = {
                 CELLS: false,
-                 SITES: false,
+                SITES: false,
                 BOUNDARY: false,
                 RF: false,
                 DRIVE_TEST: false
@@ -367,6 +373,17 @@ const mapQuery = createSlice({
 
         SET_RAW_SITES: (state, { payload }) => {
             state.rawSites = payload;
+        },
+
+        SET_TA_SECTOR_DATA: (state, { payload }) => {
+            const { cellId, taData, cellCoords } = payload;
+            if (taData === null) {
+                // remove
+                state.selectedTaCells = state.selectedTaCells.filter(c => c.cellId !== cellId);
+            } else if (state.selectedTaCells.length < 10 && !state.selectedTaCells.find(c => c.cellId === cellId)) {
+                // add (max 10, no duplicates)
+                state.selectedTaCells.push({ cellId, taData, cellCoords });
+            }
         },
 
         SET_ACTIVE_SITE_THEMATIC: (state, { payload }) => {
@@ -443,6 +460,7 @@ export const {
     SET_DRIVE_TEST_FILTERS,
 
     SET_RF_PREDICTION_FILTERS,
+    SET_RF_COLOR_CONFIG,
     SET_RF_PREDICTION_GEOJSON,
     SET_RF_PREDICTION_SELECTION,
     CLEAR_RF_PREDICTION_GEOJSON,
@@ -458,6 +476,7 @@ export const {
     SET_RULER_POINTS,
     SET_LAYER_LEGEND,
     SET_BOUNDARY_COLORS,
+    SET_TA_SECTOR_DATA,
 
 } = mapQuery.actions
 

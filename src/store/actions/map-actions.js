@@ -898,6 +898,7 @@ import {
     SET_ACTIVE_DRIVE_SESSIONS,
 
     SET_RF_PREDICTION_FILTERS,
+    SET_RF_COLOR_CONFIG,
     SET_RF_PREDICTION_GEOJSON,
     SET_RF_PREDICTION_SELECTION,
 
@@ -913,7 +914,7 @@ import {
     SET_RULER_POINTS,
     SET_LAYER_LEGEND,
     SET_BOUNDARY_COLORS,
-
+    SET_TA_SECTOR_DATA,
 
 } from "../reducers/map-reducer"
 
@@ -1189,9 +1190,9 @@ console.log("res.data.data length:", res.data.data?.length);
     getRfPredictionFilters: () => async (dispatch) => {
         try {
             const res = await Api.get({ url: Urls.rf_prediction_filters, inst: 0 });
-            console.log("RF FILTERS API RESPONSE", res.data.data)
             if (res?.status !== 200) return;
-            dispatch(SET_RF_PREDICTION_FILTERS(res.data.data));
+            dispatch(SET_RF_PREDICTION_FILTERS(res.data.data || []));
+            dispatch(SET_RF_COLOR_CONFIG(res.data.rf_color_config || []));
         } catch (err) {
             console.log("RF filters error", err);
         }
@@ -1344,6 +1345,7 @@ console.log("res.data.data length:", res.data.data?.length);
 
             const boundaryGroups = getState().map.boundaryGroups;
             const savedRfParameter = data.saveRfParameter || "RSRP";
+            dispatch(SET_MAP_CONFIG({ rfParameter: savedRfParameter }));
 
             const savedBoundaryColors = data.saveBoundaryColors
                 ? JSON.parse(data.saveBoundaryColors)
@@ -1448,7 +1450,8 @@ console.log("res.data.data length:", res.data.data?.length);
                 : {};
             dispatch(MapActions.setLayerLegend("SITES", legends.SITES));
             dispatch(MapActions.setLayerLegend("CELLS", legends.CELLS));
-            dispatch(MapActions.setLayerLegend("BOUNDARY",    legends.BOUNDARY));
+            dispatch(MapActions.setLayerLegend("BOUNDARY", legends.BOUNDARY));
+            dispatch(MapActions.setLayerLegend("RF", legends.RF));
             dispatch(MapActions.setLayerLegend("DRIVE_TEST", legends.DRIVE_TEST));
             
         } catch (err) {
@@ -1544,6 +1547,26 @@ console.log("res.data.data length:", res.data.data?.length);
     },
     clearBoundaryGroup: (shapegroup) => (dispatch) => {
         dispatch(CLEAR_BOUNDARY_GROUP(shapegroup));
+    },
+
+    setTaSectorData: (cellId, taData) => (dispatch) => {
+        // taData = null to remove; or array of rings to add
+        dispatch(SET_TA_SECTOR_DATA({ cellId, taData }));
+    },
+
+    fetchTaSectors: (cellId, cellName, cellCoords) => async (dispatch) => {
+        try {
+            const url = `${Urls.gis_ta}?cell_name=${encodeURIComponent(cellName)}`;
+            console.log("[TA] API call:", url);
+            const res = await Api.get({ url, inst: 0 });
+            console.log("[TA] API response:", res?.status, res?.data);
+            if (res?.status !== 200) return;
+            const data = res.data?.data || [];
+            console.log("[TA] dispatching rows:", data.length);
+            dispatch(SET_TA_SECTOR_DATA({ cellId, taData: data, cellCoords }));
+        } catch (err) {
+            console.log("[TA] fetchTaSectors error", err);
+        }
     },
 
 }

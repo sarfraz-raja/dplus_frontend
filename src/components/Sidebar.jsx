@@ -95,7 +95,7 @@
 
 //         {/* <Unicons.UilArrowCircleLeft size="36" style={{ color: "white" }} /> */}
 
-//         <div className={`${(!sidebarOpen) ? 'w-0 md:w-0' : 'w-80 md:w-[34vw] lg:w-[30vw] xl:w-[22vw]'} z-[2000] flex bg-gray-200 bg-primaryLine dark:bg-primaryLine duration-950 transition-all from-white to-black  fixed top-0 left-0 bottom-0 text-white ${sidebarPos == "h" ? "flex-row" : "flex-col"} ${checkPage ? "md:absolute" : "md:static"}`}>
+//         <div className={`${(!sidebarOpen) ? 'w-0' : 'w-64 xl:w-72'} z-[2000] flex bg-gray-200 bg-primaryLine dark:bg-primaryLine duration-950 transition-all from-white to-black  fixed top-0 left-0 bottom-0 text-white ${sidebarPos == "h" ? "flex-row" : "flex-col"} ${checkPage ? "md:absolute" : "md:static"}`}>
 //             <img className="mx-auto h-20 w-auto py-2 md:hidden" src="/logo.png" alt="Datayog" onClick={() => {
 
 //             }} />
@@ -155,11 +155,14 @@
 
 // export default Sidebar
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 
 import * as Unicons from '@iconscout/react-unicons';
 import MenuItem from './MenuItem';
 import { Sidebar_content } from '../utils/sidebar_values';
+
+const MIN_WIDTH = 256;
+const MAX_WIDTH = 400;
 
 const Sidebar = ({ sidebarOpen, setsidebarOpenn, sidebarPos, setSidebarPos }) => {
 
@@ -172,6 +175,41 @@ const Sidebar = ({ sidebarOpen, setsidebarOpenn, sidebarPos, setSidebarPos }) =>
 
     const [checkPage, setCheckPage] = useState(false)
     const [checkAgain, setCheckAgain] = useState(true)
+    const [sidebarWidth, setSidebarWidth] = useState(
+        window.innerWidth >= 1280 ? 288 : 256
+    )
+    const startX = useRef(0)
+    const startW = useRef(0)
+    const isDragging = useRef(false)
+
+    const onMouseDown = useCallback((e) => {
+        isDragging.current = true
+        startX.current = e.clientX
+        startW.current = sidebarWidth
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+        e.preventDefault()
+    }, [sidebarWidth])
+
+    useEffect(() => {
+        const onMouseMove = (e) => {
+            if (!isDragging.current) return
+            const dx = e.clientX - startX.current
+            const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW.current + dx))
+            setSidebarWidth(newWidth)
+        }
+        const onMouseUp = () => {
+            isDragging.current = false
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+        }
+        document.addEventListener('mousemove', onMouseMove)
+        document.addEventListener('mouseup', onMouseUp)
+        return () => {
+            document.removeEventListener('mousemove', onMouseMove)
+            document.removeEventListener('mouseup', onMouseUp)
+        }
+    }, [])
 
     // const nestSidebar = (itm) => {
     //     return <li>
@@ -252,7 +290,18 @@ const Sidebar = ({ sidebarOpen, setsidebarOpenn, sidebarPos, setSidebarPos }) =>
 
         {/* <Unicons.UilArrowCircleLeft size="36" style={{ color: "white" }} /> */}
 
-        <div className={`${(!sidebarOpen) ? 'w-0 md:w-0' : 'w-80 md:w-[34vw] lg:w-[30vw] xl:w-[22vw]'} z-[2000] flex bg-gray-200 bg-primaryLine dark:bg-primaryLine duration-950 transition-all from-white to-black  fixed top-0 left-0 bottom-0 text-white ${sidebarPos == "h" ? "flex-row" : "flex-col"} ${checkPage ? "md:absolute" : "md:static"}`}>
+        <div
+            style={sidebarOpen ? { width: sidebarWidth } : {}}
+            className={`${(!sidebarOpen) ? 'w-0' : ''} z-[2000] flex bg-primaryLine dark:bg-primaryLine transition-all fixed top-0 left-0 bottom-0 text-white ${sidebarPos == "h" ? "flex-row" : "flex-col"} ${checkPage ? "md:absolute" : "md:static"}`}
+        >
+            {sidebarOpen && (
+                <div
+                    onMouseDown={onMouseDown}
+                    style={{ position: 'absolute', right: 0, top: 0, width: '6px', height: '100%', cursor: 'col-resize', zIndex: 9999, background: 'rgba(255,165,0,0.5)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,165,0,1)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,165,0,0.5)'}
+                />
+            )}
             <img className="mx-auto h-20 w-auto py-2 md:hidden" src="/logo.png" alt="Datayog" onClick={() => {
 
             }} />

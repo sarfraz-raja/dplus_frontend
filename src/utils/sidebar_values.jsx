@@ -418,7 +418,7 @@ export const Sidebar_content = {
         },
         
         {
-            name: "Telecom Maps",
+            name: "GIS Engine",
             link: "/telecom-maps",
             subMenu: [],
             component:  <TelecomMapsPage /> ,

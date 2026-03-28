@@ -1,10 +1,10 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import Map from "react-map-gl/maplibre";
 import DeckGL from "@deck.gl/react";
 import { WebMercatorViewport } from "@deck.gl/core";
-import { PolygonLayer, ScatterplotLayer, GeoJsonLayer,LineLayer, TextLayer  } from "@deck.gl/layers";
+import { PolygonLayer, ScatterplotLayer, GeoJsonLayer, LineLayer, TextLayer  } from "@deck.gl/layers";
 import { CompassWidget, ZoomWidget, FullscreenWidget } from '@deck.gl/widgets';
 import '@deck.gl/widgets/stylesheet.css';
 
@@ -21,7 +21,6 @@ import generateSectorPolygon from "./Utils/GenerateSectorPolygon";
 import { useNavigate } from 'react-router-dom';
 import CommonActions from '../../store/actions/common-actions';
 import { ALERTS } from '../../store/reducers/component-reducer';
-import { rsrpColorScale } from "./Utils/colorEngine";
 import { FIXED_COLORS, getDriveTestColor } from "./Utils/colorEngine";
 import LegendBox from "./LegendBox";
 
@@ -141,17 +140,23 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
   const activeDriveSessions = useSelector(state => state.map.activeDriveSessions);
 
   const rfPredictionGeoJson = useSelector(state => state.map.rfPredictionGeoJson);
+  const rfColorConfig = useSelector(state => state.map.rfColorConfig || []);
   const layerOpacity = useSelector(state => state.map.layerOpacity);
   const layerVisibility = useSelector(state => state.map.layerVisibility);
 
   const rawSites = useSelector(state => state.map.rawSites);
   const activeSiteThematic = useSelector(state => state.map.activeSiteThematic);
+  const selectedTaCells = useSelector(state => state.map.selectedTaCells || []);
 
   const rulerMode = useSelector(state => state.map.rulerMode);
-  const rulerPoints = useSelector(state => state.map.rulerPoints);
 
   const [localViewState, setLocalViewState] = useState(viewState);
   const [rulerHover, setRulerHover] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, cell }
+  const [hoveringRulerDot, setHoveringRulerDot] = useState(false);
+  const [isDraggingRulerDot, setIsDraggingRulerDot] = useState(false);
+  const [rulerSegments, setRulerSegments] = useState([]); // [{id, a:[lng,lat], b:[lng,lat]|null}]
+  const draggingRulerRef = useRef(null); // {segId, endpoint:'a'|'b'} — ref avoids stale closures
 
   const layerLegends = useSelector(state => state.map.layerLegends);
   const boundaryGroups = useSelector(state => state.map.boundaryGroups || []);
@@ -168,6 +173,17 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
     : null;
     
 const selectedBoundaries = useSelector(state => state.map.selectedBoundaries || {});
+
+const rfLegendThematic = useMemo(() => {
+    if (!rfColorConfig.length) return null;
+    const activeParam = config.rfParameter || "RSRP";
+    const filtered = rfColorConfig
+        .filter(c => c.parameter_name === activeParam)
+        .sort((a, b) => a.display_order - b.display_order);
+    if (!filtered.length) return null;
+    const colors = Object.fromEntries(filtered.map(c => [c.range_label, c.color_hex]));
+    return { type: activeParam, colors };
+}, [rfColorConfig, config.rfParameter]);
 
 const boundaryLegendThematic = useMemo(() => {
     // Build colors object: one entry per group that has selections
@@ -229,9 +245,19 @@ const boundaryLegendThematic = useMemo(() => {
     }
   }, [syncEnabled, viewState]);
 
+
   useEffect(() => {
     dispatch(MapActions.getDriveTestData());
   }, []);
+
+  // Close context menu on any click outside (without blocking map scroll/zoom)
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [contextMenu]);
+
 /* ============================================================
      🔹 APPLY GLOBAL FILTERS
   ============================================================ */
@@ -300,16 +326,54 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     const coords = [];
     coords.push([x, y]);
 
+    // original denominator (110 - scale) * 100 inverts at scale > 110 (mapScale > 5.5)
+    // replaced with linear growth: same output at mapScale=1, keeps growing beyond 5.5
+    const factor = c_length / (69.093 * 9000) * (scale / 20);
+
     for (let j = 10; j >= 1; j--) {
         const angle = (Dir - antBW / 2 + (antBW / 10) * j) * 0.01745329252;
-        
-        const x1 = x + Math.sin(angle) / (69.093 / c_length) / ((110 - scale) * 100);
-        const y1 = y + Math.cos(angle) / (69.093 / c_length) / ((110 - scale) * 100);
-        
+
+        const x1 = x + Math.sin(angle) * factor;
+        const y1 = y + Math.cos(angle) * factor;
+
         coords.push([x1, y1]);
     }
 
     coords.push([x, y]);
+    return coords;
+};
+
+// Generates an annular sector polygon (donut wedge) in geographic coordinates.
+// innerMeters=0 produces a full sector (pie slice); innerMeters>0 excludes the inner portion.
+const DEG_TO_RAD = Math.PI / 180;
+const METERS_PER_DEG = 111320;
+const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, outerMeters, steps = 30) => {
+    const lngScale = Math.cos(lat * DEG_TO_RAD);
+    const coords = [];
+
+    // inner arc: left → right (collapses to center point when innerMeters = 0)
+    for (let j = 0; j <= steps; j++) {
+        const angle = (azimuth - beamWidthDeg / 2 + (beamWidthDeg / steps) * j) * DEG_TO_RAD;
+        if (innerMeters === 0) {
+            coords.push([lng, lat]);
+        } else {
+            coords.push([
+                lng + Math.sin(angle) * innerMeters / (METERS_PER_DEG * lngScale),
+                lat + Math.cos(angle) * innerMeters / METERS_PER_DEG,
+            ]);
+        }
+    }
+
+    // outer arc: right → left
+    for (let j = steps; j >= 0; j--) {
+        const angle = (azimuth - beamWidthDeg / 2 + (beamWidthDeg / steps) * j) * DEG_TO_RAD;
+        coords.push([
+            lng + Math.sin(angle) * outerMeters / (METERS_PER_DEG * lngScale),
+            lat + Math.cos(angle) * outerMeters / METERS_PER_DEG,
+        ]);
+    }
+
+    coords.push(coords[0]); // close polygon
     return coords;
 };
   /* ============================================================
@@ -330,7 +394,7 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
 
     return new ScatterplotLayer({
       id: `marker-layer-${operator}`,
-      data: (currentZoom < 9 ? siteAggregated : operatorFiltered)
+      data: (currentZoom < 10 ? siteAggregated : operatorFiltered)
               .filter(d => !isNaN(Number(d.longitude)) && !isNaN(Number(d.latitude))),
       pickable: true,
       getPosition: d => {
@@ -341,11 +405,11 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
       },
       getRadius: d => {
         // Site markers (zoomed out)
-        if (currentZoom < 9) {
+        if (currentZoom < 10) {
           return 200 + (d.cell_count || 1) * 20;
         }
         // Cell markers (mid zoom)
-        if (currentZoom < 13) {
+        if (currentZoom < 12) {
           return 120;
         }
         // When sectors appear
@@ -394,7 +458,7 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
           layerOpacity.CELLS,  
         ]
       },
-      visible: layerVisibility.CELLS && currentZoom < 13,
+      visible: layerVisibility.CELLS && currentZoom < 12, // markers visible below zoom 12
       // visible: currentZoom < 9 || selectedCell !== null, // show markers only at low zooms
       onClick: info => {
         if (info.object) {
@@ -403,7 +467,7 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
           //   _lng: info.object.longitude,
           //   _lat: info.object.latitude
           // }));
-          if (currentZoom < 9) {
+          if (currentZoom < 10) {
             dispatch(MapActions.setViewState({
               longitude: info.object.longitude,
               latitude: info.object.latitude,
@@ -449,6 +513,39 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     );
   }, [operatorFiltered]);
   
+  // derived here so handleMapContextMenu and ruler layers can both use it
+  const activeSegment = rulerSegments.find(s => s.b === null) ?? null;
+
+  // Native contextmenu on the map wrapper → pickMultipleObjects → show cell context menu
+  const handleMapContextMenu = useCallback((e) => {
+    e.preventDefault();
+
+    // If ruler mode is active and we have a pending point A, right-click cancels it
+    if (rulerMode && activeSegment) {
+      setRulerSegments(prev => prev.filter(s => s.b !== null));
+      setRulerHover(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const hits = deckRef.current?.pickMultipleObjects({ x, y, radius: 5 });
+    if (!hits?.length) return;
+
+    // prefer a real cell sector; if not found, accept a TA sector (knows its cellId)
+    const sectorHit = hits.find(h => h.layer?.id?.startsWith('sector-layer-'));
+    if (sectorHit?.object) {
+      setContextMenu({ x, y, cell: sectorHit.object });
+      return;
+    }
+    const taHit = hits.find(h => h.layer?.id === 'ta-sector-layer-fill');
+    if (taHit?.object?.cellId) {
+      const cell = operatorFiltered.find(c => c.cell_id === taHit.object.cellId);
+      if (cell) setContextMenu({ x, y, cell });
+    }
+  }, [operatorFiltered, rulerMode, activeSegment]);
+
   const sectorLayer = useMemo(() => {
 
     if (!layerVisibility.CELLS) return null;
@@ -474,23 +571,16 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
         //     ),
 
         getPolygon: d => {
-
-          const techRadius = {
-            "2G": 80,
-            "3G": 150,
-            "4G": 260,
-            "5G": 380
-          };
-
-          const radius = techRadius[d.technology] || 200;
+          // boost radius at zoom 12–13 so sectors aren't tiny at the scatterplot→sector transition
+          const zoomBoost = currentZoom <= 12 ? 6 : currentZoom <= 13 ? 3 : 1;
 
           return generateCoordinates(
             d.longitude,
             d.latitude,
-            d.azimuth, // each cell has unique azimuth → no overlap
-            d.radius_m,        // antBW — already mapped from backend beamwidth
-            d.radius_m,         // c_length — per-cell radius already mapped from backend length
-            config.mapScale*20,
+            d.azimuth,
+            d.radius_m,
+            d.radius_m * zoomBoost,
+            config.mapScale * 20,
           );
         },
 
@@ -535,10 +625,9 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
         // },
 
         updateTriggers: {
-          // getFillColor: activeThematic
-          // getLineColor: activeThematic
-          getPolygon: config.mapScale, 
+          getPolygon: config.mapScale,
           getLineColor: [
+            selectedCell,
             activeThematic?.type,
             activeThematic?.colors,
             activeThematic?.opacity,
@@ -588,9 +677,10 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
         lineJointRounded: true,
         lineCapRounded: true,
 
-        visible: layerVisibility.CELLS && currentZoom >= 13, // show sectors only at higher zooms
+        visible: layerVisibility.CELLS && currentZoom >= 12, // show sectors only at higher zooms
 
-        onClick: info => {
+        onClick: (info, event) => {
+            if (event?.srcEvent?.button === 2) return; // ignore right-click
             if (info.object) {
                 dispatch(MapActions.setSelectedCell({
                 ...info.object,
@@ -598,19 +688,21 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
                 _lat: info.coordinate[1]
                 }));
             }
-        }
+        },
 
     });
 
-  }, 
-      [operatorFiltered, 
-      operator, 
-      config.mapScale, 
-      dispatch, 
-      currentZoom, 
+  },
+      [operatorFiltered,
+      sortedCells,
+      operator,
+      config.mapScale,
+      dispatch,
+      currentZoom,
+      selectedCell,
       activeThematic?.type,
       activeThematic?.colors,
-      activeThematic?.opacity, 
+      activeThematic?.opacity,
       layerOpacity.CELLS,
       layerVisibility.CELLS,
     ]);
@@ -628,9 +720,7 @@ const siteLayer = useMemo(() => {
         getPosition: d => [Number(d.longitude), Number(d.latitude)],
         radiusUnits: "pixels",
         getRadius: 6,
-        radiusScale: config.siteScale || 1,
-        radiusMinPixels: 4,
-        radiusMaxPixels: 14,
+        radiusScale: config.mapScale / 2,
         getFillColor: d => {
             if (selectedCell && d.site_name === selectedCell.site_name)
                 return [255, 255, 0, 255];
@@ -674,7 +764,7 @@ const siteLayer = useMemo(() => {
     dispatch,
     selectedCell,
     layerVisibility.SITES,
-    config.siteScale,
+    config.mapScale,
     activeSiteThematic?.type,
     activeSiteThematic?.colors,
     activeSiteThematic?.opacity,
@@ -683,12 +773,14 @@ const siteLayer = useMemo(() => {
      🔹 Highlight LAYER (deck.gl) - highlighting cell/site
   ============================================================ */
 
-  const highlightLayer = useMemo(() => {
+  // Highlights the site location with a dot — used when searching by site
+  const siteHighlightLayer = useMemo(() => {
 
-     if (!highlightedCell || !operatorFiltered) return null;
+    if (!highlightedCell || !operatorFiltered) return null;
+    if (selectedCell) return null; // cell sector highlight takes over
 
     return new ScatterplotLayer({
-      id: "highlighted-cell",
+      id: "site-highlight",
 
       data: operatorFiltered.filter(
         d => d.cell_id === highlightedCell &&
@@ -698,18 +790,143 @@ const siteLayer = useMemo(() => {
 
       pickable: false,
 
-      getPosition: d => [
-        Number(d.longitude),
-        Number(d.latitude)
-      ],
+      getPosition: d => [Number(d.longitude), Number(d.latitude)],
 
-      getFillColor: [255, 255, 0, 255],
+      getFillColor: [255, 215, 0, 255],
 
-      getRadius: 10,
-
-      radiusUnits: "pixels"
+      getRadius: 14,
+      radiusUnits: "pixels",
     });
-  }, [operatorFiltered, highlightedCell]);
+  }, [operatorFiltered, highlightedCell, selectedCell]);
+
+  // Highlights the selected cell by filling its sector polygon — used when searching by cell
+  const cellHighlightLayer = useMemo(() => {
+
+    if (!selectedCell) return null;
+
+    return new PolygonLayer({
+      id: "cell-highlight-sector",
+
+      data: [selectedCell],
+
+      pickable: false,
+      stroked: true,
+      filled: true,
+
+      getPolygon: d => generateCoordinates(
+        d.longitude,
+        d.latitude,
+        d.azimuth,
+        d.radius_m,
+        d.radius_m,
+        config.mapScale * 20,
+      ),
+
+      getFillColor: [255, 215, 0, 140],
+      getLineColor: [255, 215, 0, 255],
+      getLineWidth: 3,
+      lineWidthUnits: "pixels",
+      lineJointRounded: true,
+      lineCapRounded: true,
+    });
+  }, [selectedCell, config.mapScale]);
+
+  /* ============================================================
+     🔹 TA SECTOR LAYER (deck.gl) — annular sectors per distance band
+  ============================================================ */
+  const taSectorLayer = useMemo(() => {
+
+    if (!selectedTaCells?.length) return null;
+
+    // HSL → RGB helper
+    const hslToRgb = (h, s, l) => {
+      s /= 100; l /= 100;
+      const k = n => (n + h / 30) % 12;
+      const a = s * Math.min(l, 1 - l);
+      const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+      return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+    };
+
+    const perRingCount = s => (s.total_samples || 0) * (s['Share in range %'] || 0) / 100;
+
+    // Build slices per cell; each cell gets a distinct hue band
+    const cellCount = selectedTaCells.length;
+    const allSlices = [];
+    selectedTaCells.forEach(({ cellId, taData, cellCoords }, cellIndex) => {
+      const sorted = [...taData].sort((a, b) => a.distance - b.distance);
+      const n = sorted.length;
+      sorted.forEach((row, i) => {
+        allSlices.push({
+          ...row,
+          // Pin to the cell's known coordinates so the TA rings always appear on the correct cell
+          latitude:  cellCoords?.lat      ?? row.latitude,
+          longitude: cellCoords?.lng      ?? row.longitude,
+          azimuth:   cellCoords?.azimuth  ?? row.azimuth,
+          length:    cellCoords?.beamWidth ?? row.length,
+          cellId,
+          innerMeters: i === 0 ? 0 : sorted[i - 1].distance,
+          outerMeters: row.distance,
+          ringIndex: i,
+          ringCount: n,
+          cellIndex,
+          cellCount,
+        });
+      });
+    });
+
+    // scale so the tallest ring across all cells = ~3000m
+    const maxSamples = Math.max(...allSlices.map(perRingCount), 1);
+    const elevationScale = 3000 / maxSamples;
+
+    const sharedProps = {
+      data: allSlices,
+      getPolygon: d => generateAnnularSector(
+        d.longitude, d.latitude,
+        d.azimuth, d.length,
+        d.innerMeters, d.outerMeters,
+      ),
+      getElevation: d => perRingCount(d) * elevationScale,
+      extruded: true,
+      updateTriggers: {
+        getPolygon: selectedTaCells,
+        getFillColor: selectedTaCells,
+        getLineColor: selectedTaCells,
+        getElevation: selectedTaCells,
+      },
+    };
+
+    // Layer 1: solid fill (semi-transparent so rings are distinguishable)
+    const fillLayer = new PolygonLayer({
+      ...sharedProps,
+      id: 'ta-sector-layer-fill',
+      pickable: true,
+      filled: true,
+      stroked: false,
+      wireframe: false,
+      getFillColor: d => {
+        // golden angle (137.508°) guarantees adjacent rings are always maximally far apart in hue
+        const hue = (d.ringIndex * 137.508 + d.cellIndex * 47) % 360;
+        return [...hslToRgb(hue, 80, 48), 150];
+      },
+      material: { ambient: 0.35, diffuse: 0.6, shininess: 32 },
+      onClick: (info, event) => {
+        if (event?.srcEvent?.button === 2) return;
+        const hits = deckRef.current?.pickMultipleObjects({
+          x: info.pixel[0], y: info.pixel[1], radius: 2,
+        });
+        const sectorHit = hits?.find(h => h.layer?.id?.startsWith('sector-layer-'));
+        if (sectorHit?.object) {
+          dispatch(MapActions.setSelectedCell({
+            ...sectorHit.object,
+            _lng: info.coordinate[0],
+            _lat: info.coordinate[1],
+          }));
+        }
+      },
+    });
+
+    return [fillLayer];
+  }, [selectedTaCells, dispatch]);
 
   /* ============================================================
      🔹 GEO Json LAYER (deck.gl)
@@ -762,6 +979,8 @@ const siteLayer = useMemo(() => {
   const rfPredictionLayer = useMemo(() => {
     if (!rfPredictionGeoJson) return null;
 
+    const activeParam = config.rfParameter || "RSRP";
+
     return new GeoJsonLayer({
       id: "rf-prediction-layer",
       data: rfPredictionGeoJson,
@@ -769,12 +988,19 @@ const siteLayer = useMemo(() => {
       stroked: false,
       getFillColor: feature => {
         const range = feature.properties.range;
-        return rsrpColorScale[range] || [200,200,200,50];
+        const entry = rfColorConfig.find(
+          c => c.parameter_name === activeParam && c.range_label === range
+        );
+        if (entry) return hexToRgba(entry.color_hex, layerOpacity.RF);
+        return [200, 200, 200, Math.round(layerOpacity.RF * 255)];
       },
       pickable: true,
       opacity: layerOpacity.RF,
+      updateTriggers: {
+        getFillColor: [rfColorConfig, config.rfParameter, layerOpacity.RF],
+      },
     });
-  }, [rfPredictionGeoJson, layerOpacity.RF]);
+  }, [rfPredictionGeoJson, rfColorConfig, config.rfParameter, layerOpacity.RF]);
 
   /* ============================================================
      🔹 RF Drive TEST LAYER (deck.gl)
@@ -806,6 +1032,7 @@ const siteLayer = useMemo(() => {
       radiusUnits: "pixels",
       getRadius: 5,
       radiusMinPixels: 3,
+      radiusScale: config.mapScale / 2,
 
       getFillColor: d => {
         const quality = getSignalQuality(d.rssi);
@@ -817,7 +1044,7 @@ const siteLayer = useMemo(() => {
       // opacity: 0.9
     });
 
-  }, [driveTestData, activeDriveSessions, driveTestFilters]);
+  }, [driveTestData, activeDriveSessions, driveTestFilters, config.mapScale]);
 
   // for hover values(color of string), dot colors
   const getSignalQuality = (rssi) => {
@@ -835,82 +1062,139 @@ const siteLayer = useMemo(() => {
   };
 
   /* ============================================================
-     🔹 Ruler ---> Line LAYER (deck.gl)
+     🔹 Ruler — independent line segments
   ============================================================ */
-// Line layer — black, thick, round caps
-const rulerLineLayer = useMemo(() => {
-    if (!rulerMode || rulerPoints.length === 0) return null;
-    const end = rulerPoints[1] ?? rulerHover;
-    if (!end) return null;
-
+  // Lines for all completed segments
+  const rulerLineLayer = useMemo(() => {
+    const complete = rulerSegments.filter(s => s.b !== null);
+    if (!rulerMode || complete.length === 0) return null;
     return new LineLayer({
-        id: "ruler-line",
-        data: [{ from: rulerPoints[0], to: end }],
-        getSourcePosition: d => d.from,
-        getTargetPosition: d => d.to,
-        getColor: [20, 20, 20, 220],
-        getWidth: 2,
-        widthUnits: "pixels",
+      id: "ruler-line",
+      data: complete,
+      getSourcePosition: d => d.a,
+      getTargetPosition: d => d.b,
+      getColor: [20, 20, 20, 220],
+      getWidth: 2,
+      widthUnits: "pixels",
     });
-}, [rulerMode, rulerPoints, rulerHover]);
+  }, [rulerMode, rulerSegments]);
 
-// Endpoint dots — white fill, black border
-const rulerDotsLayer = useMemo(() => {
-    if (!rulerMode || rulerPoints.length === 0) return null;
-    const end = rulerPoints[1] ?? rulerHover;
-    const points = end
-        ? [{ position: rulerPoints[0] }, { position: end }]
-        : [{ position: rulerPoints[0] }];
+  // Preview line from active segment's A to cursor
+  const rulerPreviewLayer = useMemo(() => {
+    if (!rulerMode || !activeSegment || !rulerHover) return null;
+    return new LineLayer({
+      id: "ruler-preview",
+      data: [{ from: activeSegment.a, to: rulerHover }],
+      getSourcePosition: d => d.from,
+      getTargetPosition: d => d.to,
+      getColor: [20, 20, 20, 100],
+      getWidth: 1.5,
+      widthUnits: "pixels",
+    });
+  }, [rulerMode, activeSegment, rulerHover]);
+
+  // All endpoint dots + hover preview dot; dots are draggable and clickable (snap)
+  const rulerDotsLayer = useMemo(() => {
+    if (!rulerMode || rulerSegments.length === 0) return null;
+
+    const dots = [];
+    rulerSegments.forEach(seg => {
+      const isPendingA = !seg.b; // this is the A of the in-progress segment
+      dots.push({ position: seg.a, segId: seg.id, endpoint: 'a', preview: false, pendingA: isPendingA });
+      if (seg.b) dots.push({ position: seg.b, segId: seg.id, endpoint: 'b', preview: false, pendingA: false });
+    });
+    if (rulerHover && activeSegment) {
+      dots.push({ position: rulerHover, segId: null, endpoint: null, preview: true, pendingA: false });
+    }
 
     return new ScatterplotLayer({
-        id: "ruler-dots",
-        data: points,
-        getPosition: d => d.position,
-        getFillColor: [255, 255, 255, 255],
-        getLineColor: [20, 20, 20, 255],
-        getRadius: 6,
-        radiusUnits: "pixels",
-        stroked: true,
-        lineWidthUnits: "pixels",
-        getLineWidth: 2,
-        pickable: false,
+      id: "ruler-dots",
+      data: dots,
+      getPosition: d => d.position,
+      // amber = pending A (click to cancel), grey = hover preview, white = confirmed
+      getFillColor: d => d.preview ? [200, 200, 200, 180] : d.pendingA ? [251, 191, 36, 255] : [255, 255, 255, 255],
+      getLineColor: d => d.pendingA ? [180, 120, 0, 255] : [20, 20, 20, 255],
+      getRadius: d => d.preview ? 5 : d.pendingA ? 14 : 8,
+      radiusUnits: "pixels",
+      stroked: true,
+      lineWidthUnits: "pixels",
+      getLineWidth: 2,
+      pickable: true,
+
+      updateTriggers: { getFillColor: rulerSegments, getLineColor: rulerSegments },
+
+      onHover: (info) => {
+        const obj = info.object;
+        setHoveringRulerDot(!!obj && !obj.preview);
+      },
+      onClick: (info, event) => {
+        if (!info.object || info.object.preview) return;
+        if (event?.rightButton) return; // right-click handled by contextmenu
+        // snap to this dot — start or complete a segment
+        const snapPos = info.object.position;
+        setRulerSegments(prev => {
+          const active = prev.find(s => s.b === null);
+          if (active) return prev.map(s => s.id === active.id ? { ...s, b: snapPos } : s);
+          return [...prev, { id: Date.now(), a: snapPos, b: null }];
+        });
+        setRulerHover(null);
+      },
+      onDragStart: (info) => {
+        if (!info.object || info.object.preview) return;
+        draggingRulerRef.current = { segId: info.object.segId, endpoint: info.object.endpoint };
+        setIsDraggingRulerDot(true);
+      },
+      onDrag: (info) => {
+        if (!draggingRulerRef.current || !info.coordinate) return;
+        const { segId, endpoint } = draggingRulerRef.current;
+        setRulerSegments(prev => prev.map(s => s.id === segId ? { ...s, [endpoint]: info.coordinate } : s));
+      },
+      onDragEnd: () => {
+        draggingRulerRef.current = null;
+        setIsDraggingRulerDot(false);
+      },
     });
-}, [rulerMode, rulerPoints, rulerHover]);
+  }, [rulerMode, rulerSegments, rulerHover, activeSegment]);
 
-// Distance label — shown at midpoint of the line
-const rulerLabelLayer = useMemo(() => {
-    if (!rulerMode || rulerPoints.length === 0) return null;
-    const end = rulerPoints[1] ?? rulerHover;
-    if (!end) return null;
 
-    const mid = [
-        (rulerPoints[0][0] + end[0]) / 2,
-        (rulerPoints[0][1] + end[1]) / 2,
-    ];
-    const dist = haversineKm(rulerPoints[0], end);
-    const label = dist >= 1
-        ? `${dist.toFixed(2)} km`
-        : `${(dist * 1000).toFixed(0)} m`;
+  // Distance label per completed segment + hover preview label
+  const rulerLabelLayer = useMemo(() => {
+    if (!rulerMode || rulerSegments.length === 0) return null;
+
+    const fmtDist = (a, b) => {
+      const d = haversineKm(a, b);
+      return d >= 1 ? `${d.toFixed(2)} km` : `${(d * 1000).toFixed(0)} m`;
+    };
+    const midPt = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+
+    const labels = rulerSegments
+      .filter(s => s.b !== null)
+      .map(s => ({ position: midPt(s.a, s.b), text: fmtDist(s.a, s.b) }));
+
+    if (activeSegment && rulerHover) {
+      labels.push({ position: midPt(activeSegment.a, rulerHover), text: fmtDist(activeSegment.a, rulerHover) });
+    }
+    if (labels.length === 0) return null;
 
     return new TextLayer({
-        id: "ruler-label",
-        data: [{ position: mid, text: label }],
-        getPosition: d => d.position,
-        getText: d => d.text,
-        getSize: 13,
-        getColor: [20, 20, 20, 255],
-        getBackgroundColor: [255, 255, 255, 220],
-        background: true,
-        backgroundPadding: [6, 3, 6, 3],
-        getBorderColor: [20, 20, 20, 180],
-        getBorderWidth: 1,
-        fontWeight: 600,
-        getTextAnchor: "middle",
-        getAlignmentBaseline: "center",
-        pickable: false,
-        fontFamily: "sans-serif",
+      id: "ruler-label",
+      data: labels,
+      getPosition: d => d.position,
+      getText: d => d.text,
+      getSize: 13,
+      getColor: [20, 20, 20, 255],
+      getBackgroundColor: [255, 255, 255, 220],
+      background: true,
+      backgroundPadding: [6, 3, 6, 3],
+      getBorderColor: [20, 20, 20, 180],
+      getBorderWidth: 1,
+      fontWeight: 600,
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "center",
+      pickable: false,
+      fontFamily: "sans-serif",
     });
-}, [rulerMode, rulerPoints, rulerHover]);
+  }, [rulerMode, rulerSegments, rulerHover, activeSegment]);
 
 
   
@@ -920,16 +1204,17 @@ const rulerLabelLayer = useMemo(() => {
   const layers = useMemo(() => {
     const baseLayers = [];
     if (layerVisibility.CELLS) {
-      if (currentZoom < 9 && markerLayer) baseLayers.push(markerLayer); // site markers
-      if (currentZoom >= 9 && currentZoom < 13 && markerLayer) baseLayers.push(markerLayer); // cell markers
-      if (currentZoom >= 13 && sectorLayer) baseLayers.push(sectorLayer); // cell sectors
+      if (currentZoom < 12 && markerLayer) baseLayers.push(markerLayer); // site markers (<10) + cell dots (10-12)
+      if (currentZoom >= 12 && sectorLayer) baseLayers.push(sectorLayer); // cell sectors
 
-      if (highlightLayer) baseLayers.push(highlightLayer);
+      if (siteHighlightLayer) baseLayers.push(siteHighlightLayer);
+      if (cellHighlightLayer) baseLayers.push(cellHighlightLayer);
+      if (taSectorLayer) baseLayers.push(...taSectorLayer);
     }
-    // if (highlightLayer) baseLayers.push(highlightLayer);  // highlight always visible
 
     if (siteLayer) baseLayers.push(siteLayer);
     if (rulerLineLayer) baseLayers.push(rulerLineLayer);
+    if (rulerPreviewLayer) baseLayers.push(rulerPreviewLayer);
     if (rulerDotsLayer) baseLayers.push(rulerDotsLayer);
     if (rulerLabelLayer) baseLayers.push(rulerLabelLayer);
 
@@ -939,10 +1224,10 @@ const rulerLabelLayer = useMemo(() => {
     if (drivetestLayer) baseLayers.push(drivetestLayer); // RF drive test layer (when selected)
 
     return baseLayers;
-  }, [ currentZoom, markerLayer, sectorLayer, highlightLayer, 
-      customGeoJsonLayer, rfPredictionLayer, drivetestLayer, 
-      layerVisibility.CELLS, siteLayer, rulerLineLayer, 
-      rulerDotsLayer, rulerLabelLayer]);
+  }, [ currentZoom, markerLayer, sectorLayer, siteHighlightLayer, cellHighlightLayer, taSectorLayer,
+      customGeoJsonLayer, rfPredictionLayer, drivetestLayer,
+      layerVisibility.CELLS, siteLayer, rulerLineLayer,
+      rulerPreviewLayer, rulerDotsLayer, rulerLabelLayer]);
 
   /* ============================================================
      🔹 VIEW STATE HANDLER (SYNC LOGIC)
@@ -1085,7 +1370,7 @@ const rulerLabelLayer = useMemo(() => {
      🔹 RENDER
   ============================================================ */
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%"}}>
+    <div className="relative w-full h-full" onContextMenu={handleMapContextMenu}>
       {/* <button
         onClick={fitToData}
         style={{
@@ -1103,8 +1388,9 @@ const rulerLabelLayer = useMemo(() => {
         📍
       </button> */}
       <DeckGL
+        ref={deckRef}
         viewState={{ ...activeViewState }}
-        controller={true}
+        controller={{ dragPan: !isDraggingRulerDot, dragRotate: !isDraggingRulerDot, doubleClickZoom: !rulerMode }}
         // getMapboxApiAccessToken={() => MAPBOX_TOKEN}
         // layers={[
         //   ...(currentZoom < 9
@@ -1119,11 +1405,7 @@ const rulerLabelLayer = useMemo(() => {
         // ].filter(Boolean)}
         layers={layers}
         onViewStateChange={handleViewStateChange}
-        style={{
-          position: "absolute",
-          width: "100%",
-          height: "100%",
-        }}
+        className="absolute w-full h-full"
         widgets={[
           new ZoomWidget({ 
             placement: 'bottom-right',
@@ -1139,58 +1421,75 @@ const rulerLabelLayer = useMemo(() => {
             viewId: 'default'
           }),
         ]}
-        //  Tooltip on Drivetest layer points on hover
+        //  Tooltip on layers
         getTooltip={({ object, layer }) => {
-            // Only show tooltip for drive test points
-          if (!object || layer?.id !== "drivetest-layer") return null;
+          if (!object || !layer?.id) return null;
 
-          const signal = getSignalQuality(object.rssi);
-          return {
-            html: `
-              <div style="font-size:12px">
-                <div>
-                  <b>Signal:</b>
-                  <span style="
-                    font-weight:bold;
-                    color:${signal.colorText};
-                  ">
-                    ${signal.label}
-                  </span>
+          // TA Sector Layer
+          if (layer.id === 'ta-sector-layer') {
+            return {
+              html: `
+                <div style="font-size:12px; max-width: 220px;">
+                  <div style="font-weight:700; margin-bottom:4px; color:#60a5fa;">${object.cellId || ''}</div>
+                  <div><b>Distance:</b> ${object.distance?.toFixed(0) || 0} m</div>
+                  <div><b>Frequency Reports:</b> ${object['Freq of reports']?.toLocaleString() || 0}</div>
+                  <div><b>Share in Range:</b> ${object['Share in range %']?.toFixed(2) || 0}%</div>
                 </div>
-                <div><b>RSSI:</b> ${object.rssi} dBm</div>
-                <div><b>Latitude:</b> ${object.latitude}</div>
-                <div><b>Longitude:</b> ${object.longitude}</div>
-                <div><b>Session:</b> ${object.session_id}</div>
-              </div>
-            `
-          };
+              `
+            };
+          }
 
+          // Drive Test Layer
+          if (layer.id === "drivetest-layer") {
+            const signal = getSignalQuality(object.rssi);
+            return {
+              html: `
+                <div style="font-size:12px">
+                  <div>
+                    <b>Signal:</b>
+                    <span style="
+                      font-weight:bold;
+                      color:${signal.colorText};
+                    ">
+                      ${signal.label}
+                    </span>
+                  </div>
+                  <div><b>RSSI:</b> ${object.rssi} dBm</div>
+                  <div><b>Latitude:</b> ${object.latitude}</div>
+                  <div><b>Longitude:</b> ${object.longitude}</div>
+                  <div><b>Session:</b> ${object.session_id}</div>
+                </div>
+              `
+            };
+          }
+
+          return null;
         }}
 
-        // Ruler Layer for Measurement of distance
+        // Ruler — hover preview and per-segment click
         onHover={({ coordinate }) => {
-          if (rulerMode && rulerPoints.length === 1 && coordinate) {
+          if (rulerMode && activeSegment && coordinate && draggingRulerRef.current === null) {
               setRulerHover(coordinate);
           }
         }}
-        onClick={({ coordinate, object, layer }) => {
-          // let existing layer clicks (cells, sectors) still work when NOT in ruler mode
+        onClick={({ coordinate, layer, object }, event) => {
           if (!rulerMode || !coordinate) return;
-          // in ruler mode, suppress cell selection and handle ruler clicks
-          if (rulerPoints.length === 0) {
-              dispatch(MapActions.setRulerPoints([coordinate]));
-          } else if (rulerPoints.length === 1) {
-              dispatch(MapActions.setRulerPoints([rulerPoints[0], coordinate]));
-              setRulerHover(null);
-          } else {
-              // third click = fresh measurement
-              dispatch(MapActions.setRulerPoints([coordinate]));
-              setRulerHover(null);
-          }
+          if (event?.rightButton) return; // right-click is handled by contextmenu → cancel
+          // real endpoint dots handle themselves; preview dot (follows cursor) must fall through to place B
+          if (layer?.id === 'ruler-dots' && !object?.preview) return;
+          setRulerSegments(prev => {
+            const active = prev.find(s => s.b === null);
+            if (active) return prev.map(s => s.id === active.id ? { ...s, b: coordinate } : s);
+            return [...prev, { id: Date.now(), a: coordinate, b: null }];
+          });
+          setRulerHover(null);
         }}
-        getCursor={({ isDragging }) =>
-            rulerMode ? "crosshair" : isDragging ? "grabbing" : "grab"
-        }
+        getCursor={({ isDragging }) => {
+            if (draggingRulerRef.current !== null) return "grabbing";
+            if (rulerMode && hoveringRulerDot) return "grab";
+            if (rulerMode) return "crosshair";
+            return isDragging ? "grabbing" : "grab";
+        }}
       >
        {/* <Map
           mapboxAccessToken={MAPBOX_TOKEN}
@@ -1223,7 +1522,7 @@ const rulerLabelLayer = useMemo(() => {
 
           <Map
               mapStyle={getMapStyle(config.mapView || "voyager")}
-              style={{ pointerEvents: "auto" }}
+              className="pointer-events-auto"
             // language="en"
           />
         </DeckGL>
@@ -1261,6 +1560,14 @@ const rulerLabelLayer = useMemo(() => {
           />
         )}
 
+        {layerLegends?.RF && rfLegendThematic && (
+          <LegendBox
+              layer="RF"
+              thematic={rfLegendThematic}
+              onClose={() => handleLegendClose("RF")}
+          />
+        )}
+
         {/* Cell info popup */}
         {selectedCell && selectedCell.operator === operator && (
           <CellInfoPopup
@@ -1292,52 +1599,27 @@ const rulerLabelLayer = useMemo(() => {
             />
         )}
 
-      <div style={{
-          position: "absolute",
-          bottom: 270,   // sits above the 3 deck.gl widgets
-          right: 12,
-          zIndex: 10,
-          display: "flex",
-          flexDirection: "column",
-          borderRadius: "6px",
-          overflow: "hidden",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-          border: "1px solid rgba(0,0,0,0.15)",
-        }}>
+      <div className="absolute bottom-[270px] right-3 z-10 flex flex-col rounded-md overflow-hidden shadow-md border border-black/15">
           {/* Fit to data */}
           <button
             title="Fit to data"
             onClick={fitToData}
-            style={{
-              width: 32, height: 32,
-              background: "white", border: "none",
-              borderBottom: "1px solid rgba(0,0,0,0.1)",
-              cursor: "pointer", display: "flex",
-              alignItems: "center", justifyContent: "center", padding: 0,
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = "#f0f0f0"}
-            onMouseLeave={e => e.currentTarget.style.background = "white"}
+            className="w-8 h-8 bg-white border-b border-black/10 flex items-center justify-center p-0 cursor-pointer hover:bg-gray-100"
           >
-            {/* <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="10" r="3"/>
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-            </svg> */}
             📍
           </button>
 
           {/* Ruler */}
           <button
-            title={rulerMode ? "Disable ruler" : "Measure distance"}
-            onClick={() => dispatch(MapActions.setRulerMode(!rulerMode))}
-            style={{
-              width: 32, height: 32,
-              background: rulerMode ? "#1a1a1a" : "white",
-              border: "none",
-              cursor: "pointer", display: "flex",
-              alignItems: "center", justifyContent: "center", padding: 0,
+            title={rulerMode ? "Clear ruler" : "Measure distance"}
+            onClick={() => {
+              if (rulerMode) {
+                setRulerSegments([]);
+                setRulerHover(null);
+              }
+              dispatch(MapActions.setRulerMode(!rulerMode));
             }}
-            onMouseEnter={e => { if (!rulerMode) e.currentTarget.style.background = "#f0f0f0"; }}
-            onMouseLeave={e => { if (!rulerMode) e.currentTarget.style.background = rulerMode ? "#1a1a1a" : "white"; }}
+            className={`w-8 h-8 flex items-center justify-center p-0 cursor-pointer ${rulerMode ? "bg-[#1a1a1a]" : "bg-white hover:bg-gray-100"}`}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke={rulerMode ? "#facc15" : "#333"}
@@ -1350,6 +1632,75 @@ const rulerLabelLayer = useMemo(() => {
             </svg>
           </button>
         </div>
+
+        {/* ── Context Menu (right-click on cell sector) ── */}
+        {contextMenu && (
+            <>
+                {/* backdrop – click outside closes menu */}
+                <div
+                    className="absolute inset-0 z-[19]"
+                    onMouseDown={() => setContextMenu(null)}
+                />
+                <div
+                    onMouseDown={e => e.stopPropagation()}
+                    className="absolute z-[20] min-w-[210px] rounded-xl overflow-hidden shadow-2xl border border-[#2c4a85]"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                >
+                    {/* ── Header ── */}
+                    <div className="bg-[#162a52] px-3 py-2 flex items-center gap-2">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                            stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                            className="shrink-0">
+                            <circle cx="12" cy="10" r="3"/>
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                        </svg>
+                        <span className="text-white text-[13px] font-semibold tracking-wide truncate max-w-[160px]">
+                            {contextMenu.cell?.cell_id}
+                        </span>
+                    </div>
+
+                    {/* ── Body ── */}
+                    <div className="bg-white/95 px-3 pt-3 pb-3 flex flex-col gap-3">
+                        {/* TA Rings toggle */}
+                        <label
+                            className="flex items-center gap-2.5 cursor-pointer select-none"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={selectedTaCells.some(c => c.cellId === contextMenu.cell.cell_id)}
+                                onChange={e => {
+                                    if (e.target.checked) {
+                                        dispatch(MapActions.fetchTaSectors(
+                                            contextMenu.cell.cell_id,
+                                            contextMenu.cell.cell_id,
+                                            {
+                                                lat: Number(contextMenu.cell.latitude),
+                                                lng: Number(contextMenu.cell.longitude),
+                                                azimuth: Number(contextMenu.cell.azimuth),
+                                                beamWidth: Number(contextMenu.cell.radius_m) || 60,
+                                            }
+                                        ));
+                                    } else {
+                                        dispatch(MapActions.setTaSectorData(contextMenu.cell.cell_id, null));
+                                    }
+                                }}
+                                className="w-4 h-4 shrink-0 cursor-pointer accent-[#162a52]"
+                            />
+                            <span className="text-[13px] font-medium text-gray-800">TA Rings</span>
+                        </label>
+
+                        {/* Dismiss button */}
+                        <button
+                            onClick={() => setContextMenu(null)}
+                            className="w-full py-1.5 text-[13px] font-medium text-white bg-[#162a52] hover:bg-[#1e3a70] border border-[#2c4a85] rounded-lg cursor-pointer transition-colors"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            </>
+        )}
 
     </div>
   );

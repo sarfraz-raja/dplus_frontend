@@ -200,16 +200,29 @@ const RightFilters = () => {
                   />
                 </div>
 
-                {/* Selected chip - only shows when selected */}
-                  {(selectedSite || selectedCell) && (
-                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 
-                      rounded-lg px-3 py-2 mb-3 text-sm text-blue-700">
-                      <Unicons.UilCheckCircle size={16} className="text-blue-500 shrink-0" />
-                      <span className="font-medium truncate">{selectedSite || selectedCell?.cell_id}</span>
-                      <Unicons.UilTimes size={14} className="ml-auto cursor-pointer hover:text-blue-600" 
-                        onClick={handleResetSearch} />
-                    </div>
-                  )}
+                {/* Selection chips */}
+                {(selectedSite || selectedCell) && (
+                  <div className="flex flex-col gap-1 mb-3">
+                    {selectedSite && (
+                      <div className="flex items-center gap-2 bg-blue-50 border border-blue-200
+                        rounded-lg px-3 py-1.5 text-xs text-blue-700 w-full">
+                        <Unicons.UilLocationPoint size={13} className="text-blue-400 shrink-0" />
+                        <span className="font-medium truncate flex-1">{selectedSite}</span>
+                        <Unicons.UilTimes size={12} className="cursor-pointer shrink-0 hover:text-blue-900"
+                          onClick={() => { setSelectedSite(null); setSelectedCell(null); }} />
+                      </div>
+                    )}
+                    {selectedCell && (
+                      <div className="flex items-center gap-2 bg-green-50 border border-green-200
+                        rounded-lg px-3 py-1.5 text-xs text-green-700 w-full">
+                        <Unicons.UilSignal size={13} className="text-green-400 shrink-0" />
+                        <span className="font-medium truncate flex-1">{selectedCell.cell_id}</span>
+                        <Unicons.UilTimes size={12} className="cursor-pointer shrink-0 hover:text-green-900"
+                          onClick={() => setSelectedCell(null)} />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Suggestions */}
                 <div className="max-h-48 overflow-y-auto border rounded-md">
@@ -218,10 +231,11 @@ const RightFilters = () => {
                     <div
                         key={index}
                         onClick={() => {
+                          if (selectedCell) return; // clear cell first before changing site
                           setSelectedSite(site);
                           setSiteSearch("");
                         }}
-                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                        className={`px-3 py-2 text-sm ${selectedCell ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-100 cursor-pointer"}`}
                     >
                         {site}
                     </div>
@@ -264,11 +278,15 @@ const RightFilters = () => {
 
                         dispatch(MapActions.setHighlightedCell(target.cell_id));
 
+                        if (searchMode === "cell") {
+                          dispatch(MapActions.setSelectedCell(selectedCell));
+                        }
+
                         dispatch(
                             MapActions.setViewState({
                             longitude: Number(target.longitude),
                             latitude: Number(target.latitude),
-                            zoom: searchMode === "cell" ? 18 : 16,
+                            zoom: searchMode === "cell" ? 20 : 14,
                             transitionDuration: 1200
                             })
                         );
