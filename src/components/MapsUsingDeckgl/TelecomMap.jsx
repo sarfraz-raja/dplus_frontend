@@ -875,8 +875,30 @@ const siteLayer = useMemo(() => {
     });
 
     // scale so the tallest ring across all cells = ~3000m
-    const maxSamples = Math.max(...allSlices.map(perRingCount), 1);
-    const elevationScale = 3000 / maxSamples;
+    // const maxSamples = Math.max(...allSlices.map(perRingCount), 1);
+    // const elevationScale = 3000 / maxSamples;
+
+    // zoom-aware height scaling
+    const zoomFactor = Math.pow(2, Math.max(0, 14 - currentZoom)); // grows as you zoom out
+
+    const MIN_HEIGHT = 10;   // smallest ring is always visible (meters)
+    const MAX_HEIGHT = 600; // tallest ring caps here (meters)
+
+    // normalisaton using (Logarithmic )
+    const logVal = d => Math.log(perRingCount(d) + 1);
+    const maxLogVal = Math.max(...allSlices.map(logVal), 1);
+
+    // normalisaton using (cube root)
+    const cbrtVal = d => Math.cbrt(perRingCount(d));
+    const maxCbrtVal = Math.max(...allSlices.map(cbrtVal), 1);
+
+    // Square root
+    const sqrtVal = d => Math.sqrt(perRingCount(d));
+    const maxSqrtVal = Math.max(...allSlices.map(sqrtVal), 1);
+
+    // Min-Max with power cap
+    const rawVal = d => perRingCount(d);
+    const maxRawVal = Math.max(...allSlices.map(rawVal), 1);
 
     const sharedProps = {
       data: allSlices,
@@ -885,7 +907,18 @@ const siteLayer = useMemo(() => {
         d.azimuth, d.length,
         d.innerMeters, d.outerMeters,
       ),
-      getElevation: d => perRingCount(d) * elevationScale,
+      // getElevation: d => perRingCount(d) * elevationScale,
+      // getElevation: d => MIN_HEIGHT + (logVal(d) / maxLogVal) * (MAX_HEIGHT - MIN_HEIGHT),
+      // getElevation: d => {
+      //   const raw = perRingCount(d);
+      //   const height = MIN_HEIGHT + (logVal(d) / maxLogVal) * (MAX_HEIGHT - MIN_HEIGHT);
+      //   console.log(`[TA] cell=${d.cellId} dist=${d.distance}m raw=${raw.toFixed(0)} → height=${height.toFixed(0)}m`);
+      //   return height;
+      // },
+      // getElevation: d => MIN_HEIGHT + (cbrtVal(d) / maxCbrtVal) * (MAX_HEIGHT - MIN_HEIGHT),
+      // getElevation: d => MIN_HEIGHT + (sqrtVal(d) / maxSqrtVal) * (MAX_HEIGHT - MIN_HEIGHT),
+      getElevation: d => Math.pow(rawVal(d) / maxRawVal, 0.3) * MAX_HEIGHT,
+
       extruded: true,
       updateTriggers: {
         getPolygon: selectedTaCells,
@@ -1426,18 +1459,45 @@ const siteLayer = useMemo(() => {
           if (!object || !layer?.id) return null;
 
           // TA Sector Layer
-          if (layer.id === 'ta-sector-layer') {
-            return {
-              html: `
-                <div style="font-size:12px; max-width: 220px;">
-                  <div style="font-weight:700; margin-bottom:4px; color:#60a5fa;">${object.cellId || ''}</div>
-                  <div><b>Distance:</b> ${object.distance?.toFixed(0) || 0} m</div>
-                  <div><b>Frequency Reports:</b> ${object['Freq of reports']?.toLocaleString() || 0}</div>
-                  <div><b>Share in Range:</b> ${object['Share in range %']?.toFixed(2) || 0}%</div>
-                </div>
-              `
-            };
-          }
+          // if (layer.id === 'ta-sector-layer') {
+          //   return {
+          //     html: `
+          //       <div style="font-size:12px; max-width: 220px;">
+          //         <div style="font-weight:700; margin-bottom:4px; color:#60a5fa;">${object.cellId || ''}</div>
+          //         <div><b>Distance:</b> ${object.distance?.toFixed(0) || 0} m</div>
+          //         <div><b>Frequency Reports:</b> ${object['Freq of reports']?.toLocaleString() || 0}</div>
+          //         <div><b>Share in Range:</b> ${object['Share in range %']?.toFixed(2) || 0}%</div>
+          //       </div>
+          //     `
+          //   };
+          // }
+          if (layer.id === 'ta-sector-layer-fill') {
+  return {
+    html: `
+      <div style="font-size:12px; min-width:210px; font-family:sans-serif;">
+        <div style="font-weight:700; margin-bottom:8px; color:#60a5fa; font-size:13px; border-bottom:1px solid #2c4a85; padding-bottom:5px;">
+          ${object.cell_name || object.cellId || ''}
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:12px; margin-bottom:4px;">
+          <span style="color:#9ca3af;">Distance</span>
+          <span style="font-weight:600;">${(object.distance ?? 0).toFixed(0)} m</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:12px; margin-bottom:4px;">
+          <span style="color:#9ca3af;">Freq of Reports</span>
+          <span style="font-weight:600;">${(object['Freq of reports'] ?? 0).toLocaleString()}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:12px; margin-bottom:4px;">
+          <span style="color:#9ca3af;">Total Samples</span>
+          <span style="font-weight:600;">${(object.total_samples ?? 0).toLocaleString()}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:12px;">
+          <span style="color:#9ca3af;">Share in Range</span>
+          <span style="font-weight:600; color:#34d399;">${(object['Share in range %'] ?? 0).toFixed(2)}%</span>
+        </div>
+      </div>
+    `
+  };
+}
 
           // Drive Test Layer
           if (layer.id === "drivetest-layer") {

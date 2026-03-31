@@ -48,6 +48,7 @@ import MgwDashboard from '../pages/InsightsEngine/CoreDashboards/MgwDashboard.js
 import WorstCellsDashboard from '../pages/InsightsEngine/RanDashboards/WorstCellsDashboard.jsx';
 import Huawei4GDashboard from '../pages/InsightsEngine/RanDashboards/Huawei4GDashboard.jsx';
 import Huawei5GDashboard from '../pages/InsightsEngine/RanDashboards/Huawei5GDashboard.jsx';
+import NSAtoSA5GPrePostDashboard from '../pages/InsightsEngine/RanDashboards/NSAtoSA5GPrePostDashboard.jsx';
 // import MapTesting from '../pages/InsightsEngine/MapTesting.jsx';
 import TelecomMapsPage from '../pages/TelecomMapsPage.jsx';
 import SupportDesk from '../pages/SupportDesk.jsx';
@@ -331,6 +332,13 @@ export const Sidebar_content = {
                         icon: <Unicons.UilChartLine size="16" />
                     }, 
                      {
+                        name: "5G NSA to SA Pre-Post Dashboard",
+                        link: "/insights-engine/ran-dashboard/5GNSAtoSAPrePostDashboard",
+                        subMenu: [],
+                        component:  <NSAtoSA5GPrePostDashboard/>,
+                        icon: <Unicons.UilChartLine size="16" />
+                    }, 
+                                         {
                         name: "5G Dashboard",
                         link: "/insights-engine/ran-dashboard/huawei5g",
                         subMenu: [],
