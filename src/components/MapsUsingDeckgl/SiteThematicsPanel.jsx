@@ -29,8 +29,8 @@ const kpiThematicOptions = [
     "Frequency",
 ];
 
-const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
-  setTempLegend }) => {
+const SiteThematicsPanel = ({ setSiteThematicsConfig, tempLegend,
+  setTempLegend, layerEnabled = false }) => {
 
     const dispatch = useDispatch();
 
@@ -489,7 +489,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
 
         
             {/* Legend Visibility */}
-            <div className="flex items-center justify-between mb-3 border-b pb-3 mt-3">
+            <div className={`flex items-center justify-between mb-3 border-b pb-3 mt-3 ${!layerEnabled ? "opacity-40 pointer-events-none" : ""}`}>
                 <span className="text-xs font-semibold text-gray-500">
                     Show Legend
                 </span>
@@ -498,11 +498,12 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
                     type="checkbox"
                     checked={tempLegend}
                     onChange={(e) => setTempLegend(e.target.checked)}
+                    disabled={!layerEnabled}
                 />
             </div>
             
             {/* OPACITY */}
-            <div className="mb-3 border-b pb-3">
+            <div className={`mb-3 border-b pb-3 ${!layerEnabled ? "opacity-40 pointer-events-none" : ""}`}>
 
                 <div className="flex justify-between items-center mb-1">
 
@@ -523,13 +524,14 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
                     step="0.05"
                     value={opacity}
                     onChange={(e) => setOpacity(Number(e.target.value))}
+                    disabled={!layerEnabled}
                     className="w-full"
                 />
 
             </div>
 
             {/* Site Scale */}
-            <div className="mb-3 border-b pb-3 mt-3">
+            <div className={`mb-3 border-b pb-3 mt-3 ${!layerEnabled ? "opacity-40 pointer-events-none" : ""}`}>
 
             <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-semibold text-gray-500">
@@ -547,14 +549,8 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
                 max={10}
                 step={0.1}
                 value={siteScale}
-                // onChange={(e) =>
-                //     dispatch(
-                //         MapActions.setMapConfig({
-                //         mapScale: parseFloat(e.target.value)
-                //         })
-                //     )
-                // }
                 onChange={(e) => setSiteScale(parseFloat(e.target.value))}
+                disabled={!layerEnabled}
                 className="w-full"
             />
 

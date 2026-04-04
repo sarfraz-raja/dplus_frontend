@@ -264,7 +264,7 @@ function App() {
     // console.log(locdata, "locdatalocdata")
 
     return (
-        <main className='flex h-screen overflow-y-scroll bg-gray-200'>
+        <main className='flex h-screen overflow-hidden bg-gray-200'>
 {/* <main className='relative flex h-screen overflow-hidden bg-gray-200'> */}
 
             {

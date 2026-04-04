@@ -218,7 +218,7 @@ const TopBar = ({ sidebarOpen, setsidebarOpenn, sidebarPos, setSidebarPos }) => 
 
 
     return <>
-        <div className='h-[9vh]'>
+        <div className='h-[6vh]'>
             <div style={{ backgroundImage: "linear-gradient(to right, #101c4c, #1b0027)" }} class="flex justify-between ml-0 overflow-y-auto duration-150 bg-topbarLine dark:bg-topbarLine h-full">
                 <div className=' h-full'>
                     <img className="mx-auto h-full w-auto py-2" src="/logo.png" alt="Datayog" onClick={() => {

@@ -1,10 +1,22 @@
 
 import React, { useState, useRef, useEffect } from "react";
 
-const LegendBox = ({ layer, thematic, onClose  }) => {
-  const [position, setPosition] = useState({ x: 100, y: 100 });
+const LegendBox = ({ layer, thematic, onClose, initialX, initialY }) => {
+  const [position, setPosition] = useState({
+    x: initialX ?? window.innerWidth - 250,
+    y: initialY ?? 80,
+  });
   const dragging = useRef(false);
   const offset = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!dragging.current) {
+      setPosition({
+        x: initialX ?? window.innerWidth - 250,
+        y: initialY ?? 80,
+      });
+    }
+  }, [initialX, initialY]);
 
   const onMouseDown = (e) => {
     dragging.current = true;

@@ -115,8 +115,8 @@ useEffect(() => {
     // </div>
 
     // 🔥 For testing single map with filters
-    <div className="w-full h-screen flex flex-col">
-      <div className="relative flex items-center gap-2 p-2 bg-[#0b1c38]">
+    <div className="w-full h-full flex flex-col">
+      <div className="relative flex items-center gap-2 p-1 bg-[#0b1c38]">
         <LeftFilters />
         <RightFilters />
     </div>

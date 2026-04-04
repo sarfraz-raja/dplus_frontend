@@ -1512,7 +1512,7 @@ const AddMapLayersPanel = ({ onClose }) => {
     });
     
     // computed — true if ANY boundary group has children selected
-    const anyBoundarySelected = boundaryGroups.some(g => 
+    const anyBoundarySelected = boundaryGroups.some(g =>
         (pendingBoundarySelections[g.shapegroup] || []).length > 0
     );
 
@@ -1520,6 +1520,14 @@ const AddMapLayersPanel = ({ onClose }) => {
     const allBoundariesSelected = boundaryGroups.every(g =>
         (pendingBoundarySelections[g.shapegroup] || []).length === g.shapenames?.length
     );
+
+    // RF — partial vs full region selection
+    const anyRfSelected = pendingRfRegions.length > 0;
+    const allRfSelected = rfRegions.length > 0 && pendingRfRegions.length === rfRegions.length;
+
+    // Drive Test — partial vs full session selection
+    const anyDriveSelected = selectedDriveSessions.length > 0;
+    const allDriveSelected = sessionIds.length > 0 && selectedDriveSessions.length === sessionIds.length;
 
 
     // ── DRIVE TEST LOCAL STATE ────────────────────────────────────
@@ -1545,43 +1553,47 @@ const AddMapLayersPanel = ({ onClose }) => {
     const [siteThematicsConfig, setSiteThematicsConfig] = useState(null);
 
     // ── SYNC PENDING FROM REDUX ───────────────────────────────────
-   useEffect(() => {
-    setPendingVisibility({
-        CELLS: layerVisibility.CELLS || false,
-        SITES: layerVisibility.SITES || false,
-        RF: layerVisibility.RF || false,
-        DRIVE_TEST: layerVisibility.DRIVE_TEST || false,
-        ...boundaryGroups.reduce((acc, g) => ({
-            ...acc,
-            [g.shapegroup]: layerVisibility[g.shapegroup] || false
-        }), {})
-    });
+    useEffect(() => {
+        setPendingVisibility({
+            CELLS: layerVisibility.CELLS || false,
+            SITES: layerVisibility.SITES || false,
+            RF: layerVisibility.RF || false,
+            DRIVE_TEST: layerVisibility.DRIVE_TEST || false,
+            ...boundaryGroups.reduce((acc, g) => ({
+                ...acc,
+                [g.shapegroup]: layerVisibility[g.shapegroup] || false
+            }), {})
+        });
 
-    // ── BOUNDARY selections — normalize "ALL" → full array
-    const normalizedBoundary = {};
-    boundaryGroups.forEach(g => {
-        const val = selectedBoundaries[g.shapegroup];
-        if (val === "ALL") normalizedBoundary[g.shapegroup] = [...(g.shapenames || [])];
-        else if (Array.isArray(val)) normalizedBoundary[g.shapegroup] = val;
-        else normalizedBoundary[g.shapegroup] = [];
-    });
-    setPendingBoundarySelections(normalizedBoundary);
+        // ── BOUNDARY selections — normalize "ALL" → full array
+        const normalizedBoundary = {};
+        boundaryGroups.forEach(g => {
+            const val = selectedBoundaries[g.shapegroup];
+            if (val === "ALL") normalizedBoundary[g.shapegroup] = [...(g.shapenames || [])];
+            else if (Array.isArray(val)) normalizedBoundary[g.shapegroup] = val;
+            else normalizedBoundary[g.shapegroup] = [];
+        });
+        setPendingBoundarySelections(normalizedBoundary);
 
-    // ── RF regions — normalize "ALL" → full array
-    const rfVal = selectedBoundaries["RF"];
-    const normalizedRf = rfVal === "ALL"
-        ? [...rfRegions]
-        : Array.isArray(rfVal) ? rfVal : [];
-    setPendingRfRegions(normalizedRf);
+        // ── RF regions — normalize "ALL" → full array
+        const rfVal = selectedBoundaries["RF"];
+        const normalizedRf = rfVal === "ALL"
+            ? [...rfRegions]
+            : Array.isArray(rfVal) ? rfVal : [];
+        setPendingRfRegions(normalizedRf);
 
-    setSelectedDriveSessions(driveTestFilters?.sessions || []);
-    setRfParameter(mapConfig?.rfParameter || "RSRP");
-    setPendingOpacity({
-        BOUNDARY:   layerOpacity?.BOUNDARY   ?? 1,
-        RF:         layerOpacity?.RF         ?? 1,
-        DRIVE_TEST: layerOpacity?.DRIVE_TEST ?? 1,
-    });
-}, [layerVisibility, selectedBoundaries, driveTestFilters, mapConfig?.rfParameter, layerOpacity]);
+        setSelectedDriveSessions(driveTestFilters?.sessions || []);
+        setRfParameter(mapConfig?.rfParameter || "RSRP");
+    }, [layerVisibility, selectedBoundaries, driveTestFilters, mapConfig?.rfParameter]);
+
+    // Opacity sync is separate so changing opacity doesn't reset pendingVisibility
+    useEffect(() => {
+        setPendingOpacity({
+            BOUNDARY:   layerOpacity?.BOUNDARY   ?? 1,
+            RF:         layerOpacity?.RF         ?? 1,
+            DRIVE_TEST: layerOpacity?.DRIVE_TEST ?? 1,
+        });
+    }, [layerOpacity]);
 
     useEffect(() => {
         setThematicMode("Default");
@@ -1598,6 +1610,28 @@ const AddMapLayersPanel = ({ onClose }) => {
         });
     }, [layerLegends]);
 
+    // Auto-sync legends with layer selection state
+    useEffect(() => {
+        setPendingLegends(prev => ({ ...prev, CELLS: pendingVisibility.CELLS || false }));
+    }, [pendingVisibility.CELLS]);
+
+    useEffect(() => {
+        setPendingLegends(prev => ({ ...prev, SITES: pendingVisibility.SITES || false }));
+    }, [pendingVisibility.SITES]);
+
+    useEffect(() => {
+        const any = boundaryGroups.some(g => (pendingBoundarySelections[g.shapegroup] || []).length > 0);
+        setPendingLegends(prev => ({ ...prev, BOUNDARY: any }));
+    }, [pendingBoundarySelections]);
+
+    useEffect(() => {
+        setPendingLegends(prev => ({ ...prev, RF: pendingRfRegions.length > 0 }));
+    }, [pendingRfRegions]);
+
+    useEffect(() => {
+        setPendingLegends(prev => ({ ...prev, DRIVE_TEST: selectedDriveSessions.length > 0 }));
+    }, [selectedDriveSessions]);
+
     // SYNC Redux colors to local state when they change
     useEffect(() => {
         setBoundaryColors(reduxBoundaryColors);
@@ -1610,10 +1644,7 @@ const AddMapLayersPanel = ({ onClose }) => {
         if (group === "CELL") {
             const newValue = !pendingVisibility.CELLS;
             setPendingVisibility(prev => ({ ...prev, CELLS: newValue }));
-            if (newValue) {
-                setExpanded("CELL");
-                setCellThematicsConfig({ type: "Band", colors: {}, opacity: 1, scale: 1 });
-            }
+            if (newValue) setExpanded("CELL");
             return;
         }
 
@@ -1639,14 +1670,6 @@ const AddMapLayersPanel = ({ onClose }) => {
         }
     };
 
-    // NEW — dedicated RF parent toggle
-    const toggleRfLayer = () => {
-        const newValue = !pendingVisibility.RF;
-        setPendingVisibility(prev => ({ ...prev, RF: newValue }));
-        setPendingRfRegions(newValue ? rfRegions : []);
-        if (newValue) setExpanded("RF");
-    };
-    
     const toggleBoundaryChild = (shapegroup, name) => {
         const existing = pendingBoundarySelections[shapegroup] || [];
         const updated = existing.includes(name)
@@ -1791,6 +1814,8 @@ const AddMapLayersPanel = ({ onClose }) => {
     dispatch(MapActions.setLayerOpacity("BOUNDARY",   pendingOpacity.BOUNDARY));
     dispatch(MapActions.setLayerOpacity("RF",         pendingOpacity.RF));
     dispatch(MapActions.setLayerOpacity("DRIVE_TEST", pendingOpacity.DRIVE_TEST));
+    if (cellThematicsConfig?.layerOpacity !== undefined)
+        dispatch(MapActions.setLayerOpacity("CELLS", cellThematicsConfig.layerOpacity));
 
     // ── COMMIT RF PARAMETER TO REDUX ──────────────────────────────
     dispatch(MapActions.setRfParameter(rfParameter));
@@ -1954,6 +1979,7 @@ const AddMapLayersPanel = ({ onClose }) => {
                         setTempLegend={(val) =>
                             setPendingLegends(prev => ({ ...prev, SITES: val }))
                         }
+                        layerEnabled={pendingVisibility.SITES}
                     />                    
                     </div>
                 )}
@@ -1979,12 +2005,13 @@ const AddMapLayersPanel = ({ onClose }) => {
                 </div>
                 {expandedLayer === "CELL" && (
                     <div className="mt-3 border rounded p-3 space-y-3">
-                        <CellThematicsPanel 
+                        <CellThematicsPanel
                             setCellThematicsConfig={setCellThematicsConfig}
                             tempLegend={pendingLegends.CELLS}
                             setTempLegend={(val) =>
                                 setPendingLegends(prev => ({ ...prev, CELLS: val }))
-                            } 
+                            }
+                            layerEnabled={pendingVisibility.CELLS}
                         />
                     </div>
                 )}
@@ -2054,35 +2081,26 @@ const AddMapLayersPanel = ({ onClose }) => {
             className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
         >
             <div className="flex items-center gap-2">
-                <input
-                    type="checkbox"
-                    ref={el => {
-                        if (el) {
-                            el.indeterminate = anyBoundarySelected && !allBoundariesSelected;
-                        }
-                    }}
-                    checked={allBoundariesSelected && boundaryGroups.length > 0}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => {
-                        // if any selected → deselect all, else select all
-                        if (anyBoundarySelected) {
+                <div className="relative group" onClick={(e) => e.stopPropagation()}>
+                    <input
+                        type="checkbox"
+                        ref={el => {
+                            if (el) el.indeterminate = anyBoundarySelected && !allBoundariesSelected;
+                        }}
+                        checked={allBoundariesSelected && boundaryGroups.length > 0}
+                        onChange={() => {
+                            if (!anyBoundarySelected) return;
                             const cleared = {};
                             boundaryGroups.forEach(g => { cleared[g.shapegroup] = []; });
                             setPendingBoundarySelections(prev => ({ ...prev, ...cleared }));
-                            boundaryGroups.forEach(g => {
-                                setPendingVisibility(prev => ({ ...prev, [g.shapegroup]: false }));
-                            });
-                        } else {
-                            const all = {};
-                            boundaryGroups.forEach(g => { all[g.shapegroup] = g.shapenames || []; });
-                            setPendingBoundarySelections(prev => ({ ...prev, ...all }));
-                            boundaryGroups.forEach(g => {
-                                setPendingVisibility(prev => ({ ...prev, [g.shapegroup]: true }));
-                            });
-                            setExpanded("BOUNDARY");
-                        }
-                    }}
-                />
+                            boundaryGroups.forEach(g => setPendingVisibility(prev => ({ ...prev, [g.shapegroup]: false })));
+                        }}
+                        className={anyBoundarySelected ? "cursor-pointer" : "cursor-not-allowed"}
+                    />
+                    <span className="absolute bottom-7 left-0 bg-gray-900 text-white text-[11px] px-2.5 py-1.5 rounded-md shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-[9999] transition-opacity duration-150">
+                        {anyBoundarySelected ? "Click to deselect all" : "Select items individually inside"}
+                    </span>
+                </div>
                 <span className="font-medium">Boundaries</span>
             </div>
             <span className="text-xl select-none">
@@ -2095,7 +2113,7 @@ const AddMapLayersPanel = ({ onClose }) => {
             <div className="mt-2 border rounded p-2">
 
                 {/* Show Legends — */}
-                 <div className="flex items-center justify-between pt-3 mb-3 mt-3 border-b pb-3">
+                 <div className={`flex items-center justify-between pt-3 mb-3 mt-3 border-b pb-3 ${!Object.values(pendingBoundarySelections).some(arr => arr.length > 0) ? "opacity-40 pointer-events-none" : ""}`}>
                     <span className="text-xs font-semibold text-gray-500">
                         Show Legend
                     </span>
@@ -2108,6 +2126,7 @@ const AddMapLayersPanel = ({ onClose }) => {
                                 BOUNDARY: e.target.checked
                             }))
                         }
+                        disabled={!Object.values(pendingBoundarySelections).some(arr => arr.length > 0)}
                     />
                 </div>
 
@@ -2115,6 +2134,7 @@ const AddMapLayersPanel = ({ onClose }) => {
                 <OpacitySlider
                     value={pendingOpacity.BOUNDARY}
                     onChange={(val) => setPendingOpacity(prev => ({ ...prev, BOUNDARY: val }))}
+                    disabled={!Object.values(pendingBoundarySelections).some(arr => arr.length > 0)}
                 />
                 
                 {/* Each boundary group — independently expandable */}
@@ -2137,46 +2157,25 @@ const AddMapLayersPanel = ({ onClose }) => {
                                 />
                                 <span className="text-sm font-medium">{group.shapegroup}</span>
                             </div>
-                            <span className="text-xl select-none">
-                                {expandedBoundaryGroup === group.shapegroup
-                                    ? <UilAngleUp size={18}/>
-                                    : <UilAngleDown size={18}/>
-                                }
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <ColorPicker
+                                    value={boundaryColors[group.shapegroup] || "#000000"}
+                                    onChange={(color) => setBoundaryColors(prev => ({ ...prev, [group.shapegroup]: color }))}
+                                />
+                                <span className="text-xl select-none">
+                                    {expandedBoundaryGroup === group.shapegroup
+                                        ? <UilAngleUp size={18}/>
+                                        : <UilAngleDown size={18}/>
+                                    }
+                                </span>
+                            </div>
                         </div>
 
                         
                         {expandedBoundaryGroup === group.shapegroup && (
                             <div className="mt-2 p-2">
-                                {/* Per-group color */}
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-semibold text-gray-500">Line Color</span>
-                                   <ColorPicker
-                                        value={boundaryColors[group.shapegroup] || "#000000"}
-                                        // onChange={(color) =>
-                                        //     setBoundaryColors(prev => ({
-                                        //         ...prev,
-                                        //         [group.shapegroup]: color
-                                        //     }))
-                                        // }
-
-                                        onChange={(color) => {
-    console.log("Updating color for group:", group.shapegroup, "to:", color);
-    console.log("Previous boundaryColors:", boundaryColors);
-    setBoundaryColors(prev => {
-        const updated = {
-            ...prev,
-            [group.shapegroup]: color
-        };
-        console.log("Updated boundaryColors:", updated);
-        return updated;
-    });
-}}
-                                    />
-                                </div>
-
                                 {/* Children list */}
-                                <div className="mt-2 max-h-[200px] overflow-y-auto border rounded p-2">
+                                <div className="max-h-[200px] overflow-y-auto border rounded p-2">
                                     {group.shapenames.map((name, idx) => (
                                         <label key={idx} className="flex items-center gap-2 text-sm mb-1 cursor-pointer">
                                             <input
@@ -2205,12 +2204,22 @@ const AddMapLayersPanel = ({ onClose }) => {
                     className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
                 >
                     <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={pendingVisibility.RF || false}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() => toggleRfLayer()}
-                        />
+                        <div className="relative group" onClick={(e) => e.stopPropagation()}>
+                            <input
+                                type="checkbox"
+                                ref={el => { if (el) el.indeterminate = anyRfSelected && !allRfSelected; }}
+                                checked={allRfSelected}
+                                onChange={() => {
+                                    if (!anyRfSelected) return;
+                                    setPendingRfRegions([]);
+                                    setPendingVisibility(prev => ({ ...prev, RF: false }));
+                                }}
+                                className={anyRfSelected ? "cursor-pointer" : "cursor-not-allowed"}
+                            />
+                            <span className="absolute bottom-7 left-0 bg-gray-900 text-white text-[11px] px-2.5 py-1.5 rounded-md shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-[9999] transition-opacity duration-150">
+                                {anyRfSelected ? "Click to deselect all" : "Select items individually inside"}
+                            </span>
+                        </div>
                         <span className="font-medium">RF Predictions</span>
                     </div>
                     <span className="text-xl select-none">
@@ -2219,7 +2228,7 @@ const AddMapLayersPanel = ({ onClose }) => {
                 </div>
                 {expandedLayer === "RF" && (
                     <div className="mt-2 border rounded p-2">
-                        <div className="flex items-center justify-between pt-3 mb-3 mt-3 border-b pb-3">
+                        <div className={`flex items-center justify-between pt-3 mb-3 mt-3 border-b pb-3 ${pendingRfRegions.length === 0 ? "opacity-40 pointer-events-none" : ""}`}>
                             <span className="text-xs font-semibold text-gray-500">Show Legend</span>
                             <input
                                 type="checkbox"
@@ -2227,11 +2236,13 @@ const AddMapLayersPanel = ({ onClose }) => {
                                 onChange={(e) =>
                                     setPendingLegends(prev => ({ ...prev, RF: e.target.checked }))
                                 }
+                                disabled={pendingRfRegions.length === 0}
                             />
                         </div>
                         <OpacitySlider
                             value={pendingOpacity.RF}
                             onChange={(val) => setPendingOpacity(prev => ({ ...prev, RF: val }))}
+                            disabled={pendingRfRegions.length === 0}
                         />
                         <span className="text-xs font-semibold text-gray-500">Select Layers</span>
                         <div className="mt-2 max-h-[200px] overflow-y-auto border rounded p-2">
@@ -2285,12 +2296,22 @@ onChange={() => toggleRfRegion(name)}
                     className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
                 >
                     <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={pendingVisibility.DRIVE_TEST || false}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() => toggleParentLayerSelection("DRIVE_TEST")}
-                        />
+                        <div className="relative group" onClick={(e) => e.stopPropagation()}>
+                            <input
+                                type="checkbox"
+                                ref={el => { if (el) el.indeterminate = anyDriveSelected && !allDriveSelected; }}
+                                checked={allDriveSelected}
+                                onChange={() => {
+                                    if (!anyDriveSelected) return;
+                                    setSelectedDriveSessions([]);
+                                    setPendingVisibility(prev => ({ ...prev, DRIVE_TEST: false }));
+                                }}
+                                className={anyDriveSelected ? "cursor-pointer" : "cursor-not-allowed"}
+                            />
+                            <span className="absolute bottom-7 left-0 bg-gray-900 text-white text-[11px] px-2.5 py-1.5 rounded-md shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-[9999] transition-opacity duration-150">
+                                {anyDriveSelected ? "Click to deselect all" : "Select items individually inside"}
+                            </span>
+                        </div>
                         <span className="font-medium">Drive Test Layers</span>
                     </div>
                     <span className="text-xl select-none">
@@ -2300,7 +2321,7 @@ onChange={() => toggleRfRegion(name)}
                 {expandedLayer === "DRIVE_TEST" && (
                     <div className="mt-2 border rounded p-2">
 
-                        <div className="flex items-center justify-between mb-3 mt-3 border-b pb-3">
+                        <div className={`flex items-center justify-between mb-3 mt-3 border-b pb-3 ${selectedDriveSessions.length === 0 ? "opacity-40 pointer-events-none" : ""}`}>
                             <span className="text-xs font-semibold text-gray-500">
                                 Show Legend
                             </span>
@@ -2314,6 +2335,7 @@ onChange={() => toggleRfRegion(name)}
                                     DRIVE_TEST: e.target.checked
                                 }))
                                 }
+                                disabled={selectedDriveSessions.length === 0}
                             />
                         </div>
                         
@@ -2321,6 +2343,7 @@ onChange={() => toggleRfRegion(name)}
                         <OpacitySlider
                             value={pendingOpacity.DRIVE_TEST}
                             onChange={(val) => setPendingOpacity(prev => ({ ...prev, DRIVE_TEST: val }))}
+                            disabled={selectedDriveSessions.length === 0}
                         />
                         <span className="text-xs font-semibold text-gray-500">Select Layers</span>
                         <div className="max-h-[160px] overflow-y-auto border rounded p-2">

@@ -32,7 +32,8 @@ const kpiThematicOptions = [
 // const CellThematicsPanel = ({ openDropdown, toggleDropdown }) => {
 const CellThematicsPanel = ({ setCellThematicsConfig,
   tempLegend,
-  setTempLegend }) => {
+  setTempLegend,
+  layerEnabled = false }) => {
 
     const dispatch = useDispatch();
 
@@ -41,6 +42,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
     const activeThematic = useSelector(state => state.map.activeThematic);
 
     const mapConfig = useSelector(state => state.map.config);
+    const layerOpacity = useSelector(state => state.map.layerOpacity);
 
     const type = activeThematic?.type || "Default";
     const colors = activeThematic?.colors || {};
@@ -64,6 +66,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
     const [kpiMode, setKpiMode] = useState("Default");
 
     const [cellScale, setCellScale] = useState(mapConfig.mapScale ?? 1);
+    const [cellOpacity, setCellOpacity] = useState(layerOpacity?.CELLS ?? 1);
 
     // const addKpiRange = () => {
     //     const last = kpiRanges[kpiRanges.length - 1];
@@ -443,16 +446,16 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
 
         const payload = {
             type: tempType,
-            colors: Object.keys(tempColors).length > 0 
-                ? tempColors 
+            colors: Object.keys(tempColors).length > 0
+                ? tempColors
                 : defaultColors[tempType] || {},
-            // opacity,
-            scale: cellScale,  
+            scale: cellScale,
+            layerOpacity: cellOpacity,
             kpiConfig: {
                 startDateTime: kpiStartDateTime,
                 endDateTime: kpiEndDateTime,
                 kpi: selectedKpi,
-                mode: kpiMode, 
+                mode: kpiMode,
                 ranges: kpiRanges,
             }
         };
@@ -462,14 +465,13 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
         }, [
         tempType,
         tempColors,
-        // opacity,
         kpiStartDateTime,
         kpiEndDateTime,
         selectedKpi,
-        kpiMode, 
+        kpiMode,
         kpiRanges,
         cellScale,
-        // defaultColors,
+        cellOpacity,
     ]);
 
     useEffect(() => {
@@ -514,7 +516,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
             </div> */}
 
             {/*  LEGENDS  */}
-            <div className="flex items-center justify-between mb-3 border-b pb-3 mt-3">
+            <div className={`flex items-center justify-between mb-3 border-b pb-3 mt-3 ${!layerEnabled ? "opacity-40 pointer-events-none" : ""}`}>
                 <span className="text-xs font-semibold text-gray-500">
                     Show Legend
                 </span>
@@ -523,16 +525,21 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     type="checkbox"
                     checked={!!tempLegend}
                     onChange={(e) => setTempLegend(e.target.checked)}
+                    disabled={!layerEnabled}
                 />
             </div>
 
             {/* OPACITY */}
             <div className="border-b pb-3">
-                <OpacitySlider layer="CELLS" />
+                <OpacitySlider
+                    value={cellOpacity}
+                    onChange={(val) => setCellOpacity(val)}
+                    disabled={!layerEnabled}
+                />
             </div>
 
             {/* Cell Scale */}
-            <div className=" pb-3 mt-3">
+            <div className={`pb-3 mt-3 ${!layerEnabled ? "opacity-40 pointer-events-none" : ""}`}>
 
             <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-semibold text-gray-500">
@@ -550,14 +557,8 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                 max={10}
                 step={0.1}
                 value={cellScale}
-                // onChange={(e) =>
-                //     dispatch(
-                //         MapActions.setMapConfig({
-                //         mapScale: parseFloat(e.target.value)
-                //         })
-                //     )
-                // }
                 onChange={(e) => setCellScale(parseFloat(e.target.value))}
+                disabled={!layerEnabled}
                 className="w-full"
             />
 

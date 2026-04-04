@@ -1,37 +1,22 @@
 const CustomTooltip = ({ text, children }) => {
-
     return (
-        <div className="">
-            <div className="group flex flex-col relative items-center w-full mr-2">
-                <p className='cursor-pointer text-center' onClick={() => { }}>{children}</p>
-                <span className="pointer-events-none w-max absolute -top-8 bg-secLine z-[100px] rounded-lg p-2 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="relative group flex flex-col items-center">
+            {children}
+            {/* Speech bubble */}
+            <div className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-[9999] opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex flex-col items-center">
+                {/* Box */}
+                <div className="bg-gray-800 text-white text-[11px] font-medium px-2.5 py-1.5 rounded-md whitespace-nowrap shadow-lg">
                     {text}
-                </span>
+                </div>
+                {/* Downward arrow */}
+                <div className="w-0 h-0" style={{
+                    borderLeft: '5px solid transparent',
+                    borderRight: '5px solid transparent',
+                    borderTop: '5px solid #1f2937',
+                }} />
             </div>
         </div>
+    );
+};
 
-    )
-}
-
-export default CustomTooltip
-
-
-
-// const CustomTooltip = ({ active, payload, label }) => {
-//     if (active && payload && payload.length) {
-//         const formattedTimestamp = new Date(label).toLocaleString();
-
-//         return (
-//             <span className="custom-tooltip bg-white p-2 inline-block">
-//                 <div>{formattedTimestamp}</div>
-//                 {payload.map((entry, index) => (
-//                     <div key={`value-${index}`} style={{ color: entry.color }}>
-//                         {entry.name}: {entry.value}
-//                     </div>
-//                 ))}
-//             </span>
-//         );
-//     }
-//     return null;
-// };
-
+export default CustomTooltip;

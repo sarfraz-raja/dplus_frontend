@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import Map from "react-map-gl/maplibre";
@@ -9,6 +9,7 @@ import { CompassWidget, ZoomWidget, FullscreenWidget } from '@deck.gl/widgets';
 import '@deck.gl/widgets/stylesheet.css';
 
 import CellInfoPopup from './CellInfoPopup'; 
+import CellProRulesModal from './CellProRulesModal';
 import * as Unicons from "@iconscout/react-unicons";
 import MapActions from "../../store/actions/map-actions";
 import generateSectorPolygon from "./Utils/GenerateSectorPolygon";
@@ -117,7 +118,21 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
   const dispatch = useDispatch();
   const deckRef = useRef(null);
   // const debounceRef = useRef(null); //to not send viewport data to backend on every minor change, but only after user stops interacting for 500ms
-  
+  const mapContainerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(window.innerWidth);
+
+  useLayoutEffect(() => {
+    if (!mapContainerRef.current) return;
+    setContainerWidth(mapContainerRef.current.offsetWidth);
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(mapContainerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   const navigate = useNavigate();
 
   /* ============================================================
@@ -134,6 +149,9 @@ const TelecomMap = ({ operator, geojsonLayer = null }) => {
   const boundaryGeoJson = useSelector(state => state.map.boundaryGeoJson);
   const activeThematic = useSelector(state => state.map.activeThematic);
   const highlightedCell = useSelector(state => state.map.highlightedCell);
+
+  const [showCellProRulesModal, setShowCellProRulesModal] = useState(false);
+  const [cellProRulesCell, setCellProRulesCell] = useState(null);
 
   const driveTestData = useSelector(state => state.map.driveTestData);
   const driveTestFilters = useSelector(state => state.map.driveTestFilters);
@@ -553,8 +571,7 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
 
     return new PolygonLayer({
       id: `sector-layer-${operator}`,
-      data: sortedCells,
-      // data: sectorCells,
+      data: selectedCell ? sortedCells.filter(d => d.cell_id !== selectedCell.cell_id) : sortedCells,
 
       pickable: true,
       stroked: true,
@@ -632,7 +649,7 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
             activeThematic?.colors,
             activeThematic?.opacity,
             layerOpacity.CELLS,
-          ]
+          ],
         },
 
         getLineColor: d => {
@@ -799,37 +816,33 @@ const siteLayer = useMemo(() => {
     });
   }, [operatorFiltered, highlightedCell, selectedCell]);
 
-  // Highlights the selected cell by filling its sector polygon — used when searching by cell
-  const cellHighlightLayer = useMemo(() => {
+  // Selected cell rendered as its own top-most layer so it's never hidden by other sectors
+  const selectedCellLayer = useMemo(() => {
+    if (!selectedCell || !layerVisibility.CELLS || currentZoom < 12) return null;
 
-    if (!selectedCell) return null;
+    const zoomBoost = currentZoom <= 12 ? 6 : currentZoom <= 13 ? 3 : 1;
 
     return new PolygonLayer({
-      id: "cell-highlight-sector",
-
+      id: "selected-cell-sector",
       data: [selectedCell],
-
       pickable: false,
       stroked: true,
-      filled: true,
-
+      filled: false,
       getPolygon: d => generateCoordinates(
         d.longitude,
         d.latitude,
         d.azimuth,
         d.radius_m,
-        d.radius_m,
+        d.radius_m * zoomBoost,
         config.mapScale * 20,
       ),
-
-      getFillColor: [255, 215, 0, 140],
       getLineColor: [255, 215, 0, 255],
-      getLineWidth: 3,
+      getLineWidth: 8,
       lineWidthUnits: "pixels",
       lineJointRounded: true,
       lineCapRounded: true,
     });
-  }, [selectedCell, config.mapScale]);
+  }, [selectedCell, config.mapScale, currentZoom, layerVisibility.CELLS]);
 
   /* ============================================================
      🔹 TA SECTOR LAYER (deck.gl) — annular sectors per distance band
@@ -1241,7 +1254,6 @@ const siteLayer = useMemo(() => {
       if (currentZoom >= 12 && sectorLayer) baseLayers.push(sectorLayer); // cell sectors
 
       if (siteHighlightLayer) baseLayers.push(siteHighlightLayer);
-      if (cellHighlightLayer) baseLayers.push(cellHighlightLayer);
       if (taSectorLayer) baseLayers.push(...taSectorLayer);
     }
 
@@ -1256,11 +1268,13 @@ const siteLayer = useMemo(() => {
     if (rfPredictionLayer) baseLayers.push(rfPredictionLayer); // RF PRediction Layer (when selected)
     if (drivetestLayer) baseLayers.push(drivetestLayer); // RF drive test layer (when selected)
 
+    if (selectedCellLayer) baseLayers.push(selectedCellLayer); // always on top
+
     return baseLayers;
-  }, [ currentZoom, markerLayer, sectorLayer, siteHighlightLayer, cellHighlightLayer, taSectorLayer,
+  }, [ currentZoom, markerLayer, sectorLayer, siteHighlightLayer, taSectorLayer,
       customGeoJsonLayer, rfPredictionLayer, drivetestLayer,
       layerVisibility.CELLS, siteLayer, rulerLineLayer,
-      rulerPreviewLayer, rulerDotsLayer, rulerLabelLayer]);
+      rulerPreviewLayer, rulerDotsLayer, rulerLabelLayer, selectedCellLayer]);
 
   /* ============================================================
      🔹 VIEW STATE HANDLER (SYNC LOGIC)
@@ -1395,6 +1409,18 @@ const siteLayer = useMemo(() => {
       }
   };
 
+  const openCellProRulesModal = (data) => {
+      setCellProRulesCell(data);
+      setShowCellProRulesModal(true);
+  };
+
+  // Keep Cell Pro Rules in sync when user selects a different cell
+  useEffect(() => {
+      if (showCellProRulesModal && selectedCell) {
+          setCellProRulesCell(selectedCell);
+      }
+  }, [selectedCell]);
+
   // Handle Closing of Legends
   const handleLegendClose = (layer) => {
     dispatch(MapActions.setLayerLegend(layer, false));
@@ -1403,7 +1429,7 @@ const siteLayer = useMemo(() => {
      🔹 RENDER
   ============================================================ */
   return (
-    <div className="relative w-full h-full" onContextMenu={handleMapContextMenu}>
+    <div ref={mapContainerRef} className="relative w-full h-full overflow-hidden" onContextMenu={handleMapContextMenu}>
       {/* <button
         onClick={fitToData}
         style={{
@@ -1545,10 +1571,14 @@ const siteLayer = useMemo(() => {
           setRulerHover(null);
         }}
         getCursor={({ isDragging }) => {
-            if (draggingRulerRef.current !== null) return "grabbing";
-            if (rulerMode && hoveringRulerDot) return "grab";
+            if (draggingRulerRef.current !== null) return "crosshair";
+            if (rulerMode && hoveringRulerDot) return "crosshair";
             if (rulerMode) return "crosshair";
-            return isDragging ? "grabbing" : "grab";
+            return isDragging ? "crosshair" : "crosshair";
+            // if (draggingRulerRef.current !== null) return "grabbing";
+            // if (rulerMode && hoveringRulerDot) return "grab";
+            // if (rulerMode) return "crosshair";
+            // return isDragging ? "grabbing" : "grab";
         }}
       >
        {/* <Map
@@ -1593,14 +1623,18 @@ const siteLayer = useMemo(() => {
             layer="SITES"
             thematic={activeSiteThematic}
             onClose={() => handleLegendClose("SITES")}
+            initialX={containerWidth - 250}
+            initialY={80}
           />
         )}
 
         {layerLegends?.CELLS && (
           <LegendBox
             layer="CELLS"
-            thematic={activeThematic}   // ⚠️ important
+            thematic={activeThematic}
             onClose={() => handleLegendClose("CELLS")}
+            initialX={containerWidth - 250}
+            initialY={260}
           />
         )}
 
@@ -1609,22 +1643,28 @@ const siteLayer = useMemo(() => {
             layer="DRIVE TEST"
             thematic={driveTestThematic}
             onClose={() => handleLegendClose("DRIVE_TEST")}
+            initialX={containerWidth - 250}
+            initialY={440}
           />
         )}
 
         {layerLegends?.BOUNDARY && boundaryLegendThematic && (
           <LegendBox
-              layer="BOUNDARY"
-              thematic={boundaryLegendThematic}
-              onClose={() => handleLegendClose("BOUNDARY")}
+            layer="BOUNDARY"
+            thematic={boundaryLegendThematic}
+            onClose={() => handleLegendClose("BOUNDARY")}
+            initialX={containerWidth - 500}
+            initialY={80}
           />
         )}
 
         {layerLegends?.RF && rfLegendThematic && (
           <LegendBox
-              layer="RF"
-              thematic={rfLegendThematic}
-              onClose={() => handleLegendClose("RF")}
+            layer="RF"
+            thematic={rfLegendThematic}
+            onClose={() => handleLegendClose("RF")}
+            initialX={containerWidth - 500}
+            initialY={260}
           />
         )}
 
@@ -1644,12 +1684,18 @@ const siteLayer = useMemo(() => {
             }}
             mapH="100%"
             mapW="100%"
-            onClose={() => dispatch(MapActions.setSelectedCell(null))}
+            onClose={() => { dispatch(MapActions.setSelectedCell(null)); setShowCellProRulesModal(false); }}
             onCopy={copyToClipboarding}
             onSiteAnalytics={(d, mode) => moveToSiteAnalyticsWindow(d, mode === 'newTab' ? 'two' : 'one')}
             onCellAnalytics={(d, mode) => moveToCellAnalyticsWindow(d, mode === 'newTab' ? 'two' : 'one')}
             onSiteProRules={(d, mode) => moveToSiteProrulesWindow(d, mode === 'newTab' ? 'two' : 'one')}
-            onCellProRules={(d, mode) => moveToCellProrulesWindow(d, mode === 'newTab' ? 'two' : 'one')}
+            onCellProRules={(d, mode) => {
+                if (mode === 'newTab') {
+                    moveToCellProrulesWindow(d, 'two');
+                } else {
+                    openCellProRulesModal(d);
+                }
+            }}
             onChartClick={(d) => {
                 // wire Superset modal here when ready
             }}
@@ -1657,6 +1703,15 @@ const siteLayer = useMemo(() => {
                 window.open(`/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${d.Cell_name}&filterId=${FILTER_Id}`, '_blank');
             }}
             />
+        )}
+
+        {showCellProRulesModal && (
+          <CellProRulesModal
+            isOpen={showCellProRulesModal}
+            setIsOpen={setShowCellProRulesModal}
+            cellId={cellProRulesCell?.cell_id || cellProRulesCell?.Cell_name}
+            cellName={cellProRulesCell?.Cell_name || cellProRulesCell?.cell_name}
+          />
         )}
 
       <div className="absolute bottom-[270px] right-3 z-10 flex flex-col rounded-md overflow-hidden shadow-md border border-black/15">

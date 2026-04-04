@@ -4,9 +4,9 @@ import Button from './Button'
 const Modal = ({ size, modalHead = "", children, isOpen, setIsOpen, closeButton = false }) => {
 
     const sizeType = {
-        xl: 'w-[96vw] h-[96vh] md:w-[75vw] md:h-[86vh]',
-        lg: 'w-[94vw] h-[90vh] md:w-[60vw] md:h-[86vh]',
-        sm: 'w-[92vw]  md:w-[36vw]',
+        xl: 'w-[96vw] h-[96vh] md:w-[80vw] md:h-[86vh]',
+        lg: 'w-[92vw] h-[86vh] md:w-[70vw] md:h-[78vh]',
+        sm: 'w-[90vw] md:w-[48vw] h-[70vh]',
         modal: 'w-[94vw] h-[38vh] md:w-[48vw] h-[28vh]',
         full: 'w-[98vw] h-[98vh] md:w-[98vw] md:h-[98vh]',
     }
