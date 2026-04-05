@@ -76,14 +76,14 @@ const customQuery = createSlice({
             if(payload.reset){
                 state.dboList = payload.dataAll
             }else{
-                state.dboList = [...state.databaseList, ...payload.dataAll];
+                state.dboList = [...state.dboList, ...payload.dataAll];
             }
         },
-        
+
         RESET_STATE: (state) => {
             state.databaseList = [];
             state.tableList = {};
-            generatedSqlQuery:{}
+            state.generatedSqlQuery = {};
         }
     }
 })
