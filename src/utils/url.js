@@ -37,8 +37,8 @@ export const Urls={
     querybuilder_getDatabase:"/querybuilder/getDatabase",
     querybuilder_getTables:"/querybuilder/getTables",
     querybuilder_getdbo:"/querybuilder/getdbo",
-    querybuilder_DBConfig:"querybuilder/DBConfig",
-    querybuilder_testDBConfig:"querybuilder/testDBConfig",
+    querybuilder_DBConfig:"/querybuilder/DBConfig",
+    querybuilder_testDBConfig:"/querybuilder/testDBConfig",
     querybuilder_sqlQueryGenerator:"/querybuilder/sqlQueryGenerator",
     querybuilder_runQuery:"/querybuilder/runQuery",
     querybuilder_downloadQuery:"/querybuilder/downloadQuery",
@@ -54,6 +54,7 @@ export const Urls={
     proRules:"/proRules",
     proRulesOutput:"/proRulesOutput",
     cellProRulesOutput:"/cellProRulesOutput",
+    cell_pro_rules: "/kpi/multi-vendor/cell-pro-rules", // added
     
     networkAnalyticsPro:"/networkAnalyticsPro",
     sitenetworkAnalyticsPro:"/sitenetworkAnalyticsPro",

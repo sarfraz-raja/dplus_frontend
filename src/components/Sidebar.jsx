@@ -151,6 +151,7 @@ const SIDEBAR_CHILD_ICON_MAP = {
   'Neighbour Audit': GitBranch,
   'Daily Parameter Audit': CalendarCheck,
   'DB Config': DatabaseZap,
+  'Query workbench': FileCode,
   'Advanced Query Builder': FileCode,
   'Run Query': Play,
   'Saved Query List': FolderOpen,

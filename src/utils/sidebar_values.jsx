@@ -9,12 +9,19 @@ import CommonPowerBI from '../pages/CommonPowerBI';
 import DataPlusAnalytics from '../pages/DataPlusAnalytics';
 import LaverView from '../pages/LaverView';
 import DBConfig from '../pages/CustomQuery/DBConfig';
+import QueryWorkbench from '../pages/CustomQuery/QueryWorkbench';
+
 import SavedQueries from '../pages/CustomQuery/SavedQueries';
-import AlertConfigure from '../pages/AlertMonitoringSystem/AlertConfigure';
+// import AlertConfigure from '../pages/AlertMonitoringSystem/AlertConfigure';
+import XAlertConfigure from '../pages/AlertMonitoringSystem/XAlertConfigure';
+
 import ViewMtandaoComplaints from '../pages/MtandaoComplaints/ViewMtandaoComplaints';
 import ISONForm from '../pages/iSON/iSonForm';
-import AlertScheduler from '../pages/AlertMonitoringSystem/AlertScheduler';
+// import AlertScheduler from '../pages/AlertMonitoringSystem/AlertScheduler';
 import UserManagement from '../pages/Admin/UserManagement/UserManagement';
+import AlertScheduler from '../pages/AlertMonitoringSystem/AlertScheduler';
+import XAlertScheduler from '../pages/AlertMonitoringSystem/XAlertScheduler';
+
 import RoleManagement from '../pages/Admin/RoleManagement/RoleManagement';
 import NokiaToolManagementQuery from '../pages/NokiaToolManagement/NokiaToolManagementQuery';
 // import NetworkAnalyticsPro from '../pages/DataPlusAnalytics/NetworkAnalyticsPro';
@@ -489,25 +496,29 @@ export const Sidebar_content = {
                 subMenu: [],
                 component: <DBConfig />,
                 icon: <Unicons.UilChannel size="16" />
-            }, {
-                name: "Advanced Query Builder",
+            }, 
+            {
+                name: "Query workbench",
                 link: "/custom-query/advanced-query-builder",
                 subMenu: [],
-                component: <AdvancedQueryBuilderComponent />,
+                component: <QueryWorkbench />,
+                // component: <AdvancedQueryBuilderComponent />,
                 icon: <Unicons.UilChannel size="16" />
-            }, {
-                name: "Run Query",
-                link: "/custom-query/run-query",
-                subMenu: [],
-                component: <RunQuery />,
-                icon: <Unicons.UilChannel size="16" />
-                // }, {
+            }, 
+            // {
+            //     name: "Run Query",
+            //     link: "/custom-query/run-query",
+            //     subMenu: [],
+            //     component: <RunQuery />,
+            //     icon: <Unicons.UilChannel size="16" />
+            // }, 
+            // {
                 //     name: "Query Builder",
                 //     link: "/custom-query/query-builder",
                 //     subMenu: [],
                 //     component:<QueryBuilderComponent />,
                 //     icon: <Unicons.UilChannel size="16" />
-            },
+            // },
             // {
             //     name: "Save Query",
             //     link: "/custom-query/save-query",
@@ -515,13 +526,14 @@ export const Sidebar_content = {
             //     component: <AdvancedQueryBuilderComponent />,
             //     icon: <Unicons.UilChannel size="16" />
             // }, 
-            {
-                name: "Saved Query List",
-                link: "/custom-query/saved-query-list",
-                subMenu: [],
-                component: <SavedQueries />,
-                icon: <Unicons.UilChannel size="16" />
-            },],
+            // {
+            //     name: "Saved Query List",
+            //     link: "/custom-query/saved-query-list",
+            //     subMenu: [],
+            //     component: <SavedQueries />,
+            //     icon: <Unicons.UilChannel size="16" />
+            // },
+        ],
         },
         {
             name: "xAlerts",
@@ -531,13 +543,15 @@ export const Sidebar_content = {
                 name: "Configure Scheduler",
                 link: "/xAlerts/configure-scheduler",
                 subMenu: [],
-                component: <AlertConfigure />,
+                // component: <AlertConfigure />,
+                component: <XAlertConfigure />,
                 icon: <Unicons.UilChannel size="16" />
             }, {
                 name: "Alert Scheduler",
                 link: "/xAlerts/alert-scheduler",
                 subMenu: [],
-                component: <AlertScheduler />,
+                component: <XAlertScheduler />,
+                // component: <AlertScheduler />,
                 icon: <Unicons.UilChannel size="16" />
             }
 
