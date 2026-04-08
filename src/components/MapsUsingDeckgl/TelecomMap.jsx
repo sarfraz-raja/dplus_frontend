@@ -40,6 +40,7 @@ import {
 } from "./Utils/gisMeasurement";
 import { TELECOM_GIS_NAV_BTN_CLASS, TelecomMapStyleRightControl } from "./TelecomMapDatayogStyleStrip";
 
+
 /** `false` → original `LegendBox.jsx`; `true` → themed `LegendBoxV2` (resize, z-order, red close). */
 const USE_LEGEND_BOX_V2 = true;
 /** `false` → `CellInfoPopup`; `true` → `CellInfoPopupV2` (currently same UI as legacy). */
