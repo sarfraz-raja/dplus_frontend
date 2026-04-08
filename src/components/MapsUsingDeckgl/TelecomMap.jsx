@@ -45,6 +45,9 @@ const USE_LEGEND_BOX_V2 = true;
 /** `false` → `CellInfoPopup`; `true` → `CellInfoPopupV2` (currently same UI as legacy). */
 const USE_CELL_INFO_POPUP_V2 = true;
 
+const DASHBOARD_UUID = "0ccb9f27-ef5c-47bb-8c86-5126f34bad2f";
+const FILTER_Id = "NATIVE_FILTER-Frwtlbdl8UhCOYVoGiXp9";
+
 const GIS_DRAFT_PATH_EXTENSION = new PathStyleExtension({
   dash: true,
   offset: false,
@@ -710,8 +713,21 @@ const boundaryLegendThematic = useMemo(() => {
     });
   }, [rawCells, filters.regions, filters.technologies]);
 
+  const filteredCellsThematic = useMemo(() => {
+    if (!activeThematic?.colors) return activeThematic;
+    if (activeThematic.type === "KPIs" || activeThematic.type === "Default" || activeThematic.type === "Alarms")
+      return activeThematic;
+    const field = THEMATIC_FIELD_MAP[activeThematic.type];
+    if (!field) return activeThematic;
+    const visibleValues = new Set(globallyFiltered.map(c => c[field]).filter(Boolean));
+    const colors = Object.fromEntries(
+      Object.entries(activeThematic.colors).filter(([k]) => visibleValues.has(k))
+    );
+    return { ...activeThematic, colors };
+  }, [activeThematic, globallyFiltered]);
+
   /* ============================================================
-     🔹 APPLY OPERATOR FILTER (PROP-BASED) 
+     🔹 APPLY OPERATOR FILTER (PROP-BASED)
   ============================================================ */
   // const operatorFiltered = useMemo(() => {
   //   return globallyFiltered.filter(
@@ -1160,7 +1176,7 @@ const siteLayer = useMemo(() => {
         getPosition: d => [Number(d.longitude), Number(d.latitude)],
         radiusUnits: "pixels",
         getRadius: 6,
-        radiusScale: config.mapScale / 2,
+        radiusScale: config.siteScale / 2,
         getFillColor: d => {
             if (selectedCell && d.site_name === selectedCell.site_name)
                 return [255, 255, 0, 255];
@@ -1205,7 +1221,7 @@ const siteLayer = useMemo(() => {
     dispatch,
     selectedCell,
     layerVisibility.SITES,
-    config.mapScale,
+    config.siteScale,
     activeSiteThematic?.type,
     activeSiteThematic?.colors,
     activeSiteThematic?.opacity,
@@ -2623,7 +2639,7 @@ const siteLayer = useMemo(() => {
           (USE_LEGEND_BOX_V2 ? (
             <LegendBoxV2
               layer="CELLS"
-              thematic={activeThematic}
+              thematic={filteredCellsThematic}
               onClose={() => handleLegendClose("CELLS")}
               zIndex={legendZIndex("CELLS")}
               onBringToFront={() => bringLegendToFront("CELLS")}
@@ -2632,7 +2648,7 @@ const siteLayer = useMemo(() => {
           ) : (
             <LegendBox
               layer="CELLS"
-              thematic={activeThematic}
+              thematic={filteredCellsThematic}
               onClose={() => handleLegendClose("CELLS")}
             />
           ))}
@@ -2725,8 +2741,8 @@ const siteLayer = useMemo(() => {
                 else openCellProRulesModal(d);
               }}
               onChartClick={(d) => {
-                void d;
-                /* wire Superset modal when ready */
+                const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
+                window.location.href = `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`;
               }}
               onChartRightClick={(d) => {
                 const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
@@ -2765,7 +2781,8 @@ const siteLayer = useMemo(() => {
                 else openCellProRulesModal(d);
               }}
               onChartClick={(d) => {
-                /* wire Superset modal when ready */
+                const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
+                window.location.href = `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`;
               }}
               onChartRightClick={(d) => {
                 const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");

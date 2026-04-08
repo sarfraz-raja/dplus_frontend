@@ -4,16 +4,25 @@ import CustomQueryActions from '../../store/actions/customQuery-actions';
 import CommonActions from '../../store/actions/common-actions';
 import { Urls } from '../../utils/url';
 import { RUN_QUERY } from '../../store/reducers/customQuery-reducer';
+import Modal from '../../components/Modal';
 
 // ─── Save Query Popover (with query name input) ────────────────────────────────
+const VISIBILITY_OPTIONS = [
+    { value: 'self',  label: 'Self' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'all',   label: 'All Users' },
+];
+
 const SaveQueryPopover = ({ onSave, disabled }) => {
     const [open, setOpen] = useState(false);
     const [queryName, setQueryName] = useState('');
+    const [visibleTo, setVisibleTo] = useState('self');
 
     const handleSave = () => {
         if (!queryName.trim()) return;
-        onSave(queryName.trim());
+        onSave(queryName.trim(), visibleTo);
         setQueryName('');
+        setVisibleTo('self');
         setOpen(false);
     };
 
@@ -28,7 +37,7 @@ const SaveQueryPopover = ({ onSave, disabled }) => {
                 Save Query
             </button>
             {open && (
-                <div className="absolute left-0 top-11 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-3 min-w-[220px]">
+                <div className="absolute left-0 top-11 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-3 min-w-[240px]">
                     <p className="text-xs font-semibold text-slate-700 mb-2">Query Name</p>
                     <input
                         autoFocus
@@ -37,8 +46,31 @@ const SaveQueryPopover = ({ onSave, disabled }) => {
                         onChange={e => setQueryName(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSave()}
                         placeholder="e.g. Monthly user report"
-                        className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-300 mb-2"
+                        className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-300 mb-3"
                     />
+                    <p className="text-xs font-semibold text-slate-700 mb-1.5">Visible To</p>
+                    <div className="flex gap-2 mb-3">
+                        {VISIBILITY_OPTIONS.map(opt => (
+                            <label
+                                key={opt.value}
+                                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                                    visibleTo === opt.value
+                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                        : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                                }`}
+                            >
+                                <input
+                                    type="radio"
+                                    name="visibleTo"
+                                    value={opt.value}
+                                    checked={visibleTo === opt.value}
+                                    onChange={() => setVisibleTo(opt.value)}
+                                    className="hidden"
+                                />
+                                {opt.label}
+                            </label>
+                        ))}
+                    </div>
                     <div className="flex gap-2">
                         <button
                             onClick={handleSave}
@@ -49,7 +81,7 @@ const SaveQueryPopover = ({ onSave, disabled }) => {
                             Save
                         </button>
                         <button
-                            onClick={() => { setOpen(false); setQueryName(''); }}
+                            onClick={() => { setOpen(false); setQueryName(''); setVisibleTo('self'); }}
                             className="px-3 py-1.5 text-xs font-semibold text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50"
                         >
                             Cancel
@@ -84,8 +116,11 @@ const ExportDropdown = ({ onExportCSV, onExportExcel, disabled }) => {
 };
 
 // ─── Saved Query Card ──────────────────────────────────────────────────────────
-const SavedQueryCard = ({ item, onDragStart, onClick }) => {
-    // support both camelCase and postgres lowercase column names
+const SavedQueryCard = ({ item, onDragStart, onClick, onEdit, onDelete }) => {
+    const [editing, setEditing] = useState(false);
+    const [editName, setEditName] = useState('');
+    const [editQuery, setEditQuery] = useState('');
+
     const name     = item.name     || item.queryname  || item.queryName  || item.title;
     const dbServer = item.dbServer || item.dbserver;
     const dbName   = item.dbName   || item.dbname;
@@ -93,18 +128,92 @@ const SavedQueryCard = ({ item, onDragStart, onClick }) => {
 
     const displayName = name || (queryTxt?.split('\n')[0]?.substring(0, 48) + (queryTxt?.length > 48 ? '…' : ''));
 
+    const openEdit = (e) => {
+        e.stopPropagation();
+        setEditName(name || '');
+        setEditQuery(queryTxt || '');
+        setEditing(true);
+    };
+
+    const handleSaveEdit = () => {
+        if (!editName.trim() || !editQuery.trim()) return;
+        onEdit(item.savequeryid, { queryname: editName.trim(), queries: editQuery.trim(), dbServer });
+        setEditing(false);
+    };
+
+    const handleDelete = (e) => {
+        e.stopPropagation();
+        onDelete(item.savequeryid);
+    };
+
+    if (editing) {
+        return (
+            <div className="p-3 bg-white border border-blue-200 rounded-lg shadow-sm">
+                <p className="text-xs font-semibold text-slate-700 mb-2">Edit Query</p>
+                <input
+                    autoFocus
+                    type="text"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    placeholder="Query name"
+                    className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-300 mb-2"
+                />
+                <textarea
+                    value={editQuery}
+                    onChange={e => setEditQuery(e.target.value)}
+                    rows={3}
+                    className="w-full px-2 py-1.5 text-xs font-mono border border-slate-200 rounded bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-300 mb-2 resize-none"
+                />
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleSaveEdit}
+                        disabled={!editName.trim() || !editQuery.trim()}
+                        className="flex-1 px-2 py-1.5 text-xs font-semibold text-white rounded disabled:opacity-40"
+                        style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}
+                    >
+                        Save
+                    </button>
+                    <button
+                        onClick={() => setEditing(false)}
+                        className="px-2 py-1.5 text-xs font-semibold text-slate-600 rounded border border-slate-200 hover:bg-slate-50"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div
             draggable
             onDragStart={(e) => onDragStart(e, item)}
             onClick={() => onClick(item)}
-            className="p-3 bg-white border border-slate-100 rounded-lg shadow-sm cursor-grab hover:border-blue-200 transition-colors"
+            className="p-3 bg-white border border-slate-100 rounded-lg shadow-sm cursor-grab hover:border-blue-200 transition-colors group"
         >
             <div className="flex justify-between items-start mb-1">
                 <p className="text-xs font-semibold text-slate-700 line-clamp-1 flex-1 mr-2" title={displayName}>{displayName}</p>
-                {dbServer && (
-                    <p className="text-[10px] text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded shrink-0">{dbServer}</p>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                            onClick={openEdit}
+                            title="Edit"
+                            className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                        >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                        <button
+                            onClick={handleDelete}
+                            title="Delete"
+                            className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                        </button>
+                    </div>
+                    {dbServer && (
+                        <p className="text-[10px] text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded">{dbServer}</p>
+                    )}
+                </div>
             </div>
             <p className="text-xs font-mono text-slate-500 line-clamp-2 bg-slate-50 p-1.5 rounded" title={queryTxt}>
                 {queryTxt}
@@ -126,6 +235,7 @@ const QueryWorkbench = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isDragOver, setIsDragOver] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [errorModalOpen, setErrorModalOpen] = useState(false);
 
     // ── Redux selectors ──
     const databaseList = useSelector(s => s?.customQuery?.databaseList || []);
@@ -153,9 +263,14 @@ const QueryWorkbench = () => {
         if (isLoading) setIsLoading(false);
     }, [runQuery]);
 
+    const hasError = runQuery?.type === 'Error' || (runQuery?.msg && runQuery?.type !== 'Data');
+    useEffect(() => {
+        if (hasError) setErrorModalOpen(true);
+    }, [hasError]);
+
     // ── Drag & Drop ──
     const handleDragStart = (e, item) => {
-        const serverId = item.id || item.dbServer || item.dbserver || '';
+        const serverId = item.dbServer || item.dbserver || '';
         const sql = item.queries || item.query || '';
         e.dataTransfer.setData('wq_item', JSON.stringify({ queries: sql, dbServer: serverId }));
     };
@@ -172,7 +287,7 @@ const QueryWorkbench = () => {
 
     const handleCardClick = (item) => {
         setActiveQuery(item.queries || item.query || '');
-        const serverId = item.id || item.dbServer || item.dbserver;
+        const serverId = item.dbServer || item.dbserver;
         if (serverId) setServer(String(serverId));
     };
 
@@ -195,11 +310,23 @@ const QueryWorkbench = () => {
         dispatch(CustomQueryActions.postRunQuery(true, getFormData(), () => {}, Urls.querybuilder_downloadQuery + '/excel'));
     };
 
-    const saveQuery = (name, overrideServer, overrideQuery) => {
+    const saveQuery = (name, overrideServer, overrideQuery, visibleTo = 'self') => {
         const dbServer = overrideServer || server;
         const queries  = overrideQuery  || activeQuery;
         if (!queries.trim() || !dbServer) return;
-        dispatch(CommonActions.postApiCaller(Urls.querybuilder_saveQuery, { dbServer, queries, queryname: name }, () => {
+        dispatch(CommonActions.postApiCaller(Urls.querybuilder_saveQuery, { dbServer, queries, queryname: name, visible_to: visibleTo }, () => {
+            dispatch(CustomQueryActions.getSavedQuery(true));
+        }));
+    };
+
+    const editQuery = (savequeryid, data) => {
+        dispatch(CustomQueryActions.updateSavedQuery(savequeryid, data, () => {
+            dispatch(CustomQueryActions.getSavedQuery(true));
+        }));
+    };
+
+    const deleteQuery = (savequeryid) => {
+        dispatch(CustomQueryActions.deleteSavedQuery(savequeryid, () => {
             dispatch(CustomQueryActions.getSavedQuery(true));
         }));
     };
@@ -210,12 +337,12 @@ const QueryWorkbench = () => {
     };
 
     const hasResults = runQuery?.type === 'Data';
-    const hasError = runQuery?.type === 'Error' || (runQuery?.msg && runQuery?.type !== 'Data');
     const columns = runQuery?.columns || [];
     const rows = runQuery?.data || [];
     const canExecute = activeQuery.trim() && server;
 
     return (
+        <>
         <div
             className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
             style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
@@ -273,7 +400,7 @@ const QueryWorkbench = () => {
                                 {savedQueryList.length === 0 ? 'No saved queries found.' : 'No matches.'}
                             </p>
                         ) : filteredQueries.map((q, i) => (
-                            <SavedQueryCard key={q.id || i} item={q} onDragStart={handleDragStart} onClick={handleCardClick} />
+                            <SavedQueryCard key={q.savequeryid || i} item={q} onDragStart={handleDragStart} onClick={handleCardClick} onEdit={editQuery} onDelete={deleteQuery} />
                         ))}
                     </div>
                 </div>
@@ -301,7 +428,7 @@ const QueryWorkbench = () => {
                                             <option key={db.value} value={db.value}>{db.label}</option>
                                         ))}
                                     </select>
-                                    <SaveQueryPopover onSave={saveQuery} disabled={!canExecute} />
+                                    <SaveQueryPopover onSave={(name, visibleTo) => saveQuery(name, undefined, undefined, visibleTo)} disabled={!canExecute} />
                                     <ExportDropdown onExportCSV={exportCSV} onExportExcel={exportExcel} disabled={!canExecute} />
                                     {!server && activeQuery && (
                                         <p className="text-[10px] text-amber-600 font-medium">Select a server first.</p>
@@ -361,53 +488,87 @@ const QueryWorkbench = () => {
                                         dispatch(CustomQueryActions.postRunQuery(true, { dbServer: server, queries: q }, () => {}, Urls.querybuilder_runQuery));
                                     }
                                 }}
-                                onSave={(name, builderServer, q) => saveQuery(name, builderServer, q)}
+                                onSave={(name, builderServer, q, visibleTo) => saveQuery(name, builderServer, q, visibleTo)}
                             />
                         )}
                     </div>
 
                     {/* ── Results Panel ── */}
-                    {(hasResults || hasError) && (
+                    {hasResults && (
                         <div
                             className="flex-1 overflow-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0"
                             style={{ background: 'rgba(255,255,255,0.6)' }}
                         >
-                            {hasError ? (
-                                <div className="p-6 flex items-center gap-3">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>
-                                    <p className="text-sm text-red-600 font-medium">{runQuery.msg || 'Query failed.'}</p>
-                                </div>
-                            ) : (
-                                <table className="min-w-full text-left text-sm">
-                                    <thead className="sticky top-0" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
-                                        <tr>
+                            <table className="min-w-full text-left text-sm">
+                                <thead className="sticky top-0" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
+                                    <tr>
+                                        {columns.map(col => (
+                                            <th key={col} className="px-4 py-3 text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">{col}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows.map((row, idx) => (
+                                        <tr
+                                            key={idx}
+                                            className="border-b border-white/40 transition-colors text-slate-700"
+                                            style={{ background: idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)' }}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.6)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
+                                        >
                                             {columns.map(col => (
-                                                <th key={col} className="px-4 py-3 text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">{col}</th>
+                                                <td key={col} className="px-4 py-3 text-xs whitespace-nowrap">{row[col] ?? '—'}</td>
                                             ))}
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {rows.map((row, idx) => (
-                                            <tr
-                                                key={idx}
-                                                className="border-b border-white/40 transition-colors text-slate-700"
-                                                style={{ background: idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.6)'}
-                                                onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
-                                            >
-                                                {columns.map(col => (
-                                                    <td key={col} className="px-4 py-3 text-xs whitespace-nowrap">{row[col] ?? '—'}</td>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
                 </div>
             </div>
         </div>
+
+        {/* ── Query Error Modal ── */}
+        <Modal size="form" showHeader={false} isOpen={errorModalOpen} setIsOpen={setErrorModalOpen}>
+            <div className="p-5">
+                <div
+                    className="flex items-center justify-between px-4 py-3 rounded-lg mb-5 shadow-sm"
+                    style={{ background: '#b91c1c' }}
+                >
+                    <div className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        <h2 className="text-white font-semibold text-lg">Query Error</h2>
+                    </div>
+                    <button type="button" onClick={() => setErrorModalOpen(false)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
+                </div>
+
+                <div className="flex flex-col items-center gap-3 py-4 px-2 text-center">
+                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="m15 9-6 6M9 9l6 6"/>
+                        </svg>
+                    </div>
+                    <p className="text-slate-700 text-sm font-medium whitespace-pre-wrap break-all text-left">{runQuery?.msg || 'Query failed.'}</p>
+                </div>
+
+                <div className="flex justify-end mt-4">
+                    <button
+                        type="button"
+                        onClick={() => setErrorModalOpen(false)}
+                        className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm"
+                        style={{ background: '#b91c1c' }}
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </Modal>
+        </>
     );
 };
 
@@ -561,7 +722,7 @@ const VisualBuilder = ({ onGenerateQuery, onGenerateAndRun, onSave }) => {
                     </button>
                     <SaveQueryPopover
                         disabled={!selectedTable || !builderServer}
-                        onSave={(name) => onSave(name, builderServer, buildQuery())}
+                        onSave={(name, visibleTo) => onSave(name, builderServer, buildQuery(), visibleTo)}
                     />
                 </div>
             </div>

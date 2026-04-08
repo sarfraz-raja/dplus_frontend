@@ -16,6 +16,8 @@ export default function TicketsPage() {
     ticketTitle: "" 
   });
   const [updatingField, setUpdatingField] = useState({ id: null, field: null });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rpp, setRpp] = useState(15);
 
   // Options for dropdowns
   const severityOptions = ["S1", "S2", "S3", "S4"];
@@ -28,6 +30,7 @@ export default function TicketsPage() {
     try {
       const res = await Api.get({ url: "/tickets/ticket_list" });
       setTickets(res?.data?.data || []);
+      setCurrentPage(1);
     } catch (err) {
       console.error(err);
       toast.error("Failed to fetch tickets");
@@ -186,7 +189,7 @@ export default function TicketsPage() {
                   setIsOpen(false);
                 }}
                 className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors ${
-                  opt === currentValue ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                  opt === currentValue ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-700'
                 }`}
               >
                 {opt}
@@ -241,7 +244,7 @@ export default function TicketsPage() {
             {selectedValues.map(value => (
               <span
                 key={value}
-                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs border border-blue-200"
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-700 rounded text-xs border border-orange-200"
               >
                 {value}
                 <button
@@ -268,7 +271,7 @@ export default function TicketsPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
@@ -299,12 +302,16 @@ export default function TicketsPage() {
     );
   };
 
+  const totalPages = Math.max(1, Math.ceil(tickets.length / rpp));
+  const startIdx = (currentPage - 1) * rpp;
+  const paginatedTickets = tickets.slice(startIdx, Math.min(startIdx + rpp, tickets.length));
+
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="flex flex-col h-full overflow-hidden p-6" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}>
       <Toaster position="top-right" />
       
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-4 shrink-0">
         <div>
           <h1 className="text-2xl font-semibold text-gray-800">Tickets</h1>
           <p className="text-sm text-gray-500">
@@ -314,7 +321,8 @@ export default function TicketsPage() {
 
         <button
           onClick={() => setOpenModal(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 flex items-center gap-2"
+          className="px-4 py-2 text-white rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 transition-opacity flex items-center gap-2"
+          style={{ background: '#EC7D09' }}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -324,7 +332,7 @@ export default function TicketsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 shrink-0">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-500">Total Tickets</div>
           <div className="text-2xl font-semibold mt-1">{tickets.length}</div>
@@ -350,7 +358,7 @@ export default function TicketsPage() {
       </div>
 
       {/* Tickets Table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+      <div className="flex-1 overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col">
         {loading ? (
           <div className="p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-blue-600"></div>
@@ -365,7 +373,8 @@ export default function TicketsPage() {
             <p className="text-gray-400 text-sm mt-1">Create your first ticket to get started</p>
             <button
               onClick={() => setOpenModal(true)}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-2"
+              className="mt-4 px-4 py-2 text-white rounded-lg hover:opacity-90 inline-flex items-center gap-2"
+              style={{ background: '#EC7D09' }}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -374,27 +383,27 @@ export default function TicketsPage() {
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="flex-1 overflow-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="sticky top-0 z-10 border-b border-gray-200" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Site</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cells</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participants</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Activity</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Ticket ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Site</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Cells</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Category</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Team</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Severity</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Priority</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Region</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Participants</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Last Activity</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {tickets.map((ticket) => (
+                {paginatedTickets.map((ticket) => (
                   <tr key={ticket.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">
                       {ticket.ticket_id}
@@ -474,7 +483,7 @@ export default function TicketsPage() {
                     <td className="px-4 py-3">
                       <button
                         onClick={() => openChatModal(ticket)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-2 text-gray-500 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors"
                         title="Open Chat"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -486,6 +495,58 @@ export default function TicketsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination footer */}
+        {!loading && tickets.length > 0 && (
+          <div className="shrink-0 flex items-center justify-between px-4 py-2 border-t border-gray-200 bg-gray-50 text-xs text-gray-500">
+            <span>
+              {tickets.length === 0
+                ? 'No tickets'
+                : `Showing ${Math.min(startIdx + 1, tickets.length)}–${Math.min(startIdx + rpp, tickets.length)} of ${tickets.length}`}
+            </span>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1">
+                Rows per page:
+                <select
+                  value={rpp}
+                  onChange={(e) => { setRpp(Number(e.target.value)); setCurrentPage(1); }}
+                  className="ml-1 border border-slate-300 rounded px-1 py-0.5 text-xs"
+                >
+                  {[10, 15, 25, 50].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2 py-0.5 border border-slate-300 rounded disabled:opacity-40 hover:bg-slate-100"
+                >‹</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .reduce((acc, p, i, arr) => {
+                    if (i > 0 && p - arr[i - 1] > 1) acc.push('…');
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === '…'
+                      ? <span key={`e-${i}`} className="px-1">…</span>
+                      : <button
+                          key={p}
+                          onClick={() => setCurrentPage(p)}
+                          className={`px-2 py-0.5 border rounded ${currentPage === p ? 'text-white border-[#EC7D09]' : 'border-slate-300 hover:bg-slate-100'}`}
+                          style={currentPage === p ? { background: '#EC7D09' } : {}}
+                        >{p}</button>
+                  )}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-2 py-0.5 border border-slate-300 rounded disabled:opacity-40 hover:bg-slate-100"
+                >›</button>
+              </div>
+            </div>
           </div>
         )}
       </div>

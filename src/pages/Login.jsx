@@ -234,7 +234,7 @@ const Login = () => {
                 />
               </div>
 
-              <h1 className="portal-brand-font mt-1 text-[1.18rem] font-black tracking-[0.28em] sm:text-[1.45rem]">
+              <h1 className="portal-brand-font mt-1 text-[1.50rem] font-black tracking-[0.28em] sm:text-[3.5rem]">
                 <span className="text-[#ffffff]">DATA</span>
                 <span className="text-[#F26522] drop-shadow-[0_0_15px_rgba(242,101,34,0.28)]">PLUS</span>
               </h1>
@@ -250,20 +250,20 @@ const Login = () => {
 
             <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit(onSubmit)}>
               <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
+                <span className="mb-2 flex items-center gap-2 text-[15px] uppercase tracking-[0.2em] text-white/45">
                   <UserCircle2 className="h-4 w-4 text-[#F26522]" /> Username
                 </span>
                 <input
                   {...register('username', { required: 'Username is required.' })}
                   placeholder="Enter username"
                   autoComplete="username"
-                  className="w-full rounded-2xl border border-white/5 bg-[rgba(3,6,18,0.98)] px-4 py-3.5 text-sm outline-none transition-all duration-200 focus:border-[#F26522]/45"
+                  className="w-full rounded-2xl border border-white/5 bg-[rgba(3,6,18,0.98)] px-4 py-3.5 text-md outline-none transition-all duration-200 focus:border-[#F26522]/45"
                 />
                 {errors?.username?.message ? <p className="mt-2 text-xs text-red-300">{errors.username.message}</p> : null}
               </label>
 
               <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
+                <span className="mb-2 flex items-center gap-2 text-[15px]  uppercase tracking-[0.2em] text-white/45">
                   <LockKeyhole className="h-4 w-4 text-[#F26522]" /> Password
                 </span>
                 <div className="relative">

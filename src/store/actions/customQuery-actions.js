@@ -145,9 +145,12 @@ const CustomQueryActions = {
             const res = await Api.post({ data: data, url: urlinnng })
             console.log(res, "postRunQuery")
             if (res?.status === 201 || res?.status === 200) {
-                const dtaa = res.data
+                const dtaa = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
                 console.log(dtaa.type == "File", dtaa.type == "Data", "dtaadtaa")
                 if (dtaa.type == "Data") {
+                    dispatch(RUN_QUERY(dtaa))
+                }
+                if (dtaa.type == "Error") {
                     dispatch(RUN_QUERY(dtaa))
                 }
                 if (dtaa.type == "File") {
@@ -156,9 +159,7 @@ const CustomQueryActions = {
                     let msgdata = {
                         show: true,
                         icon: 'success',
-                        buttons: [
-
-                        ],
+                        buttons: [],
                         text: dtaa.msg,
                         type: 1
                     }
@@ -167,16 +168,8 @@ const CustomQueryActions = {
 
             } else if (res?.status === 400) {
                 cb()
-                const dtaa = res.data
-                let msgdata = {
-                    show: true,
-                    icon: 'error',
-                    buttons: [
-                    ],
-                    text: dtaa.msg
-                }
-                dispatch(ALERTS(msgdata))
-                console.log("dsadsadasdasdasdsada", msgdata)
+                const dtaa = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
+                dispatch(RUN_QUERY({ type: 'Error', msg: dtaa.msg }))
             } else {
                 return
             }
@@ -235,6 +228,24 @@ const CustomQueryActions = {
             console.log(error, "amit errorerror 37")
 
             // dispatch(Notify.error('something went wrong! please try again after a while'))
+        }
+    },
+    updateSavedQuery: (id, data, cb) => async (dispatch, _) => {
+        try {
+            const res = await Api.put({ url: `${Urls.querybuilder_updateQuery}/${id}`, data })
+            if (res?.status !== 200 && res?.status !== 201) return
+            cb()
+        } catch (error) {
+            console.log(error, 'updateSavedQuery error')
+        }
+    },
+    deleteSavedQuery: (id, cb) => async (dispatch, _) => {
+        try {
+            const res = await Api.delete({ url: `${Urls.querybuilder_deleteQuery}/${id}` })
+            if (![200, 201, 204].includes(res?.status)) return
+            cb()
+        } catch (error) {
+            console.log(error, 'deleteSavedQuery error')
         }
     },
     resetTablesList: () => async (dispatch, _) => {

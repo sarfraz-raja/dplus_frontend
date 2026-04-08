@@ -55,7 +55,7 @@ const RunQuery = () => {
         {
             label: "DB Server",
             value: "",
-            name: "dbServer",
+            name: "dbserver",
             option: databaseList,
             type: "select",
             required: true,
@@ -107,7 +107,7 @@ const RunQuery = () => {
     if (state && OneTime) {
         setOneTime(false)
         setValue("queries", state?.queries)
-        setValue("dbServer", state?.dbServer)
+        setValue("dbserver", state?.dbserver)
     }
 
 

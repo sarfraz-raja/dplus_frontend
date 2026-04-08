@@ -309,7 +309,7 @@ const normalizeStoredUser = (raw) => {
   return null;
 };
 
-export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, onMobileClose }) {
+export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, onMobileClose, onOpen }) {
   const apiMenuRaw = useSelector((state) => state.auth.sidebarMenu);
   const authUser = useSelector((state) => state.auth.user);
   const navigate = useNavigate();
@@ -418,6 +418,14 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
   };
 
   const handleDropdown = (title) => {
+    if (!sidebarOpen) {
+      onOpen?.();
+      const nextOpen = [title];
+      persistOpenCategories(nextOpen);
+      setOpenCategory(nextOpen);
+      return;
+    }
+
     const nextOpen = openCategory.includes(title)
       ? openCategory.filter((itemTitle) => itemTitle !== title)
       : [...openCategory, title];
@@ -489,7 +497,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                   />
                   {isExpanded ? (
                     <span
-                      className={`min-w-0 flex-1 truncate text-left text-[14px] tracking-[0.01em] text-[#ffffff] ${
+                      className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-[#ffffff] ${
                         activeItem === 'Dashboard' ? 'font-bold' : 'font-medium'
                       }`}
                     >
@@ -530,7 +538,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                         />
                         {isExpanded ? (
                           <span
-                            className={`min-w-0 flex-1 truncate text-left text-[14px] tracking-[0.01em] text-[#ffffff] ${
+                            className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-[#ffffff] ${
                               isActive ? 'font-bold' : 'font-medium'
                             }`}
                           >
@@ -568,7 +576,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                         />
                         {isExpanded ? (
                           <span
-                            className={`min-w-0 flex-1 truncate text-left text-[14px] tracking-[0.01em] text-[#ffffff] ${
+                            className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-[#ffffff] ${
                               isSelected ? 'font-bold' : 'font-medium'
                             }`}
                           >

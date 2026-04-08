@@ -232,7 +232,7 @@ const XAlertScheduler = () => {
                 {/* Table */}
                 <div className="flex-1 overflow-auto rounded-xl min-h-0 backdrop-blur-md border border-white/60 shadow-lg"
                     style={{ background: 'rgba(255,255,255,0.55)' }}>
-                    <table className="min-w-full text-left text-sm">
+                    <table className="w-full min-w-max text-left text-sm">
                         <thead className="sticky top-0" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
                             <tr>
                                 {visibleCols.map(col => (

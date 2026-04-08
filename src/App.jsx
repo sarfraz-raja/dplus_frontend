@@ -107,7 +107,7 @@ function App() {
             <main className='flex h-screen overflow-hidden bg-gray-200'>
                 <WebSocketClient />
 
-                <div className="flex flex-1 flex-col">
+                <div className="flex flex-1 flex-col min-w-0">
                     <TopBar
                         isSidebarOpen={effectiveSidebarOpen}
                         isMobileViewport={isMobileViewport}
@@ -127,6 +127,7 @@ function App() {
                                     isMobileViewport={isMobileViewport}
                                     mobileVisible={mobileSidebarOpen}
                                     onMobileClose={() => setMobileSidebarOpen(false)}
+                                    onOpen={() => setsidebarOpenn(true)}
                                 />
                             </ErrorBoundary>
                         </div>

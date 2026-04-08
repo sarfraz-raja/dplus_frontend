@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import Api from "../../utils/api";
 import toast from "react-hot-toast";
+import { useSelector } from "react-redux";
 
 export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
+  const authUser = useSelector((state) => state.auth.user);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
@@ -39,15 +41,19 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
   };
 
   const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      setSelectedFiles(prev => [...prev, ...files]);
     }
   };
 
+  const removeFile = (indexToRemove) => {
+    setSelectedFiles(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
   const handleSendMessage = async () => {
-    if (!newMessage.trim() && !selectedFile) {
-      toast.error("Please enter a message or select a file");
+    if (!newMessage.trim() && selectedFiles.length === 0) {
+      toast.error("Please enter a message or select files");
       return;
     }
 
@@ -59,25 +65,29 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
       formData.append("ticketId", ticketId);
       formData.append("message", newMessage.trim() || "");
       
-      if (selectedFile) {
-        formData.append("file", selectedFile);
-      }
+      // Append multiple files
+      selectedFiles.forEach((file) => {
+        formData.append("files[]", file);
+      });
 
       // Don't set Content-Type header - let browser set it with boundary
       const res = await Api.post({
         url: "/tickets/message",
         data: formData,
-        headers: {} // Remove any content-type header
+        contentType: null,
       });
 
       if (res.data?.success) {
+        // Clear input and files
         setNewMessage("");
-        setSelectedFile(null);
+        setSelectedFiles([]);
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
-        fetchMessages();
-        toast.success("Message sent");
+        
+        // Immediately fetch updated messages
+        await fetchMessages();
+        toast.success("Message sent successfully");
       }
     } catch (err) {
       console.error("Error sending message:", err);
@@ -88,6 +98,8 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
   };
 
   const formatTimestamp = (timestamp) => {
+    if (!timestamp) return "";
+    
     const date = new Date(timestamp);
     const today = new Date();
     const yesterday = new Date(today);
@@ -102,9 +114,14 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
     }
   };
 
+  const isImageFile = (fileUrl) => {
+    if (!fileUrl) return false;
+    return fileUrl.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i);
+  };
+
   const renderMessageContent = (msg) => {
-    if (msg.type === "MEDIA" && msg.file_url) {
-      const isImage = msg.file_url.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+    if (msg.file_url) {
+      const isImage = isImageFile(msg.file_url);
       if (isImage) {
         return (
           <div className="mt-2">
@@ -149,23 +166,19 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
 
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">Chat</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  {ticketTitle || `Ticket #${ticketId}`}
-                </p>
-              </div>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-500 focus:outline-none"
-              >
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+          <div className="flex items-center justify-between px-6 py-4" style={{ background: '#EC7D09' }}>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Ticket Chat</h3>
+              <p className="text-sm text-white/75 mt-0.5">
+                {ticketTitle || `Ticket #${ticketId}`}
+              </p>
             </div>
+            <button
+              onClick={onClose}
+              className="text-white/80 hover:text-white focus:outline-none text-xl leading-none"
+            >
+              ✕
+            </button>
           </div>
 
           <div className="bg-gray-50 px-6 py-4 h-96 overflow-y-auto">
@@ -185,62 +198,69 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
               </div>
             ) : (
               <div className="space-y-4">
-                {messages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={`flex ${msg.is_current_user ? "justify-end" : "justify-start"}`}
-                  >
+                {messages.map((msg, index) => {
+                  const isCurrentUser = msg.sender_id === authUser?.id;
+                  return (
                     <div
-                      className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                        msg.is_current_user
-                          ? "bg-blue-600 text-white"
-                          : "bg-white border border-gray-200 text-gray-900"
-                      }`}
+                      key={index}
+                      className={`flex ${isCurrentUser ? "justify-end" : "justify-start"}`}
                     >
-                      {!msg.is_current_user && (
-                        <div className="text-xs font-medium mb-1 text-gray-500">
-                          {msg.username}
-                        </div>
-                      )}
-                      {msg.message && msg.type === "TEXT" && (
-                        <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
-                      )}
-                      {renderMessageContent(msg)}
                       <div
-                        className={`text-xs mt-1 ${
-                          msg.is_current_user ? "text-blue-100" : "text-gray-400"
+                        className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                          isCurrentUser
+                            ? "text-white"
+                            : "bg-white border border-gray-200 text-gray-900"
                         }`}
+                        style={isCurrentUser ? { background: '#EC7D09' } : {}}
                       >
-                        {formatTimestamp(msg.created_at)}
+                        {!isCurrentUser && (
+                          <div className="text-xs font-medium mb-1 text-gray-500">
+                            {msg.username || "Unknown User"}
+                          </div>
+                        )}
+                        {msg.message && msg.message_type === "TEXT" && (
+                          <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
+                        )}
+                        {renderMessageContent(msg)}
+                        <div
+                          className={`text-xs mt-1 ${
+                            isCurrentUser ? "text-white/70" : "text-gray-400"
+                          }`}
+                        >
+                          {formatTimestamp(msg.create_time || msg.created_at)}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
             )}
           </div>
 
           <div className="bg-white px-6 py-4 border-t border-gray-200">
-            {selectedFile && (
-              <div className="mb-3 flex items-center gap-2 bg-blue-50 p-2 rounded-lg">
-                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-                <span className="text-sm text-gray-600 flex-1 truncate">{selectedFile.name}</span>
-                <button
-                  onClick={() => {
-                    setSelectedFile(null);
-                    if (fileInputRef.current) {
-                      fileInputRef.current.value = "";
-                    }
-                  }}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+            {/* Selected Files List */}
+            {selectedFiles.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {selectedFiles.map((file, index) => (
+                  <div key={index} className="flex items-center gap-2 bg-blue-50 p-2 rounded-lg">
+                    <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    <span className="text-sm text-gray-600 flex-1 truncate">{file.name}</span>
+                    <span className="text-xs text-gray-400">
+                      {(file.size / 1024).toFixed(1)} KB
+                    </span>
+                    <button
+                      onClick={() => removeFile(index)}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -251,13 +271,14 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type your message..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    if (e.key === "Enter" && !e.shiftKey && !sending) {
                       e.preventDefault();
                       handleSendMessage();
                     }
                   }}
+                  disabled={sending}
                 />
               </div>
               <div className="flex gap-2">
@@ -267,10 +288,13 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
                   onChange={handleFileSelect}
                   className="hidden"
                   id="file-upload"
+                  multiple
                 />
                 <label
                   htmlFor="file-upload"
-                  className="cursor-pointer p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  className={`cursor-pointer p-2 text-gray-500 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors ${
+                    sending ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -279,7 +303,8 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
                 <button
                   onClick={handleSendMessage}
                   disabled={sending}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 text-white rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                  style={{ background: '#EC7D09' }}
                 >
                   {sending ? (
                     <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>

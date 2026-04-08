@@ -257,20 +257,64 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
               onClick={() => navigate('/home')}
               className="flex cursor-pointer items-center group focus:outline-none"
             >
-              <div className="relative flex min-w-0 items-center gap-1.5 sm:gap-2 lg:min-w-[220px]">
+              {/* <div className="relative flex min-w-0 items-center gap-1.5 sm:gap-2 lg:min-w-[220px]">
                 <img src="/dy-globe-only.png" alt="DataPlus globe" className="relative z-10 h-11 w-auto shrink-0 self-center drop-shadow-[0_0_10px_rgba(242,101,34,0.22)] sm:h-[3.1rem] lg:h-[3.5rem]" />
-                <span className="relative z-10 inline-flex min-w-0 flex-col items-stretch justify-center gap-0.5 leading-none sm:gap-1 lg:gap-1">
-                  <span className="portal-brand-font inline-flex w-max max-w-full min-w-0 items-baseline text-[16px] font-extrabold tracking-[0.08em] sm:text-[20px] lg:text-[22px]">
+                <span className="relative z-10 inline-flex min-w-0 flex-col items-stretch justify-center gap-0.5 leading-none sm:gap-1 lg:gap-1 ">
+                  <span className="font-['Quantico'] inline-flex w-max max-w-full min-w-0 items-baseline text-[24px] font-extrabold tracking-[0.08em] sm:text-[28px] lg:text-[30px]">
                     <span className="text-[#ffffff]">DATA</span>
                     <span className="text-[#F26522]">PLUS</span>
                   </span>
-                  <span className="flex w-full min-w-0 items-center justify-between whitespace-nowrap text-[9px] font-medium leading-none tracking-[0.12em] text-[#ffffff] sm:text-[10px] lg:text-[11px]">
-                    <span className="shrink-0">Powered</span>
-                    <span className="shrink-0">by</span>
-                    <span className="shrink-0 font-bold">Datayog</span>
+                  <span className="flex w-full min-w-0 items-end justify-end whitespace-nowrap text-[4px] font-medium leading-none tracking-[0.12em] text-[#ffffff] sm:text-[10px] lg:text-[10px]">
+                      <span className="shrink-0">Powered by DataYog</span>
+                    
                   </span>
                 </span>
-              </div>
+              </div> */}
+              {/* <div className="relative flex min-w-0 items-start gap-1.5 sm:gap-2 lg:min-w-[220px]"> 
+                <img 
+                  src="/dy-globe-only.png" 
+                  alt="DataPlus globe" 
+                  className="relative z-10 h-11 w-auto shrink-0 self-center drop-shadow-[0_0_10px_rgba(242,101,34,0.22)] sm:h-[3.1rem] lg:h-[3.5rem]" 
+                />
+                
+            
+                <span className="relative z-10 inline-flex min-w-0 flex-col items-stretch justify-start gap-0.5 leading-none sm:gap-1 lg:gap-1 mt-4 sm:mt-5 lg:mt-6">
+                  <span className="font-['Quantico'] inline-flex w-max max-w-full min-w-0 items-baseline text-[24px] font-extrabold tracking-[0.08em] sm:text-[28px] lg:text-[30px]">
+                    <span className="text-[#ffffff]">DATA</span>
+                    <span className="text-[#F26522]">PLUS</span>
+                  </span>
+                  <span className="flex w-full min-w-0 items-end justify-end whitespace-nowrap text-[4px] font-medium leading-none tracking-[0.12em] text-[#ffffff] sm:text-[10px] lg:text-[10px]">
+                      <span className="shrink-0">Powered by DataYog</span>
+                  </span>
+                </span>
+              </div> */}
+
+<div className="relative flex min-w-0 items-center gap-1.5 sm:gap-2 lg:min-w-[220px]">
+  {/* Globe Image */}
+  <img 
+    src="/dy-globe-only.png" 
+    alt="DataPlus globe" 
+    className="relative z-10 h-11 w-auto shrink-0 self-center drop-shadow-[0_0_10px_rgba(242,101,34,0.22)] sm:h-[3.1rem] lg:h-[3.5rem]" 
+  />
+
+  {/* Text Container */}
+  {/* We use translate-y to nudge the text block up, so the center-line of the globe 
+      strikes through the middle of "DATAPLUS" rather than the middle of the whole block */}
+  <span className="relative z-10 inline-flex min-w-0 flex-col items-stretch justify-center leading-none translate-y-[15%] sm:translate-y-[12%]">
+    
+    {/* Brand Name */}
+    <span className="font-['Quantico'] inline-flex w-max max-w-full min-w-0 items-baseline text-[24px] font-extrabold tracking-[0.08em] sm:text-[28px] lg:text-[30px]">
+      <span className="text-[#ffffff]">DATA</span>
+      <span className="text-[#F26522]">PLUS</span>
+    </span>
+
+    {/* Subtext - Aligned to the Right of the "PLUS" */}
+    <span className="flex w-full min-w-0 items-end justify-end whitespace-nowrap text-[4px] font-medium leading-none tracking-[0.12em] text-[#ffffff] sm:text-[10px] lg:text-[10px] mt-0.5 sm:mt-1">
+      <span className="shrink-0">Powered by DataYog</span>
+    </span>
+    
+  </span>
+</div>
             </button>
           </div>
 

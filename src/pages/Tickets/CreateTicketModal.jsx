@@ -114,7 +114,7 @@ function EnterpriseTagInput({
       <div
         className={`
           relative w-full min-h-[48px] bg-white rounded-lg border
-          ${isOpen ? "border-blue-500 ring-2 ring-blue-200" : "border-gray-300"}
+          ${isOpen ? "border-orange-400 ring-2 ring-orange-200" : "border-gray-300"}
           ${disabled ? "bg-gray-100" : ""}
         `}
         onClick={() => !disabled && inputRef.current?.focus()}
@@ -128,7 +128,7 @@ function EnterpriseTagInput({
             return (
               <span
                 key={id}
-                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded"
+                className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded"
               >
                 <span className="truncate max-w-[150px]">
                   {user?.label || id}
@@ -198,8 +198,8 @@ function EnterpriseTagInput({
                 key={option.id}
                 className={`
                   px-3 py-2 cursor-pointer
-                  ${focusedIndex === index ? "bg-blue-50" : "hover:bg-gray-50"}
-                  ${value.includes(option.id) ? "bg-blue-100" : ""}
+                  ${focusedIndex === index ? "bg-orange-50" : "hover:bg-gray-50"}
+                  ${value.includes(option.id) ? "bg-orange-100" : ""}
                 `}
                 onClick={() => toggleOption(option)}
                 onMouseEnter={() => setFocusedIndex(index)}
@@ -245,8 +245,8 @@ function EnterpriseSelect({
         className={`
           relative w-full min-h-[42px] bg-white rounded-lg border px-3 py-2
           transition-all duration-200 cursor-pointer
-          ${isOpen 
-            ? "border-blue-500 ring-2 ring-blue-200" 
+          ${isOpen
+            ? "border-orange-400 ring-2 ring-orange-200"
             : "border-gray-300 hover:border-gray-400"
           }
           ${disabled ? "bg-gray-100 cursor-not-allowed" : ""}
@@ -294,7 +294,7 @@ function EnterpriseSelect({
                 className={`
                   px-3 py-2 cursor-pointer hover:bg-gray-50 transition-colors duration-150
                   border-b border-gray-100 last:border-0
-                  ${value === option ? "bg-blue-50 text-blue-700" : "text-gray-700"}
+                  ${value === option ? "bg-orange-50 text-orange-700" : "text-gray-700"}
                 `}
                 onClick={() => {
                   onChange(option);
@@ -340,18 +340,18 @@ const TELECOM_CONSTANTS = {
 
 /* ---------- INITIAL STATE ---------- */
 const INITIAL_FORM = {
-  datasetType: "SITE",
+  datasettype: "SITE",
   title: "",
   description: "",
   technology: "4G",
-  issueCategory: "",
+  issuecategory: "",
   severity: "S3",
   priority: "Medium",
   region: "",
-  assignedTeam: "",
-  siteName: "",
-  cellNames: [],
-  assignedUsers: []
+  assignedteam: "",
+  sitename: "",
+  cellnames: [],
+  assignedusers: []
 };
 
 /* ---------- MAIN COMPONENT ---------- */
@@ -385,10 +385,10 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
 
   // Fetch cells immediately when switching to CELL mode
   useEffect(() => {
-    if (formData.datasetType === "CELL" && isOpen) {
+    if (formData.datasettype === "CELL" && isOpen) {
       fetchAllCells();
     }
-  }, [formData.datasetType, isOpen]);
+  }, [formData.datasettype, isOpen]);
 
   const fetchInitialData = async () => {
     setLoadingSites(true);
@@ -441,31 +441,31 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
 
   // Smart team assignment
   useEffect(() => {
-    if (formData.issueCategory) {
+    if (formData.issuecategory) {
       setFormData(prev => ({
         ...prev,
-        assignedTeam: TELECOM_CONSTANTS.TEAMS[formData.issueCategory] || ""
+        assignedteam: TELECOM_CONSTANTS.TEAMS[formData.issuecategory] || ""
       }));
     }
-  }, [formData.issueCategory]);
+  }, [formData.issuecategory]);
 
   const handleChange = (field, value) => {
     setErrors(prev => ({ ...prev, [field]: null }));
 
-    if (field === "datasetType") {
+    if (field === "datasettype") {
       setFormData({
         ...formData,
-        datasetType: value,
-        siteName: "",
-        cellNames: []
+        datasettype: value,
+        sitename: "",
+        cellnames: []
       });
       setCellOptions(value === "CELL" ? allCells : []);
       return;
     }
 
-    if (field === "siteName") {
-      const selectedSite = siteList.find(s => s.siteName === value);
-      const siteCells = selectedSite?.cellNames
+    if (field === "sitename") {
+      const selectedSite = siteList.find(s => s.sitename === value);
+      const siteCells = selectedSite?.cellnames
         ?.split(',')
         .map(cell => cell.trim())
         .filter(cell => cell.length > 0) || [];
@@ -473,8 +473,8 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
       setCellOptions(siteCells);
       setFormData({
         ...formData,
-        siteName: value,
-        cellNames: []
+        sitename: value,
+        cellnames: []
       });
       return;
     }
@@ -486,13 +486,13 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
     const newErrors = {};
 
     if (!formData.title.trim()) newErrors.title = "Title is required";
-    if (!formData.issueCategory) newErrors.issueCategory = "Issue category is required";
+    if (!formData.issuecategory) newErrors.issuecategory = "Issue category is required";
     if (!formData.priority) newErrors.priority = "Priority is required";
-    if (formData.datasetType === "SITE" && !formData.siteName) {
-      newErrors.siteName = "Site is required";
+    if (formData.datasettype === "SITE" && !formData.sitename) {
+      newErrors.sitename = "Site is required";
     }
-    if (formData.cellNames.length === 0) {
-      newErrors.cellNames = "At least one cell must be selected";
+    if (formData.cellnames.length === 0) {
+      newErrors.cellnames = "At least one cell must be selected";
     }
 
     setErrors(newErrors);
@@ -510,15 +510,15 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
     setLoading(true);
 
     try {
-      const ticketId = `TKT-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+      const ticketid = `TKT-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
 
       const payload = {
-        ticketId,
+        ticketid,
         ...formData,
         description: formData.description.trim(),
         title: formData.title.trim(),
-        siteName: formData.datasetType === "SITE" ? formData.siteName : null,
-        createdAt: new Date().toISOString()
+        sitename: formData.datasettype === "SITE" ? formData.sitename : null,
+        createdat: new Date().toISOString()
       };
 
       await Api.post({ url: "/tickets/create", data: payload });
@@ -526,7 +526,7 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
       toast.success(
         <div>
           <div className="font-medium">Ticket Created</div>
-          <div className="text-xs opacity-75">{ticketId}</div>
+          <div className="text-xs opacity-75">{ticketid}</div>
         </div>
       );
 
@@ -540,20 +540,28 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
   };
 
   return (
-    <Modal isOpen={isOpen} setIsOpen={onClose} size="lg">
-      <div className="bg-white rounded-lg overflow-hidden">
-        {/* Header with updated heading */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-xl font-bold text-gray-800">
-            Raise Ticket
-          </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Create and assign network issue tickets
-          </p>
+    <Modal isOpen={isOpen} setIsOpen={onClose} size="lg" showHeader={false}>
+        {/* Header - sticky */}
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4" style={{ background: '#EC7D09' }}>
+          <div>
+            <h2 className="text-xl font-semibold text-white">
+              Raise Ticket
+            </h2>
+            <p className="text-sm text-white/75 mt-0.5">
+              Create and assign network issue tickets
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/80 hover:text-white text-xl leading-none"
+          >
+            ✕
+          </button>
         </div>
 
-        {/* Scrollable Form - Fixed Height */}
-        <div className="px-6 py-4 space-y-6 max-h-[60vh] overflow-y-auto">
+        {/* Scrollable Form */}
+        <div className="px-6 py-4 space-y-6">
           {/* Dataset Type */}
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -563,14 +571,15 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
               {["SITE", "CELL"].map(type => (
                 <button
                   key={type}
-                  onClick={() => handleChange("datasetType", type)}
+                  onClick={() => handleChange("datasettype", type)}
                   className={`
                     flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all
-                    ${formData.datasetType === type
-                      ? "bg-blue-600 text-white shadow-sm"
+                    ${formData.datasettype === type
+                      ? "text-white shadow-sm"
                       : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
                     }
                   `}
+                  style={formData.datasettype === type ? { background: '#EC7D09' } : {}}
                 >
                   {type}
                 </button>
@@ -590,8 +599,8 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
                 className={`
                   w-full px-3 py-2 border rounded-md transition-all
                   ${errors.title
-                    ? "border-red-300 bg-red-50 focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                    : "border-gray-300 hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    ? "border-red-300 bg-red-50 focus:border-red-400 focus:ring-1 focus:ring-red-400"
+                    : "border-gray-300 hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                   }
                 `}
                 placeholder="e.g., RNC Down - North Region"
@@ -605,7 +614,7 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
               <textarea
-                className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
                 rows={3}
                 placeholder="Provide detailed description of the issue..."
                 value={formData.description}
@@ -621,7 +630,7 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Technology</label>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
                   value={formData.technology}
                   onChange={(e) => handleChange("technology", e.target.value)}
                 >
@@ -638,38 +647,38 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
                 <select
                   className={`
                     w-full px-3 py-2 border rounded-md transition-all
-                    ${errors.issueCategory
-                      ? "border-red-300 bg-red-50 focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                      : "border-gray-300 hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    ${errors.issuecategory
+                      ? "border-red-300 bg-red-50 focus:border-red-400 focus:ring-1 focus:ring-red-400"
+                      : "border-gray-300 hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                     }
                   `}
-                  value={formData.issueCategory}
-                  onChange={(e) => handleChange("issueCategory", e.target.value)}
+                  value={formData.issuecategory}
+                  onChange={(e) => handleChange("issuecategory", e.target.value)}
                 >
                   <option value="">Select Category</option>
                   {TELECOM_CONSTANTS.ISSUE_CATEGORIES.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
-                {errors.issueCategory && <p className="text-xs text-red-500 mt-1">{errors.issueCategory}</p>}
+                {errors.issuecategory && <p className="text-xs text-red-500 mt-1">{errors.issuecategory}</p>}
               </div>
             </div>
 
             {/* Site (SITE mode only) */}
-            {formData.datasetType === "SITE" && (
+            {formData.datasettype === "SITE" && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Site <span className="text-red-500">*</span>
                 </label>
                 <EnterpriseSelect
-                  options={siteList.map(s => s.siteName)}
-                  value={formData.siteName}
-                  onChange={(v) => handleChange("siteName", v)}
+                  options={siteList.map(s => s.sitename)}
+                  value={formData.sitename}
+                  onChange={(v) => handleChange("sitename", v)}
                   placeholder="Select site..."
                   loading={loadingSites}
                   error={siteError}
                 />
-                {errors.siteName && <p className="text-xs text-red-500 mt-1">{errors.siteName}</p>}
+                {errors.sitename && <p className="text-xs text-red-500 mt-1">{errors.sitename}</p>}
               </div>
             )}
 
@@ -681,18 +690,18 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
               <EnterpriseTagInput
                 // options={cellOptions}
                 options={cellOptions.map(c => ({ id: c, label: c }))}
-                value={formData.cellNames}
-                onChange={(v) => handleChange("cellNames", v)}
+                value={formData.cellnames}
+                onChange={(v) => handleChange("cellnames", v)}
                 placeholder={
-                  formData.datasetType === "SITE"
+                  formData.datasettype === "SITE"
                     ? loadingSites ? "Loading sites..." : "Select a site first"
                     : loadingCells ? "Loading cells..." : "Search cells..."
                 }
-                loading={formData.datasetType === "CELL" ? loadingCells : false}
+                loading={formData.datasettype === "CELL" ? loadingCells : false}
                 error={cellError}
-                disabled={formData.datasetType === "SITE" && !formData.siteName}
+                disabled={formData.datasettype === "SITE" && !formData.sitename}
               />
-              {errors.cellNames && <p className="text-xs text-red-500 mt-1">{errors.cellNames}</p>}
+              {errors.cellnames && <p className="text-xs text-red-500 mt-1">{errors.cellnames}</p>}
             </div>
 
             {/* Severity & Region */}
@@ -700,7 +709,7 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
                   value={formData.severity}
                   onChange={(e) => handleChange("severity", e.target.value)}
                 >
@@ -713,7 +722,7 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
                   value={formData.region}
                   onChange={(e) => handleChange("region", e.target.value)}
                 >
@@ -738,8 +747,8 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
                   className={`
                     w-full px-3 py-2 border rounded-md transition-all
                     ${errors.priority
-                      ? "border-red-300 bg-red-50 focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                      : "border-gray-300 hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      ? "border-red-300 bg-red-50 focus:border-red-400 focus:ring-1 focus:ring-red-400"
+                      : "border-gray-300 hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                     }
                   `}
                   value={formData.priority}
@@ -758,7 +767,7 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
                 <input
                   type="text"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600"
-                  value={formData.assignedTeam}
+                  value={formData.assignedteam}
                   readOnly
                   disabled
                 />
@@ -770,8 +779,8 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
               <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Users</label>
               <EnterpriseTagInput
                 options={userList.map(u => u.label)}
-                value={formData.assignedUsers}
-                onChange={(v) => handleChange("assignedUsers", v)}
+                value={formData.assignedusers}
+                onChange={(v) => handleChange("assignedusers", v)}
                 placeholder="Search users..."
                 loading={loadingUsers}
                 error={userError}
@@ -784,8 +793,8 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
 
   <EnterpriseTagInput
     options={userList} 
-    value={formData.assignedUsers} 
-    onChange={(v) => handleChange("assignedUsers", v)}
+    value={formData.assignedusers} 
+    onChange={(v) => handleChange("assignedusers", v)}
     placeholder="Search users..."
     loading={loadingUsers}
     error={userError}
@@ -794,11 +803,11 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
           </FormSection>
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
+        {/* Footer - sticky */}
+        <div className="sticky bottom-0 px-6 py-3 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-all"
+            className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
             disabled={loading}
           >
             Cancel
@@ -806,7 +815,8 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
           <button
             onClick={handleSubmit}
             disabled={loading || loadingSites || loadingCells || loadingUsers}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-all flex items-center gap-2"
+            className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 disabled:opacity-50 transition-opacity shadow-sm flex items-center gap-2"
+            style={{ background: '#EC7D09' }}
           >
             {loading && (
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
@@ -814,7 +824,6 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess }) {
             {loading ? "Creating..." : "Raise Ticket"}
           </button>
         </div>
-      </div>
     </Modal>
   );
 }

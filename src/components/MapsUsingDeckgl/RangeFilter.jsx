@@ -268,7 +268,7 @@
 //               updateRange(index, "min", e.target.value);
 //             }}
 //             onBlur={() => handleRangeBlur(index)}
-//             className="border rounded px-2 py-1 w-20 text-sm"
+//             className="border rounded px-2 py-1 w-20 text-sm text-black"
 //           />
 
 //           <input
@@ -280,7 +280,7 @@
 //               updateRange(index, "max", e.target.value);
 //             }}
 //             onBlur={() => handleRangeBlur(index)}
-//             className="border rounded px-2 py-1 w-20 text-sm"
+//             className="border rounded px-2 py-1 w-20 text-sm text-black"
 //           />
 
 //           <ColorPicker
@@ -365,9 +365,8 @@ const RangeFilter = ({ value = [], onChange }) => {
     ]);
 }
 
-  const updateRange = (index, key, value) => {
-    const updated = [...ranges];
-    updated[index][key] = value;
+  const updateRange = (index, key, val) => {
+    const updated = ranges.map((r, i) => i === index ? { ...r, [key]: val } : r);
     setRanges(updated);
   };
 
@@ -456,7 +455,7 @@ const handleRangeBlur = (index) => {
               updateRange(index, "min", e.target.value)
             }
             onBlur={() => handleRangeBlur(index)}
-            className="border rounded px-2 py-1 w-20 text-sm"
+            className="border rounded px-2 py-1 w-20 text-sm text-black"
           />
 
           <input
@@ -467,7 +466,7 @@ const handleRangeBlur = (index) => {
               updateRange(index, "max", e.target.value)
             }
             onBlur={() => handleRangeBlur(index)}
-            className="border rounded px-2 py-1 w-20 text-sm"
+            className="border rounded px-2 py-1 w-20 text-sm text-black"
           />
 
           <ColorPicker

@@ -12,7 +12,7 @@ const dy3LayerCb =
 
 /** Dark-theme overrides for legacy light panels inside the floating shell */
 const floatingInner =
-  "sidebar-scroll min-h-0 flex-1 overflow-y-auto px-2 py-1.5 [&_input[type=checkbox]]:border-white/30 [&_input[type=range]]:accent-[#F26522] [&_select]:rounded [&_select]:border [&_select]:border-white/25 [&_select]:bg-[#0a1428] [&_select]:px-2 [&_select]:py-1 [&_select]:text-xs [&_select]:text-white [&_input[type=datetime-local]]:rounded [&_input[type=datetime-local]]:border [&_input[type=datetime-local]]:border-white/25 [&_input[type=datetime-local]]:bg-[#0a1428] [&_input[type=datetime-local]]:text-xs [&_input[type=datetime-local]]:text-white [&_.text-gray-500]:text-white/45 [&_.text-gray-600]:text-white/70 [&_.text-gray-400]:text-white/50 [&_.text-gray-300]:text-white/60 [&_label]:text-white/80 [&_.border-gray-300]:border-white/20 [&_.bg-white]:bg-white/[0.06] [&_.border.rounded.p-2]:border-white/15 [&_.border.rounded.p-3]:border-white/15 [&_.bg-blue-600]:bg-[#F26522] [&_.border-blue-600]:border-[#F26522] [&_.text-white]:text-white";
+  "sidebar-scroll px-2 py-1.5 [&_input[type=checkbox]]:border-white/30 [&_input[type=range]]:accent-[#F26522] [&_select]:rounded [&_select]:border [&_select]:border-white/25 [&_select]:bg-[#0a1428] [&_select]:px-2 [&_select]:py-1 [&_select]:text-xs [&_select]:text-white [&_input[type=datetime-local]]:rounded [&_input[type=datetime-local]]:border [&_input[type=datetime-local]]:border-white/25 [&_input[type=datetime-local]]:bg-[#0a1428] [&_input[type=datetime-local]]:text-xs [&_input[type=datetime-local]]:text-white [&_.text-gray-500]:text-white/45 [&_.text-gray-600]:text-white/70 [&_.text-gray-400]:text-white/50 [&_.text-gray-300]:text-white/60 [&_label]:text-white/80 [&_.border-gray-300]:border-white/20 [&_.bg-white]:bg-white/[0.06] [&_.border.rounded.p-2]:border-white/15 [&_.border.rounded.p-3]:border-white/15 [&_.bg-blue-600]:bg-[#F26522] [&_.border-blue-600]:border-[#F26522] [&_.text-white]:text-white";
 
 const SECTION_TITLE = {
   SITE: "Sites",
@@ -345,7 +345,7 @@ const AddMapLayersPanelFloatingLayout = ({
         {/* Right detail — only after a left category is opened (chevron / row) */}
         {activeLayerSection ? (
           <div className="min-w-0 flex-1">
-            <div className="flex max-h-[min(56vh,200px)] w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[#27365C] bg-[linear-gradient(180deg,#0C1931_0%,#0B1730_100%)] shadow-[0_16px_32px_rgba(3,8,24,0.4)]">
+            <div className="flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[#27365C] bg-[linear-gradient(180deg,#0C1931_0%,#0B1730_100%)] shadow-[0_16px_32px_rgba(3,8,24,0.4)]">
               <div className="flex h-7 shrink-0 items-center justify-between gap-2 border-b border-[#27365C]/90 px-2">
                 <div className="min-w-0 truncate text-[9px] font-bold uppercase leading-[1.1] tracking-[0.14em] text-[#F26522]">
                   {SECTION_TITLE[activeLayerSection]} layers
@@ -412,17 +412,24 @@ const AddMapLayersPanelFloatingLayout = ({
                     onChange={(val) => setPendingOpacity((prev) => ({ ...prev, BOUNDARY: val }))}
                   />
                   {boundaryGroups.map((group, index) => (
-                    <div key={index} className="mb-2 rounded border border-white/10 p-2">
-                      <div className="flex items-center justify-between rounded p-1 hover:bg-white/[0.04]">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={pendingVisibility[group.shapegroup] || false}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() => toggleParentLayerSelection(group.shapegroup)}
-                          />
-                          <span className="text-sm font-medium">{group.shapegroup}</span>
-                        </div>
+                    <div key={index} className="mb-2 rounded border border-white/10 bg-white/[0.06] p-2">
+                      <div className="flex items-center gap-2 rounded p-1 hover:bg-white/[0.04]">
+                        <input
+                          type="checkbox"
+                          checked={pendingVisibility[group.shapegroup] || false}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleParentLayerSelection(group.shapegroup)}
+                        />
+                        <span className="flex-1 text-sm font-medium">{group.shapegroup}</span>
+                        <ColorPicker
+                          value={boundaryColors[group.shapegroup] || "#3b82f6"}
+                          onChange={(color) =>
+                            setBoundaryColors((prev) => ({
+                              ...prev,
+                              [group.shapegroup]: color,
+                            }))
+                          }
+                        />
                         <button
                           type="button"
                           onClick={() =>
@@ -440,31 +447,17 @@ const AddMapLayersPanelFloatingLayout = ({
                         </button>
                       </div>
                       {expandedBoundaryGroup === group.shapegroup ? (
-                        <div className="mt-2 p-1">
-                          <div className="mb-2 flex items-center justify-between">
-                            <span className="text-xs font-semibold text-gray-500">Line color</span>
-                            <ColorPicker
-                              value={boundaryColors[group.shapegroup] || "#000000"}
-                              onChange={(color) =>
-                                setBoundaryColors((prev) => ({
-                                  ...prev,
-                                  [group.shapegroup]: color,
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="mt-2 max-h-[160px] overflow-y-auto rounded border border-white/10 p-2">
-                            {group.shapenames.map((name, idx) => (
-                              <label key={idx} className="mb-1 flex cursor-pointer items-center gap-2 text-sm">
-                                <input
-                                  type="checkbox"
-                                  checked={pendingBoundarySelections[group.shapegroup]?.includes(name) || false}
-                                  onChange={() => toggleBoundaryChild(group.shapegroup, name)}
-                                />
-                                {name}
-                              </label>
-                            ))}
-                          </div>
+                        <div className="mt-2 max-h-[160px] overflow-y-auto rounded border border-white/10 p-2">
+                          {group.shapenames.map((name, idx) => (
+                            <label key={idx} className="mb-1 flex cursor-pointer items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={pendingBoundarySelections[group.shapegroup]?.includes(name) || false}
+                                onChange={() => toggleBoundaryChild(group.shapegroup, name)}
+                              />
+                              {name}
+                            </label>
+                          ))}
                         </div>
                       ) : null}
                     </div>

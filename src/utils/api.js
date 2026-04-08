@@ -92,7 +92,7 @@ const instance = axios.create({
     baseURL: baseUrl,
     withCredentials: true,
     headers: {
-        "Content-Type": "application/json",
+        // "Content-Type": "application/json",
         timeout: 1000,
     },
 });
@@ -192,14 +192,14 @@ const Api = {
             },
         });
     },
-    post: ({ data, url, contentType = "application/json", cb = () => {}, inst = 1 }) => {
+    post: ({ data, url, contentType = "application/json", cb = () => { }, inst = 1 }) => {
         return guardedRequest("post", { url }, () => which[inst]({
             method: "POST",
             data,
             url,
-            headers: {
-                "Content-Type": contentType,
-            },
+            headers: contentType
+                ? { "Content-Type": contentType }
+                : {},
         }).then((res) => {
             cb();
             return res;
@@ -215,7 +215,7 @@ const Api = {
             },
         }));
     },
-    patch: ({ data, url, contentType = "application/json", cb = () => {}, inst = 1 }) => {
+    patch: ({ data, url, contentType = "application/json", cb = () => { }, inst = 1 }) => {
         return guardedRequest("patch", { url }, () => which[inst]({
             method: "PATCH",
             data,

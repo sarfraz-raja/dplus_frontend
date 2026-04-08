@@ -44,6 +44,8 @@ export const Urls={
     querybuilder_downloadQuery:"/querybuilder/downloadQuery",
     querybuilder_saveQuery:"/querybuilder/saveQuery",
     querybuilder_getSavedQuery:"/querybuilder/getSavedQuery",
+    querybuilder_updateQuery:"/querybuilder/saveQuery",
+    querybuilder_deleteQuery:"/querybuilder/saveQuery",
     powerBI_tokenCreator:"/powerBI/tokenCreator",
     alertConfiguration_configureAlert:"/alertConfiguration/configureAlert",
     alertConfiguration_schedulerAlert:"/alertConfiguration/schedulerAlert",

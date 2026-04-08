@@ -62,6 +62,12 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
         deepCopyRanges(KPI_RANGE_DEFAULTS[kpiThematicOptions[0]])
     );
     const [kpiMode, setKpiMode] = useState("Default");
+    const [techMode, setTechMode] = useState("Preview");
+    const [bandMode, setBandMode] = useState("Preview");
+    const [regionMode, setRegionMode] = useState("Preview");
+
+    const layerOpacity = useSelector(state => state.map.layerOpacity);
+    const [cellOpacity, setCellOpacity] = useState(layerOpacity?.CELLS ?? 1);
 
     const [cellScale, setCellScale] = useState(mapConfig.mapScale ?? 1);
 
@@ -443,16 +449,16 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
 
         const payload = {
             type: tempType,
-            colors: Object.keys(tempColors).length > 0 
-                ? tempColors 
+            colors: Object.keys(tempColors).length > 0
+                ? tempColors
                 : defaultColors[tempType] || {},
-            // opacity,
-            scale: cellScale,  
+            layerOpacity: cellOpacity,
+            scale: cellScale,
             kpiConfig: {
                 startDateTime: kpiStartDateTime,
                 endDateTime: kpiEndDateTime,
                 kpi: selectedKpi,
-                mode: kpiMode, 
+                mode: kpiMode,
                 ranges: kpiRanges,
             }
         };
@@ -462,11 +468,11 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
         }, [
         tempType,
         tempColors,
-        // opacity,
+        cellOpacity,
         kpiStartDateTime,
         kpiEndDateTime,
         selectedKpi,
-        kpiMode, 
+        kpiMode,
         kpiRanges,
         cellScale,
         // defaultColors,
@@ -528,7 +534,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
 
             {/* OPACITY */}
             <div className="border-b pb-3">
-                <OpacitySlider layer="CELLS" />
+                <OpacitySlider value={cellOpacity} onChange={setCellOpacity} />
             </div>
 
             {/* Cell Scale */}
@@ -873,315 +879,232 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
             )} */}
 
             {tempType === "Technology" && (
-                <div >
-
-                    {/* Selected Colors Preview COLORS */}
-                    {/* COLOR SCHEMES */}
+                <div>
+                    {/* DEFAULT COLOR PALETTES */}
                     <div className="border-t pt-2 mb-3">
-
-                    <div className="text-xs font-semibold text-gray-500 mb-2">
-                        Color Schemes
-                    </div>
-
-                    {Object.keys(TECHNOLOGY_SCHEMES).map((scheme) => (
-
-                        <label
-                        key={scheme}
-                        className="flex items-center justify-between mb-2 cursor-pointer"
-                        >
-
-                        <div className="flex items-center gap-2">
-
-                            <input
-                            type="radio"
-                            name="tech-scheme"
-                            checked={selectedScheme === scheme}
-                            onChange={() => applyTechnologyScheme(scheme)}
-                            />
-
-                            <span className="text-sm">{scheme}</span>
-
-                        </div>
-
-                        {/* Preview */}
-                        <div className="flex gap-1">
-
-                            {Object.values(TECHNOLOGY_SCHEMES[scheme]).map((color, i) => (
-
-                            <div
-                                key={i}
-                                className="w-4 h-4 rounded"
-                                style={{ backgroundColor: color }}
-                            />
-
-                            ))}
-
-                        </div>
-
-                        </label>
-
-                    ))}
-
-                    </div>
-
-                    {/* PREVIEW */}
-                    <div className="border-t pt-3 mb-3">
-
-                    <div className="text-xs font-semibold text-gray-500 mb-2">
-                        Preview
-                    </div>
-
-                    <div className="flex gap-4 text-xs">
-
-                        {["2G","3G","4G","5G"].map((tech) => (
-
-                        <div key={tech} className="flex items-center gap-1">
-
-                            <span>{tech}</span>
-
-                            <div
-                            className="w-4 h-4 rounded"
-                            style={{
-                                backgroundColor:
-                                tempColors[tech] ||
-                                TECHNOLOGY_SCHEMES[selectedScheme]?.[tech] ||
-                                FIXED_COLORS.Technology?.[tech]
-                            }}
-                            />
-
-                        </div>
-
+                        <div className="text-xs font-semibold text-gray-500 mb-2">Default Color Palettes</div>
+                        {Object.keys(TECHNOLOGY_SCHEMES).map((scheme) => (
+                            <label key={scheme} className="flex items-center justify-between mb-2 cursor-pointer">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="radio"
+                                        name="tech-scheme"
+                                        checked={selectedScheme === scheme}
+                                        onChange={() => applyTechnologyScheme(scheme)}
+                                    />
+                                    <span className="text-sm">{scheme}</span>
+                                </div>
+                                <div className="flex gap-1">
+                                    {Object.values(TECHNOLOGY_SCHEMES[scheme]).map((color, i) => (
+                                        <div key={i} className="w-4 h-4 rounded" style={{ backgroundColor: color }} />
+                                    ))}
+                                </div>
+                            </label>
                         ))}
-
                     </div>
 
+                    {/* Mode Toggle */}
+                    <div className="text-xs font-semibold text-gray-500 mb-2">Mode</div>
+                    <div className="flex gap-2 mb-3">
+                        {["Preview", "Customize"].map(mode => (
+                            <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setTechMode(mode)}
+                                className={`flex-1 px-3 py-1 rounded text-sm border ${
+                                    techMode === mode
+                                        ? "bg-blue-600 text-white border-blue-600"
+                                        : "bg-white text-gray-600 border-gray-300"
+                                }`}
+                            >
+                                {mode}
+                            </button>
+                        ))}
                     </div>
 
-                    {/* MANUAL OVERRIDE */}
-                    <div className="border-t pt-2">
-
-                    <div className="text-xs font-semibold text-gray-500 mb-2">
-                        Customize
-                    </div>
-
-                    {Object.keys(techGrouped).map((tech) => (
-                        <div
-                        key={tech}
-                        className="flex justify-between items-center mb-2"
-                        >
-                        <span className="text-sm">{tech}</span>
-
-                        <ColorPicker
-                            value={
-                            tempColors[tech] ||
-                            defaultColors.Technology?.[tech] ||
-                            "#2563eb"
-                            }
-                            onChange={(color) =>
-                            handleColorChange(tech, color)
-                            }
-                        />
+                    {/* Preview */}
+                    {techMode === "Preview" && (
+                        <div className="border rounded p-2 mb-3">
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Currently Selected Colors</div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                {["2G", "3G", "4G", "5G"].map((tech) => (
+                                    <div key={tech} className="flex items-center gap-2">
+                                        <div
+                                            className="w-3 h-3 rounded-sm flex-shrink-0"
+                                            style={{
+                                                backgroundColor:
+                                                    tempColors[tech] ||
+                                                    TECHNOLOGY_SCHEMES[selectedScheme]?.[tech] ||
+                                                    FIXED_COLORS.Technology?.[tech]
+                                            }}
+                                        />
+                                        <span className="truncate">{tech}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    ))}
+                    )}
 
-                    </div>
-
+                    {/* Customize — per-tech color pickers in table layout */}
+                    {techMode === "Customize" && (
+                        <div className="border rounded p-2 mb-3">
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Customize Colors</div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                {Object.keys(techGrouped).map((tech) => (
+                                    <div key={tech} className="flex items-center gap-2">
+                                        <ColorPicker
+                                            value={tempColors[tech] || defaultColors.Technology?.[tech] || "#2563eb"}
+                                            onChange={(color) => handleColorChange(tech, color)}
+                                        />
+                                        <span className="truncate">{tech}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
             {/* BAND Thematics*/}
-            {tempType  === "Band" && (
-                <div >
-                     {/* PALETTE */}
+            {tempType === "Band" && (
+                <div>
+                    {/* DEFAULT COLOR PALETTES */}
                     <div className="border-t pt-2 mb-3">
-
-                    <div className="text-xs font-semibold text-gray-500 mb-2">
-                        Palette
-                    </div>
-
-                    {Object.keys(COLOR_SCHEMES).map((palette) => (
-
-                        <label
-                        key={palette}
-                        className="flex items-center justify-between mb-2 cursor-pointer"
-                        >
-
-                        <div className="flex items-center gap-2">
-
-                            <input
-                            type="radio"
-                            name="band-palette"
-                            checked={selectedBandPalette === palette}
-                            onChange={() => applyBandPalette(palette)}
-                            />
-
-                            <span className="text-sm">{palette}</span>
-
-                        </div>
-
-                        <div className="flex gap-1">
-
-                            {COLOR_SCHEMES[palette].slice(0,4).map((color,i)=>(
-
-                            <div
-                                key={i}
-                                className="w-4 h-4 rounded"
-                                style={{backgroundColor:color}}
-                            />
-
-                            ))}
-
-                        </div>
-
-                        </label>
-
-                    ))}
-
-                    </div>
-
-                    {/* PREVIEW */}
-                    {/* <div className="border-t pt-3 mb-3">
-
-                        <div className="text-xs font-semibold text-gray-500 mb-2">
-                            Preview
-                        </div>
-
-                        <div className="flex flex-wrap gap-3 text-xs">
-                            {Object.entries(defaultColors.Band).map(([band,color]) => (
-                                <div key={band} className="flex items-center gap-1">
-                                    <span>{band}</span>
-                                    <div
-                                        className="w-4 h-4 rounded"
-                                        style={{
-                                            backgroundColor:
-                                            tempColors[band] || color
-                                    }}
+                        <div className="text-xs font-semibold text-gray-500 mb-2">Default Color Palettes</div>
+                        {Object.keys(COLOR_SCHEMES).map((palette) => (
+                            <label key={palette} className="flex items-center justify-between mb-2 cursor-pointer">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="radio"
+                                        name="band-palette"
+                                        checked={selectedBandPalette === palette}
+                                        onChange={() => applyBandPalette(palette)}
                                     />
+                                    <span className="text-sm">{palette}</span>
                                 </div>
-                            ))}
-                        </div>
-
-                    </div> */}
-
-                    {/* PREVIEW */}
-                    <div className="border-t pt-3 mb-3">
-                        <div className="text-xs font-semibold text-gray-500 mb-2">
-                            Preview
-                        </div>
-
-                        <div className="max-h-[150px] overflow-y-auto grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                            {Object.entries(defaultColors.Band).map(([band, color]) => (
-                                <div key={band} className="flex items-center gap-2">
-                                    <div
-                                        className="w-3 h-3 rounded-sm flex-shrink-0"
-                                        style={{
-                                            backgroundColor: tempColors[band] || color
-                                        }}
-                                    />
-                                    <span className="truncate">{band}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* MANUAL OVERRIDE */}
-                    <div className="border-t pt-2">
-                        <div className="text-xs font-semibold text-gray-500 mb-2">
-                            Customize
-                        </div>
-
-                        <div className="max-h-[200px] overflow-y-auto"> 
-                            {Object.entries(techGrouped).map(([tech, bands]) => (
-                                <div key={tech} className="mb-3">
-                                    <div className="font-semibold text-sm mb-1">
-                                        {tech}
-                                    </div>
-
-                                    {bands.map(band => (
-                                        <div
-                                            key={band}
-                                            className="flex justify-between items-center mb-1"
-                                        >
-                                            <span className="text-sm">{band}</span>
-                                            {/* <input
-                                                type="color"
-                                                className="w-5 h-5 cursor-pointer"
-                                                value={tempColors[band] || defaultColors.Band?.[band] || "#22c55e"}                           
-                                                onChange={(e) =>
-                                                handleColorChange(band, e.target.value)
-                                                }
-                                            /> */}
-                                            <ColorPicker
-                                                value={tempColors[band] || defaultColors.Band?.[band] || "#22c55e"}
-                                                onChange={(color) =>handleColorChange(band, color)}
-                                            />
-                                        </div>
+                                <div className="flex gap-1">
+                                    {COLOR_SCHEMES[palette].slice(0, 4).map((color, i) => (
+                                        <div key={i} className="w-4 h-4 rounded" style={{ backgroundColor: color }} />
                                     ))}
                                 </div>
-                            ))}
-                        </div>
+                            </label>
+                        ))}
                     </div>
+
+                    {/* Mode Toggle */}
+                    <div className="text-xs font-semibold text-gray-500 mb-2">Mode</div>
+                    <div className="flex gap-2 mb-3">
+                        {["Preview", "Customize"].map(mode => (
+                            <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setBandMode(mode)}
+                                className={`flex-1 px-3 py-1 rounded text-sm border ${
+                                    bandMode === mode
+                                        ? "bg-blue-600 text-white border-blue-600"
+                                        : "bg-white text-gray-600 border-gray-300"
+                                }`}
+                            >
+                                {mode}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Preview */}
+                    {bandMode === "Preview" && (
+                        <div className="border rounded p-2 mb-3">
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Currently Selected Colors</div>
+                            <div className="max-h-[150px] overflow-y-auto grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                {Object.entries(defaultColors.Band).map(([band, color]) => (
+                                    <div key={band} className="flex items-center gap-2">
+                                        <div
+                                            className="w-3 h-3 rounded-sm flex-shrink-0"
+                                            style={{ backgroundColor: tempColors[band] || color }}
+                                        />
+                                        <span className="truncate">{band}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Customize — per-band color pickers in table layout */}
+                    {bandMode === "Customize" && (
+                        <div className="border rounded p-2 mb-3">
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Customize Colors</div>
+                            <div className="max-h-[200px] overflow-y-auto">
+                                {Object.entries(techGrouped).map(([tech, bands]) => (
+                                    <div key={tech} className="mb-3">
+                                        <div className="text-xs font-semibold text-gray-400 mb-1">{tech}</div>
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                            {bands.map(band => (
+                                                <div key={band} className="flex items-center gap-2">
+                                                    <ColorPicker
+                                                        value={tempColors[band] || defaultColors.Band?.[band] || "#22c55e"}
+                                                        onChange={(color) => handleColorChange(band, color)}
+                                                    />
+                                                    <span className="truncate">{band}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
             {/* REGION Thematics*/}
-            {tempType  === "Region" && (
+            {tempType === "Region" && (
                 <div>
-                    {/* PALETTE */}
+                    {/* DEFAULT COLOR PALETTES */}
                     <div className="border-t pt-2 mb-3">
-
-                    <div className="text-xs font-semibold text-gray-500 mb-2">
-                        Palette
+                        <div className="text-xs font-semibold text-gray-500 mb-2">Default Color Palettes</div>
+                        {Object.keys(COLOR_SCHEMES).map((palette) => (
+                            <label key={palette} className="flex items-center justify-between mb-2 cursor-pointer">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="radio"
+                                        name="region-palette"
+                                        checked={selectedRegionPalette === palette}
+                                        onChange={() => applyRegionPalette(palette)}
+                                    />
+                                    <span className="text-sm">{palette}</span>
+                                </div>
+                                <div className="flex gap-1">
+                                    {COLOR_SCHEMES[palette].slice(0, 4).map((color, i) => (
+                                        <div key={i} className="w-4 h-4 rounded" style={{ backgroundColor: color }} />
+                                    ))}
+                                </div>
+                            </label>
+                        ))}
                     </div>
 
-                    {Object.keys(COLOR_SCHEMES).map((palette) => (
-
-                        <label
-                        key={palette}
-                        className="flex items-center justify-between mb-2 cursor-pointer"
-                        >
-
-                        <div className="flex items-center gap-2">
-
-                            <input
-                            type="radio"
-                            name="region-palette"
-                            checked={selectedRegionPalette === palette}
-                            onChange={() => applyRegionPalette(palette)}
-                            />
-
-                            <span className="text-sm">{palette}</span>
-
-                        </div>
-
-                        <div className="flex gap-1">
-
-                            {COLOR_SCHEMES[palette].slice(0,4).map((color,i)=>(
-
-                            <div
-                                key={i}
-                                className="w-4 h-4 rounded"
-                                style={{backgroundColor:color}}
-                            />
-
-                            ))}
-
-                        </div>
-
-                        </label>
-
-                    ))}
-
+                    {/* Mode Toggle */}
+                    <div className="text-xs font-semibold text-gray-500 mb-2">Mode</div>
+                    <div className="flex gap-2 mb-3">
+                        {["Preview", "Customize"].map(mode => (
+                            <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setRegionMode(mode)}
+                                className={`flex-1 px-3 py-1 rounded text-sm border ${
+                                    regionMode === mode
+                                        ? "bg-blue-600 text-white border-blue-600"
+                                        : "bg-white text-gray-600 border-gray-300"
+                                }`}
+                            >
+                                {mode}
+                            </button>
+                        ))}
                     </div>
 
-                    {/* PREVIEW */}
-                    <div className="border-t pt-3 mb-3">
-                        <div className="text-xs font-semibold text-gray-500 mb-2">
-                            Preview
-                        </div>
-
-                        <div className="max-h-[150px] overflow-y-auto overflow-x-hidden">
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs"> 
+                    {/* Preview */}
+                    {regionMode === "Preview" && (
+                        <div className="border rounded p-2 mb-3">
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Currently Selected Colors</div>
+                            <div className="max-h-[150px] overflow-y-auto grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                                 {regions.map((region) => (
                                     <div key={region.name} className="flex items-center gap-2">
                                         <div
@@ -1192,44 +1115,30 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                                                     defaultColors.Region?.[region.name]
                                             }}
                                         />
-                                        <span className="break-words">{region.name}</span>
+                                        <span className="truncate">{region.name}</span>
                                     </div>
                                 ))}
-                           </div>
-                        </div>
-                    </div>
-
-                    {/* MANUAL OVERRIDE */}
-                    <div className="border-t pt-2">
-                        <div className="text-xs font-semibold text-gray-500 mb-2">
-                            Customize
-                        </div>
-
-                        <div className="max-h-[200px] overflow-y-auto">
-                            {regions.map((region) => (
-                            <div
-                                key={region.indexi}
-                                className="flex justify-between items-center mb-2"
-                            >
-                                <span className="text-sm">{region.name}</span>
-                                {/* <input
-                                type="color"
-                                className="w-6 h-6 cursor-pointer"
-                                // value={tempColors[region.name] || "#f59e0b"}
-                                value={tempColors[region.name] || defaultColors.Region?.[region.name] || "#f59e0b"}
-                                onChange={(e) =>
-                                    handleColorChange(region.name, e.target.value)
-                                }
-                                /> */}
-
-                                <ColorPicker
-                                    value={tempColors[region.name] || defaultColors.Region?.[region.name] || "#f59e0b"}
-                                    onChange={(color) => handleColorChange(region.name, color)}
-                                />
                             </div>
-                            ))}
                         </div>
-                    </div>
+                    )}
+
+                    {/* Customize — per-region color pickers in table layout */}
+                    {regionMode === "Customize" && (
+                        <div className="border rounded p-2 mb-3">
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Customize Colors</div>
+                            <div className="max-h-[200px] overflow-y-auto grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                {regions.map((region) => (
+                                    <div key={region.indexi} className="flex items-center gap-2">
+                                        <ColorPicker
+                                            value={tempColors[region.name] || defaultColors.Region?.[region.name] || "#f59e0b"}
+                                            onChange={(color) => handleColorChange(region.name, color)}
+                                        />
+                                        <span className="truncate">{region.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         {/* </div> */}

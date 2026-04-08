@@ -40,8 +40,7 @@ const Home = () => {
                 Welcome to DataPlus
               </h1>
               <p className="mt-3 max-w-[620px] text-sm leading-7 text-white/68">
-                Local React + Vite shell is active and ready for UI migration. Use this dashboard as the stable landing page while the
-                rest of the portal is being aligned to the Datayog design system.
+                
               </p>
             </div>
             <div className="rounded-[20px] border border-white/10 bg-white/[0.04] px-5 py-4 text-sm text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
@@ -71,17 +70,16 @@ const Home = () => {
             <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#F26522]">Workspace</p>
             <h2 className="mt-3 text-2xl font-black tracking-[0.02em] text-[#111827]">Migration Staging Area</h2>
             <p className="mt-3 max-w-[760px] text-sm leading-7 text-[#475467]">
-              Header and sidebar are being aligned to the Datayog reference. This page is intentionally lightweight so the post-login
-              route stays stable while the rest of the portal is ported feature by feature.
+             
             </p>
           </article>
 
           <article className="rounded-[26px] border border-[#10214d]/10 bg-white px-6 py-6 shadow-[0_12px_32px_rgba(15,23,42,0.08)]">
             <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#F26522]">Next Focus</p>
             <div className="mt-4 space-y-3 text-sm text-[#344054]">
-              <div className="rounded-2xl border border-[#10214d]/10 bg-[#f8fafc] px-4 py-3">Login and portal shell are active.</div>
-              <div className="rounded-2xl border border-[#10214d]/10 bg-[#f8fafc] px-4 py-3">Next step can continue with exact Datayog page-by-page porting.</div>
-              <div className="rounded-2xl border border-[#10214d]/10 bg-[#f8fafc] px-4 py-3">Backend remains on the server; frontend stays local for UI work.</div>
+              <div className="rounded-2xl border border-[#10214d]/10 bg-[#f8fafc] px-4 py-3"></div>
+              <div className="rounded-2xl border border-[#10214d]/10 bg-[#f8fafc] px-4 py-3"></div>
+              <div className="rounded-2xl border border-[#10214d]/10 bg-[#f8fafc] px-4 py-3"></div>
             </div>
           </article>
         </section>
