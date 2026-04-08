@@ -380,7 +380,7 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
             <span className="max-w-[min(240px,18vw)] truncate whitespace-nowrap">{HEADER_SESSION_STATUS.text}</span>
           </div>
 
-          <button
+          {/* <button
             type="button"
             className="hidden h-10 w-10 items-center justify-center rounded-[10px] border border-white/10 bg-white/5 text-white/75 transition-all duration-200 hover:border-[#F26522]/45 hover:bg-[#F26522]/10 hover:text-[#F26522] md:inline-flex"
           >
@@ -393,7 +393,7 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
           >
             <Bell className="h-[18px] w-[18px]" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#F26522]" />
-          </button>
+          </button> */}
 
           <div className="relative">
             <button
