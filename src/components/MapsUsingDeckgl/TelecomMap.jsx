@@ -2740,9 +2740,14 @@ const siteLayer = useMemo(() => {
                 if (mode === "newTab") moveToCellProrulesWindow(d, "two");
                 else openCellProRulesModal(d);
               }}
+              // onChartClick={(d) => {
+              //   const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
+              //   window.location.href = `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`;
+              // }}
               onChartClick={(d) => {
                 const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
-                window.location.href = `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`;
+                const reactUrl = `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`;
+                window.open(reactUrl, "_blank");
               }}
               onChartRightClick={(d) => {
                 const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
