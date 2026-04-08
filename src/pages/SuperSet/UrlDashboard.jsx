@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 
-const SUPERSET_BASE = "http://192.168.0.100:8088";
+const SUPERSET_BASE = "http://91.203.132.27:8088";
 
 const UrlDashboard = ({
   dashboardId,

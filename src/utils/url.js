@@ -16,8 +16,8 @@ export const isReadOnlyFrontendMode = toFlag(import.meta.env.VITE_READ_ONLY_MODE
 export const shouldBlockSocketEmit = toFlag(import.meta.env.VITE_BLOCK_SOCKET_EMIT, isReadOnlyFrontendMode);
 
 /** Superset embedded dashboards: UI origin (no trailing slash) + backend URL that mints guest tokens. */
-const defaultSupersetUiOrigin = "http://192.168.0.100:8088";
-const defaultSupersetGuestTokenUrl = "http://192.168.0.100:8089/api/superset/guest-token";
+const defaultSupersetUiOrigin = "http://91.203.132.27:8088";
+const defaultSupersetGuestTokenUrl = "http://91.203.132.27:8089/api/superset/guest-token";
 export const supersetUiOrigin = trimTrailingSlash(
     import.meta.env.VITE_SUPERSET_UI_ORIGIN || defaultSupersetUiOrigin
 );

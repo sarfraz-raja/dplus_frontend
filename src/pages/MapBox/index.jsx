@@ -580,7 +580,7 @@
 //     const buildSupersetCellDashboardUrl = (cellName, { standalone = true } = {}) => {
 //         if (!cellName) return null;
 
-//         const BASE = "http://192.168.0.100:8088";
+//         const BASE = "http://91.203.132.27:8088";
 //         const DASHBOARD_ID = 11 ;  //URL method will use this ID to fetch the dashboard and render it
 //         const FILTER_ID = "NATIVE_FILTER-Frwtlbdl8UhCOYVoGiXp9";
         
@@ -1598,7 +1598,7 @@ const moveToChartWindow = (data, from) => {
     const buildSupersetCellDashboardUrl = (cellName, { standalone = true } = {}) => {
         if (!cellName) return null;
 
-        const BASE = "http://192.168.0.100:8088";
+        const BASE = "http://91.203.132.27:8088";
         const DASHBOARD_ID = 11 ;  //URL method will use this ID to fetch the dashboard and render it
         const FILTER_ID = "NATIVE_FILTER-Frwtlbdl8UhCOYVoGiXp9";
         

@@ -11,14 +11,14 @@
 
 //     embedDashboard({
 //       id: dashboardUuid,
-//       supersetDomain: "http://192.168.0.100:8088",
+//       supersetDomain: "http://91.203.132.27:8088",
 //       mountPoint,
 
 //       fetchGuestToken: async () => {
 //         console.log("Fetching Guest Token...");
 
 //         const response = await fetch(
-//           "http://192.168.0.100:8089/api/superset/guest-token",
+//           "http://91.203.132.27:8089/api/superset/guest-token",
 //           {
 //             method: "POST",
 //             headers: {
