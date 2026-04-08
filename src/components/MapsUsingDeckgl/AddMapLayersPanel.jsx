@@ -1821,6 +1821,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         dispatch(MapActions.setActiveDriveSessions(selectedDriveSessions));
         dispatch(MapActions.getDriveTestData());
     } else {
+        dispatch(MapActions.setDriveTestFilters({ sessions: [], startDateTime: "", endDateTime: "", thematic: selectedThematic, thematicMode, ranges }));
         dispatch(MapActions.setActiveDriveSessions([]));
     }
 
