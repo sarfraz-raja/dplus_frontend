@@ -1462,6 +1462,8 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     const layerVisibility     = useSelector(state => state.map.layerVisibility);
     const layerOpacity        = useSelector(state => state.map.layerOpacity);
     const mapConfig           = useSelector(state => state.map.config);
+    const reduxActiveThematic     = useSelector(state => state.map.activeThematic);
+    const reduxActiveSiteThematic = useSelector(state => state.map.activeSiteThematic);
 
     // ── PENDING OPACITY (not applied until Apply is clicked) ──────
     const [pendingOpacity, setPendingOpacity] = useState({
@@ -1549,9 +1551,9 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         setExpandedLayer(layer);
         if (layer !== "BOUNDARY") setExpandedBoundaryGroup(null);
     };
-    const [cellThematicsConfig, setCellThematicsConfig] = useState(null);
+    const [cellThematicsConfig, setCellThematicsConfig] = useState(() => reduxActiveThematic ?? null);
 
-    const [siteThematicsConfig, setSiteThematicsConfig] = useState(null);
+    const [siteThematicsConfig, setSiteThematicsConfig] = useState(() => reduxActiveSiteThematic ?? null);
 
     const [activeLayerSection, setActiveLayerSection] = useState(null);
 
@@ -1562,6 +1564,15 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     const clearActiveLayerSectionDraft = () => {
         setActiveLayerSection(null);
     };
+
+    // ── DIRTY STATE ──────────────────────────────────────────────
+    const [isDirty, setIsDirty] = useState(false);
+    const markDirty = () => setIsDirty(true);
+
+    const hasAppliedLayers = !!(
+        layerVisibility.CELLS || layerVisibility.SITES || layerVisibility.BOUNDARY ||
+        layerVisibility.RF || layerVisibility.DRIVE_TEST
+    );
 
     // ── SYNC PENDING FROM REDUX ───────────────────────────────────
     useEffect(() => {
@@ -1814,19 +1825,26 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     }
 
     // ── CELL / SITE THEMATICS ─────────────────────────────────
-    if (cellThematicsConfig) dispatch(MapActions.setActiveThematic(cellThematicsConfig));
-    if (cellThematicsConfig?.scale !== undefined)
-        dispatch(MapActions.setMapConfig({ mapScale: cellThematicsConfig.scale }));
-    if (siteThematicsConfig) dispatch(MapActions.setActiveSiteThematic(siteThematicsConfig));
-    if (siteThematicsConfig?.scale !== undefined)
-        dispatch(MapActions.setMapConfig({ siteScale: siteThematicsConfig.scale }));
+    // Use current config; fall back to Redux-stored thematic (which has real color mappings from prior sessions)
+    const effectiveCellThematic = cellThematicsConfig ?? reduxActiveThematic ?? { type: "Band", colors: {}, opacity: 1, scale: 1 };
+    const effectiveSiteThematic = siteThematicsConfig ?? reduxActiveSiteThematic ?? { type: "Technology", colors: {}, opacity: 1 };
+    if (pendingVisibility.CELLS) {
+        dispatch(MapActions.setActiveThematic(effectiveCellThematic));
+        if (effectiveCellThematic.scale !== undefined)
+            dispatch(MapActions.setMapConfig({ mapScale: effectiveCellThematic.scale }));
+    }
+    if (pendingVisibility.SITES) {
+        dispatch(MapActions.setActiveSiteThematic(effectiveSiteThematic));
+        if (effectiveSiteThematic.scale !== undefined)
+            dispatch(MapActions.setMapConfig({ siteScale: effectiveSiteThematic.scale }));
+    }
 
     // ── COMMIT OPACITY TO REDUX ───────────────────────────────────
     dispatch(MapActions.setLayerOpacity("BOUNDARY",   pendingOpacity.BOUNDARY));
     dispatch(MapActions.setLayerOpacity("RF",         pendingOpacity.RF));
     dispatch(MapActions.setLayerOpacity("DRIVE_TEST", pendingOpacity.DRIVE_TEST));
-    if (cellThematicsConfig?.layerOpacity !== undefined)
-        dispatch(MapActions.setLayerOpacity("CELLS", cellThematicsConfig.layerOpacity));
+    if (effectiveCellThematic?.layerOpacity !== undefined)
+        dispatch(MapActions.setLayerOpacity("CELLS", effectiveCellThematic.layerOpacity));
 
     // ── COMMIT RF PARAMETER TO REDUX ──────────────────────────────
     dispatch(MapActions.setRfParameter(rfParameter));
@@ -1852,10 +1870,10 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
             pendingRfRegions.length === rfRegions.length ? "ALL" : pendingRfRegions
         ),
         saveRfParameter: rfParameter,
-        ...(cellThematicsConfig && { saveThematics: JSON.stringify(cellThematicsConfig) }),
-        ...(cellThematicsConfig?.scale !== undefined && { mapScale: cellThematicsConfig.scale }),
+        saveThematics: JSON.stringify(effectiveCellThematic),
+        ...(effectiveCellThematic.scale !== undefined && { mapScale: effectiveCellThematic.scale }),
         saveLayerOpacity: JSON.stringify(pendingOpacity),
-        ...(siteThematicsConfig && { saveSiteThematics: JSON.stringify(siteThematicsConfig) }),
+        saveSiteThematics: JSON.stringify(effectiveSiteThematic),
         saveDriveTestFilters: JSON.stringify({
             sessions: selectedDriveSessions,
             startDateTime, endDateTime,
@@ -1865,6 +1883,8 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         saveBoundaryColors: JSON.stringify(boundaryColors),
     }));
 
+    setIsDirty(false);
+    setActiveLayerSection(null);
     onClose();
 };
 
@@ -1941,6 +1961,36 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     };
 
 
+    // ── RESET PENDING TO LAST APPLIED ────────────────────────────
+    const resetAllPendingChanges = () => {
+        setPendingVisibility({
+            CELLS: layerVisibility.CELLS || false,
+            SITES: layerVisibility.SITES || false,
+            RF: layerVisibility.RF || false,
+            DRIVE_TEST: layerVisibility.DRIVE_TEST || false,
+            ...boundaryGroups.reduce((acc, g) => ({
+                ...acc, [g.shapegroup]: layerVisibility[g.shapegroup] || false
+            }), {})
+        });
+        const normalizedBoundary = {};
+        boundaryGroups.forEach(g => {
+            const val = selectedBoundaries[g.shapegroup];
+            if (val === "ALL") normalizedBoundary[g.shapegroup] = [...(g.shapenames || [])];
+            else if (Array.isArray(val)) normalizedBoundary[g.shapegroup] = val;
+            else normalizedBoundary[g.shapegroup] = [];
+        });
+        setPendingBoundarySelections(normalizedBoundary);
+        const rfVal = selectedBoundaries["RF"];
+        setPendingRfRegions(rfVal === "ALL" ? [...rfRegions] : Array.isArray(rfVal) ? rfVal : []);
+        setSelectedDriveSessions(driveTestFilters?.sessions || []);
+        setRfParameter(mapConfig?.rfParameter || "RSRP");
+        setPendingOpacity({ BOUNDARY: layerOpacity?.BOUNDARY ?? 1, RF: layerOpacity?.RF ?? 1, DRIVE_TEST: layerOpacity?.DRIVE_TEST ?? 1 });
+        setPendingLegends({ SITES: layerLegends?.SITES || false, CELLS: layerLegends?.CELLS || false, BOUNDARY: layerLegends?.BOUNDARY || false, RF: layerLegends?.RF || false, DRIVE_TEST: layerLegends?.DRIVE_TEST || false });
+        setBoundaryColors(reduxBoundaryColors);
+        setIsDirty(false);
+        setActiveLayerSection(null);
+    };
+
     // ── RENDER ────────────────────────────────────────────────────
     if (mode === "floating") {
         return (
@@ -1949,13 +1999,18 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
                 toggleFloatingSection={toggleFloatingSection}
                 clearActiveLayerSectionDraft={clearActiveLayerSectionDraft}
                 applySelectedMapLayers={applySelectedMapLayers}
+                resetAllPendingChanges={resetAllPendingChanges}
+                clearAllMapLayers={clearAllMapLayers}
+                isDirty={isDirty}
+                markDirty={markDirty}
+                hasAppliedLayers={hasAppliedLayers}
                 pendingVisibility={pendingVisibility}
                 setPendingVisibility={setPendingVisibility}
                 setActiveLayerSection={setActiveLayerSection}
                 pendingLegends={pendingLegends}
                 setPendingLegends={setPendingLegends}
-                setSiteThematicsConfig={setSiteThematicsConfig}
-                setCellThematicsConfig={setCellThematicsConfig}
+                setSiteThematicsConfig={(cfg) => { setSiteThematicsConfig(cfg); setIsDirty(true); }}
+                setCellThematicsConfig={(cfg) => { setCellThematicsConfig(cfg); setIsDirty(true); }}
                 boundaryGroups={boundaryGroups}
                 anyBoundarySelected={anyBoundarySelected}
                 allBoundariesSelected={allBoundariesSelected}

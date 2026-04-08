@@ -130,41 +130,42 @@ export const Sidebar_content = {
         
     ],
     all_routes: [
-        {
-            name: "Topology Layer",
-            link: "/topology-layer",
-            icon: <Unicons.UilReact />,
-            subMenu: [],
-            component: <ComingSoon />,
-        },
-        {
-            name: "Layer View",
-            link: "/layer-view",
-            icon: <Unicons.UilReact />,
-            subMenu: [{
-                name: "Site Layer",
-                link: "/layer-view/site-layer",
-                subMenu: [],
-                component: <LaverView />,
-                icon: <Unicons.UilChannel size="16" />
-            },
-            {
-                name: "Carrier Layer",
-                link: "/layer-view/carrier-layer",
-                subMenu: [],
-                component: <MapView />,
-                icon: <Unicons.UilChannel size="16" />
-            },
-            {
-                name: "Cell Layer",
-                link: "/map-box/carrier-layer",
-                subMenu: [],
-                component: <MapBoxView />,
-                icon: <Unicons.UilChannel size="16" />
-            }],
+        // {
+        //     name: "Topology Layer",
+        //     link: "/topology-layer",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [],
+        //     component: <ComingSoon />,
+        // },
+        // {
+        //     name: "Layer View",
+        //     link: "/layer-view",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [{
+        //         name: "Site Layer",
+        //         link: "/layer-view/site-layer",
+        //         subMenu: [],
+        //         component: <LaverView />,
+        //         icon: <Unicons.UilChannel size="16" />
+        //     },
+        //     {
+        //         name: "Carrier Layer",
+        //         link: "/layer-view/carrier-layer",
+        //         subMenu: [],
+        //         component: <MapView />,
+        //         icon: <Unicons.UilChannel size="16" />
+        //     },
+        //     {
+        //         name: "Cell Layer",
+        //         link: "/map-box/carrier-layer",
+        //         subMenu: [],
+        //         component: <MapBoxView />,
+        //         icon: <Unicons.UilChannel size="16" />
+        //     }],
 
-        },{
-            name: "DataPlus Analytics Pro",
+        // },
+        {
+            name: "Analytics Pro",
             link: "/dataplus-analytics-pro",
             icon: <Unicons.UilReact />,
             subMenu: [{
@@ -394,25 +395,25 @@ export const Sidebar_content = {
             // },
         ]
         },
-        {
-            name: "Reporting Suite",
-            link: "/reporting-suite",
-            icon: <Unicons.UilReact />,
-            subMenu: [{
-                name: "Customized Report",
-                link: "/reporting-suite/report-customization",
-                subMenu: [],
-                component: <ComingSoon />,
-                icon: <Unicons.UilChannel size="16" />
-            }, {
-                name: "Repository",
-                link: "/reporting-suite/repository",
-                subMenu: [],
-                component: <ComingSoon />,
-                icon: <Unicons.UilChannel size="16" />
-            },
-        ],
-        },
+        // {
+        //     name: "Reporting Suite",
+        //     link: "/reporting-suite",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [{
+        //         name: "Customized Report",
+        //         link: "/reporting-suite/report-customization",
+        //         subMenu: [],
+        //         component: <ComingSoon />,
+        //         icon: <Unicons.UilChannel size="16" />
+        //     }, {
+        //         name: "Repository",
+        //         link: "/reporting-suite/repository",
+        //         subMenu: [],
+        //         component: <ComingSoon />,
+        //         icon: <Unicons.UilChannel size="16" />
+        //     },
+        // ],
+        // },
         // {
         //     name: "Discussions",
         //     link: "/discussions",
@@ -432,16 +433,16 @@ export const Sidebar_content = {
             // component: <SupportDesk />,
             subMenu: [],
         },
-        {
-            name: "NiFi",
-            link: "/nifi-app",
-            // icon: <Unicons.UilComment size="16" />,
-            icon: <Unicons.UilReact />,
-            component: <NifiViewer />,
-            // component: <DiscussionPage />,
-            // component: <SupportDesk />,
-            subMenu: [],
-        },
+        // {
+        //     name: "NiFi",
+        //     link: "/nifi-app",
+        //     // icon: <Unicons.UilComment size="16" />,
+        //     icon: <Unicons.UilReact />,
+        //     component: <NifiViewer />,
+        //     // component: <DiscussionPage />,
+        //     // component: <SupportDesk />,
+        //     subMenu: [],
+        // },
         
         {
             name: "GIS Engine",
@@ -586,13 +587,13 @@ export const Sidebar_content = {
                 icon: <Unicons.UilChannel size="16" />
             }],
         },
-        {
-            name: "Network Complaints",
-            link: "/network-complaints/view-network-complaints",
-            subMenu: [],
-            component: <ViewMtandaoComplaints />,
-            icon: <Unicons.UilReact />,
-        },
+        // {
+        //     name: "Network Complaints",
+        //     link: "/network-complaints/view-network-complaints",
+        //     subMenu: [],
+        //     component: <ViewMtandaoComplaints />,
+        //     icon: <Unicons.UilReact />,
+        // },
         
 
 
@@ -600,32 +601,32 @@ export const Sidebar_content = {
 
         // }
         
-        {
-            name: "Fault Management",
-            link: "/fault-management",
-            icon: <Unicons.UilReact />,
-            subMenu: [],
-            component: <ComingSoon />,
-        },
-        {
-            name: "Capacity Management",
-            link: "/capacity-management",
-            icon: <Unicons.UilReact />,
-            subMenu: [{
-                name: "Resource Utilization",
-                link: "/capacity-management/resource-utilization",
-                subMenu: [],
-                component: <ComingSoon />,
-                icon: <Unicons.UilChannel size="16" />
-            }],
-        },
-        {
-            name: "Revenue Assurance",
-            link: "/revenue-assurance",
-            icon: <Unicons.UilReact />,
-            subMenu: [],
-            component: <ComingSoon />,
-        },
+        // {
+        //     name: "Fault Management",
+        //     link: "/fault-management",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [],
+        //     component: <ComingSoon />,
+        // },
+        // {
+        //     name: "Capacity Management",
+        //     link: "/capacity-management",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [{
+        //         name: "Resource Utilization",
+        //         link: "/capacity-management/resource-utilization",
+        //         subMenu: [],
+        //         component: <ComingSoon />,
+        //         icon: <Unicons.UilChannel size="16" />
+        //     }],
+        // },
+        // {
+        //     name: "Revenue Assurance",
+        //     link: "/revenue-assurance",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [],
+        //     component: <ComingSoon />,
+        // },
         //     name: "DataPlus Analytics Pro",
         //     link: "/network-analytics",
         //     icon: <Unicons.UilReact />,
@@ -638,30 +639,30 @@ export const Sidebar_content = {
         //     }],
         // }, {
            
-        {
-            name: "Work Force Management",
-            link: "/work-force-management",
-            icon: <Unicons.UilReact />,
-            subMenu: [{
-                name: "Auto TT Dispatch",
-                link: "/work-force-management/auto-tt-dispatch",
-                subMenu: [],
-                component: <ComingSoon />,
-                icon: <Unicons.UilChannel size="16" />
-            }],
-        },
-        {
-            name: "Change Management",
-            link: "/change-management",
-            icon: <Unicons.UilReact />,
-            subMenu: [{
-                name: "Plan Work Order",
-                link: "/change-management/plan-work-order",
-                subMenu: [],
-                component: <ComingSoon />,
-                icon: <Unicons.UilChannel size="16" />
-            }],
-        },
+        // {
+        //     name: "Work Force Management",
+        //     link: "/work-force-management",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [{
+        //         name: "Auto TT Dispatch",
+        //         link: "/work-force-management/auto-tt-dispatch",
+        //         subMenu: [],
+        //         component: <ComingSoon />,
+        //         icon: <Unicons.UilChannel size="16" />
+        //     }],
+        // },
+        // {
+        //     name: "Change Management",
+        //     link: "/change-management",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [{
+        //         name: "Plan Work Order",
+        //         link: "/change-management/plan-work-order",
+        //         subMenu: [],
+        //         component: <ComingSoon />,
+        //         icon: <Unicons.UilChannel size="16" />
+        //     }],
+        // },
         // {
         //     name: "Testing",
         //     link: "/testing",
@@ -691,19 +692,21 @@ export const Sidebar_content = {
                 component: <ComingSoon />,
                 icon: <Unicons.UilChannel size="16" />
             }],
-        }, {
-            name: "Nokia Tool Management Query",
-            link: "/nokia-tool-management-query",
-            component: <NokiaToolManagementQuery/>,
-            icon: <Unicons.UilReact />,
-            subMenu: [],
-        }, {
-            name: "Map Settings",
-            link: "/selectSettings",
-            icon: <Unicons.UilReact />,
-            subMenu: [],
-            component:<SettingConfigForm />
         },
+        // {
+        //     name: "Nokia Tool Management Query",
+        //     link: "/nokia-tool-management-query",
+        //     component: <NokiaToolManagementQuery/>,
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [],
+        // },
+        // {
+        //     name: "Map Settings",
+        //     link: "/selectSettings",
+        //     icon: <Unicons.UilReact />,
+        //     subMenu: [],
+        //     component:<SettingConfigForm />
+        // },
         ],
 
     Admin:[

@@ -48,7 +48,7 @@ const TOP_LEVEL_ICON_MAP = {
   Dashboard: LayoutDashboard,
   'Insights Engine': Activity,
   'GIS Engine': MapIcon,
-  'DataPlus Analytics Pro': BarChart2,
+  'Analytics Pro': BarChart2,
   Discussions: MessageSquare,
   'Configuration Management': Settings,
   'Custom Query': Database,
@@ -83,7 +83,7 @@ const REFERENCE_MENU = [
   },
   { name: 'GIS Engine' },
   {
-    name: 'DataPlus Analytics Pro',
+    name: 'Analytics Pro',
     children: ['Site Analytics', 'Site Pro Rules', 'Cell Analytics', 'Cell Pro Rules', 'KPI Check Rules', 'Pro Rules Management'],
   },
   { name: 'Discussions' },

@@ -237,6 +237,12 @@ const QueryWorkbench = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [errorModalOpen, setErrorModalOpen] = useState(false);
 
+    // Visual Builder state — lifted here so it survives mode switches
+    const [builderServer, setBuilderServer] = useState('');
+    const [builderSchema, setBuilderSchema] = useState('');
+    const [selectedTable, setSelectedTable] = useState(null);
+    const [builderConditions, setBuilderConditions] = useState([{ col: '', op: '=', val: '' }]);
+
     // ── Redux selectors ──
     const databaseList = useSelector(s => s?.customQuery?.databaseList || []);
     const savedQueryList = useSelector(s => s?.customQuery?.savedQueryList || []);
@@ -259,8 +265,9 @@ const QueryWorkbench = () => {
     }, []);
 
     // action only calls cb() for "File" responses, not "Data" — so watch runQuery to reset loading
+    // only reset loading when actual data/error arrives, not on the empty {} reset dispatch
     useEffect(() => {
-        if (isLoading) setIsLoading(false);
+        if (isLoading && runQuery?.type) setIsLoading(false);
     }, [runQuery]);
 
     const hasError = runQuery?.type === 'Error' || (runQuery?.msg && runQuery?.type !== 'Data');
@@ -416,23 +423,31 @@ const QueryWorkbench = () => {
                         {mode === 'sql' ? (
                             <>
                                 {/* Controls row */}
-                                <div className="flex items-center gap-3 mb-3">
-                                    <label className="text-xs font-medium text-slate-600 shrink-0">DB Server:</label>
-                                    <select
-                                        value={server}
-                                        onChange={(e) => setServer(e.target.value)}
-                                        className="w-56 px-3 py-1.5 text-xs border border-slate-200 rounded bg-white shadow-inner focus:outline-none"
-                                    >
-                                        <option value="">Select Server</option>
-                                        {databaseList.map((db) => (
-                                            <option key={db.value} value={db.value}>{db.label}</option>
-                                        ))}
-                                    </select>
+                                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                                    <label className="text-xs font-semibold text-slate-700 shrink-0">
+                                        DB Server <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="flex flex-col gap-0.5">
+                                        <select
+                                            value={server}
+                                            onChange={(e) => setServer(e.target.value)}
+                                            className={`w-56 px-3 py-1.5 text-xs rounded shadow-inner focus:outline-none transition-colors ${
+                                                !server
+                                                    ? 'border-2 border-red-400 bg-red-50 focus:border-red-500'
+                                                    : 'border border-slate-200 bg-white focus:border-blue-400'
+                                            }`}
+                                        >
+                                            <option value="">— Select a DB Server —</option>
+                                            {databaseList.map((db) => (
+                                                <option key={db.value} value={db.value}>{db.label}</option>
+                                            ))}
+                                        </select>
+                                        {!server && (
+                                            <p className="text-[10px] text-red-500 font-medium">Required before running a query</p>
+                                        )}
+                                    </div>
                                     <SaveQueryPopover onSave={(name, visibleTo) => saveQuery(name, undefined, undefined, visibleTo)} disabled={!canExecute} />
                                     <ExportDropdown onExportCSV={exportCSV} onExportExcel={exportExcel} disabled={!canExecute} />
-                                    {!server && activeQuery && (
-                                        <p className="text-[10px] text-amber-600 font-medium">Select a server first.</p>
-                                    )}
                                 </div>
 
                                 {/* Drop Zone / SQL Editor */}
@@ -457,7 +472,12 @@ const QueryWorkbench = () => {
                                 </div>
 
                                 {/* Bottom action buttons */}
-                                <div className="flex justify-end gap-3 mt-3 pt-3 border-t border-slate-100">
+                                <div className="flex justify-end items-center gap-3 mt-3 pt-3 border-t border-slate-100">
+                                    {activeQuery.trim() && !server && (
+                                        <p className="text-xs text-red-500 font-semibold mr-auto">
+                                            ↑ Select a DB Server to run this query
+                                        </p>
+                                    )}
                                     <button
                                         onClick={clearWorkbench}
                                         className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
@@ -467,7 +487,8 @@ const QueryWorkbench = () => {
                                     <button
                                         onClick={executeQuery}
                                         disabled={!canExecute || isLoading}
-                                        className="flex items-center gap-2 px-6 py-2 text-sm font-semibold rounded text-white shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                                        title={!server ? 'Select a DB Server first' : !activeQuery.trim() ? 'Enter a query first' : ''}
+                                        className="flex items-center gap-2 px-6 py-2 text-sm font-semibold rounded text-white shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                                         style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}
                                     >
                                         {isLoading && (
@@ -480,15 +501,30 @@ const QueryWorkbench = () => {
                         ) : (
                             /* ── Visual Builder ── */
                             <VisualBuilder
-                                onGenerateQuery={(q) => { setActiveQuery(q); setMode('sql'); }}
-                                onGenerateAndRun={(q) => {
+                                builderServer={builderServer}
+                                setBuilderServer={setBuilderServer}
+                                builderSchema={builderSchema}
+                                setBuilderSchema={setBuilderSchema}
+                                selectedTable={selectedTable}
+                                setSelectedTable={setSelectedTable}
+                                conditions={builderConditions}
+                                setConditions={setBuilderConditions}
+                                onGenerateQuery={(q, srv) => {
                                     setActiveQuery(q);
+                                    if (srv) setServer(String(srv));
                                     setMode('sql');
-                                    if (server) {
-                                        dispatch(CustomQueryActions.postRunQuery(true, { dbServer: server, queries: q }, () => {}, Urls.querybuilder_runQuery));
+                                }}
+                                onGenerateAndRun={(q, srv) => {
+                                    setActiveQuery(q);
+                                    const effectiveServer = srv || server;
+                                    if (effectiveServer) setServer(String(effectiveServer));
+                                    // stay in Visual Builder — results panel shows below regardless of mode
+                                    if (effectiveServer && q.trim()) {
+                                        setIsLoading(true);
+                                        dispatch(CustomQueryActions.postRunQuery(true, { dbServer: effectiveServer, queries: q }, () => {}, Urls.querybuilder_runQuery));
                                     }
                                 }}
-                                onSave={(name, builderServer, q, visibleTo) => saveQuery(name, builderServer, q, visibleTo)}
+                                onSave={(name, srv, q, visibleTo) => saveQuery(name, srv, q, visibleTo)}
                             />
                         )}
                     </div>
@@ -575,16 +611,17 @@ const QueryWorkbench = () => {
 // ─── Visual Builder ────────────────────────────────────────────────────────────
 const CONDITION_OPS = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IN', 'IS NULL', 'IS NOT NULL'];
 
-const VisualBuilder = ({ onGenerateQuery, onGenerateAndRun, onSave }) => {
+const VisualBuilder = ({
+    builderServer, setBuilderServer,
+    builderSchema, setBuilderSchema,
+    selectedTable, setSelectedTable,
+    conditions, setConditions,
+    onGenerateQuery, onGenerateAndRun, onSave,
+}) => {
     const databaseList = useSelector(s => s?.customQuery?.databaseList || []);
     const dboList      = useSelector(s => s?.customQuery?.dboList      || []);
     const tableList    = useSelector(s => s?.customQuery?.tableList    || {});
     const dispatch = useDispatch();
-
-    const [builderServer, setBuilderServer] = useState('');
-    const [builderSchema, setBuilderSchema] = useState('');
-    const [selectedTable, setSelectedTable] = useState(null);
-    const [conditions, setConditions] = useState([{ col: '', op: '=', val: '' }]);
 
     const tables = tableList?.d1 || [];
     const allCols = tableList?.d2 || [];
@@ -599,10 +636,11 @@ const VisualBuilder = ({ onGenerateQuery, onGenerateAndRun, onSave }) => {
     const buildQuery = () => {
         if (!selectedTable) return '';
         const cols = selectedTableCols.length ? selectedTableCols.join(', ') : '*';
+        const qualifiedTable = builderSchema ? `${builderSchema}.${selectedTable}` : selectedTable;
         const wheres = conditions.filter(c => c.col && c.op).map(c =>
             c.op === 'IS NULL' || c.op === 'IS NOT NULL' ? `${c.col} ${c.op}` : `${c.col} ${c.op} '${c.val}'`
         );
-        return `SELECT ${cols}\nFROM ${selectedTable}${wheres.length ? '\nWHERE ' + wheres.join('\n  AND ') : ''};`;
+        return `SELECT ${cols}\nFROM ${qualifiedTable}${wheres.length ? '\nWHERE ' + wheres.join('\n  AND ') : ''};`;
     };
 
     return (
@@ -706,14 +744,14 @@ const VisualBuilder = ({ onGenerateQuery, onGenerateAndRun, onSave }) => {
 
                 <div className="flex gap-3 pt-3 border-t border-slate-100 mt-auto">
                     <button
-                        onClick={() => onGenerateQuery(buildQuery())}
+                        onClick={() => onGenerateQuery(buildQuery(), builderServer)}
                         disabled={!selectedTable}
                         className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-40"
                     >
                         Generate Query
                     </button>
                     <button
-                        onClick={() => onGenerateAndRun(buildQuery())}
+                        onClick={() => onGenerateAndRun(buildQuery(), builderServer)}
                         disabled={!selectedTable}
                         className="px-5 py-2 text-sm font-semibold rounded text-white shadow-sm hover:opacity-90 transition-opacity disabled:opacity-40"
                         style={{ background: '#EC7D09' }}

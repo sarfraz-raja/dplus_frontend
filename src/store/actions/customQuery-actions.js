@@ -171,10 +171,12 @@ const CustomQueryActions = {
                 const dtaa = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
                 dispatch(RUN_QUERY({ type: 'Error', msg: dtaa.msg }))
             } else {
+                dispatch(RUN_QUERY({ type: 'Error', msg: `Request failed (status ${res?.status}). Please try again.` }))
                 return
             }
         } catch (error) {
             console.log(error, "amit errorerror 37")
+            dispatch(RUN_QUERY({ type: 'Error', msg: 'Network error. Please check your connection and try again.' }))
 
             // dispatch(Notify.error('something went wrong! please try again after a while'))
         }
