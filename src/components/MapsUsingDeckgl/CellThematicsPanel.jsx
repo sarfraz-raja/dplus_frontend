@@ -244,6 +244,12 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
 
     }, [techMeta, regions]);
 
+    const initDone = useRef(false);
+    useEffect(() => {
+        const t = setTimeout(() => { initDone.current = true; }, 0);
+        return () => clearTimeout(t);
+    }, []);
+
     const hasInitialized = useRef(false);
 
     useEffect(() => {
@@ -446,6 +452,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
     useEffect(() => {
 
         if (!setCellThematicsConfig) return;
+        if (!initDone.current) return;
 
         const payload = {
             type: tempType,

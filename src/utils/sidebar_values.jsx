@@ -60,6 +60,7 @@ import Huawei5GDashboard from '../pages/InsightsEngine/RanDashboards/Huawei5GDas
 import NSAtoSA5GPrePostDashboard from '../pages/InsightsEngine/RanDashboards/NSAtoSA5GPrePostDashboard.jsx';
 // import MapTesting from '../pages/InsightsEngine/MapTesting.jsx';
 import TelecomMapsPage from '../pages/TelecomMapsPage.jsx';
+import TelecomMultipleMapsPage from '../pages/TelecomMultipleMapsPage.jsx';
 import SupportDesk from '../pages/SupportDesk.jsx';
 import TicketsPage from '../pages/Tickets/index.jsx';
 import DiscussionPage from '../pages/DiscussionForum/DiscussionPage.jsx';
@@ -449,6 +450,13 @@ export const Sidebar_content = {
             link: "/telecom-maps",
             subMenu: [],
             component:  <TelecomMapsPage /> ,
+            icon: <Unicons.UilReact />,
+        },
+        {
+            name: "Multi-Map View",
+            link: "/telecom-multi-maps",
+            subMenu: [],
+            component: <TelecomMultipleMapsPage />,
             icon: <Unicons.UilReact />,
         },
         {

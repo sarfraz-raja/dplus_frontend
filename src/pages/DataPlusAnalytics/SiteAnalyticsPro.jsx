@@ -201,7 +201,7 @@
 //                                                 //     return <>
 
 //                                                 <div className='m-0.5 mt-4 bg-white rounded-sm shadow-lg hover:shadow-2xl shadow-slate-400 shadow-xl'>
-//                                                     <SiteAnalyticsCard ckeyr={ckeyr} AllDataShowing={AllDataShowing} innerkey={"innerkey"} ckey={ckey} headerName={DataShowCols[ckey]["name"]} fetchBackend={true} headers={dataCols[ckey]} variables={DataShowCols[ckey]} />
+//                                                     <SiteAnalyticsCard ckeyr={ckeyr} AllDataShowing={AllDataShowing} ckey={ckey} headerName={DataShowCols[ckey]["name"]} variables={DataShowCols[ckey]} />
 //                                                     {/* <SiteAnalyticsCard AllDataShowing={AllDataShowing} innerkey={"innerkey"} ckey={ckey} fetchBackend={false} headers={["Site ID", "Issue", "<1 KM", "1-5 KM",">5KM"]} /> */}
 //                                                 </div>
 //                                                 //     </>
@@ -309,19 +309,13 @@
 // export default SiteAnalyticsPro;
 
 
-import React, { useEffect, useState } from 'react';
-import Table from '../../components/Table';
-import DPAOneRow from '../../components/DPAOneRow';
+import { useEffect, useState } from 'react';
 import nokiaPrePostActions from '../../store/actions/nokiaPrePost-actions';
 import { useDispatch, useSelector } from 'react-redux';
 import { useForm } from 'react-hook-form';
 import AutoSuggestion from '../../components/FormElements/AutoSuggestion';
-import SelectDropDown from '../../components/FormElements/SelectDropDown';
 import DatePicking from '../../components/FormElements/DatePicking';
-import WebsocketActions from '../../store/actions/websocket-actions';
-import { WebSocketUrls } from '../../utils/url';
 import SiteAnalyticsCard from '../../components/SiteAnalyticsCard';
-import { cn } from '../../utils/common';
 import Button from '../../components/Button';
 import { objectToQueryString } from '../../utils/commonFunnction';
 import moment from 'moment';
@@ -329,23 +323,17 @@ import moment from 'moment';
 
 const SiteAnalyticsPro = () => {
 
-    const dispatch = useDispatch()
+    const dispatch = useDispatch();
 
-    const [datew, setdatew] = useState(0)
-
-
+    const [datew, setdatew] = useState(0);
 
     const url = new URL(window.location.href);
     const params = new URLSearchParams(url.search);
     const urlUniqueId = params.get('uniqueId');
-    
-
 
     const {
         register,
         handleSubmit,
-        watch,
-        reset,
         setValue,
         getValues,
         formState: { errors },
@@ -355,8 +343,6 @@ const SiteAnalyticsPro = () => {
         return state?.nokiaPrePost?.networkAnalyticsPro
     })
 
-
-
     let DataSorter = useSelector((state) => {
         return state?.nokiaPrePost?.networkAnalyticsProSorter
     })
@@ -364,22 +350,9 @@ const SiteAnalyticsPro = () => {
         return state?.nokiaPrePost?.uniquePhysicalId
     })
 
-
-
-
     let DataShowCols = useSelector((state) => {
         return state?.nokiaPrePost?.showCols
     })
-
-
-
-
-
-    let common_socket = useSelector((state) => {
-        return state?.websocket?.socket_setup
-    })
-
-
 
     const dataSumitter = (data) => {
         console.log(data, "dataSumitterdataSumitter")
@@ -388,39 +361,7 @@ const SiteAnalyticsPro = () => {
         }))
     }
 
-
-    let dataCols = {
-        "5G PM KPI Check": ["KPI", "Pre", "Post", "Delta"],
-        "4G PM KPI Check": ["KPI", "Pre", "Post", "Delta"],
-        "3G PM KPI Check": ["KPI", "Pre", "Post", "Delta"],
-        "2G PM KPI Check": ["KPI", "Pre", "Post", "Delta"],
-        "5G PCI Check": ["Site ID", "Issue", "<1 KM", "1-5 KM", ">5KM"],
-        "4G PCI Check": ["Site ID", "Issue", "<1 KM", "1-5 KM", ">5KM"],
-        "3G PSC Check": ["Site ID", "Issue", "<1 KM", "1-5 KM", ">5KM"],
-        "2G BCCH Check": ["Site ID", "Issue", "<1 KM", "1-5 KM", ">5KM"]
-    }
-
-
-
-
-
-
-
-    for (let key in AllDataShowing) {
-
-        // console.log(key, AllDataShowing[key], "keykeykeykey")
-
-        let dataInner = AllDataShowing[key]
-        // for (let innerkey in dataInner) {
-        //     console.log(innerkey, dataInner[innerkey], "keykeykeykey")
-        // }
-        // if (AllDataShowing.hasOwnProperty(key)) {
-        //     console.log(`${key}: ${AllDataShowing[key]}`,"AllDataShowing");
-        // }
-    }
-
-
-    useEffect(() => {
+   useEffect(() => {
 
         if (datew == 0) {
 
@@ -487,36 +428,23 @@ const SiteAnalyticsPro = () => {
             </div>
 
 
-            <div class=" bg-white mt-8 rounded-md">
+            <div className=" bg-white mt-8 rounded-md">
                 <div className='' >
                     {
-                        Object.keys(DataSorter).sort((a, b) => DataSorter[a]["sort"] - DataSorter[b]["sort"]).map((ckeyr) => {
-
-                            let colorName = `${DataSorter[ckeyr]["color"]}  "flex justify-center p-1 text-white"`
-
-                            return <div className='border-2 border-black mx-2 my-4'>
-                                <div style={{ backgroundColor: `${DataSorter[ckeyr]["color"]}` }} className={`${DataSorter[ckeyr]["color"]}`}>
+                        DataShowCols && Object.keys(DataSorter).sort((a, b) => DataSorter[a]["sort"] - DataSorter[b]["sort"]).map((ckeyr) => (
+                            <div className='border-2 border-black mx-2 my-4'>
+                                <div style={{ backgroundColor: `${DataSorter[ckeyr]["color"]}` }}>
                                     <h1 className={" flex justify-center p-1 text-white text-sm font-bold"}>{ckeyr}</h1>
                                 </div>
-                                {/* {console.log(DataSorter, ckeyr, "DataShowCols,ckey")} */}
                                 <div className='grid-cols-1 sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-4 grid col-span-12 rounded-md'>{
                                     DataSorter[ckeyr]["data"].map((ckey) => (
 
                                         <>
-                                            {/* {console.log(DataShowCols, ckey, "DataShowCols,ckey")} */}
-                                            {/* <div className='col-span-12 grid grid-cols-1 m-2 mt-4 md:grid-cols-2 xs:grid-cols-1 sm:grid-cols-4' > */}
-                                            {/* <div className=''> */}
                                             {
-                                                //  ["5G", "4G", "3G", "2G"].map((innerkey) => {
-                                                // //     console.log(AllDataShowing,innerkey,ckey,"AllDataShowing")
-                                                //     return <>
-
+                                                DataShowCols[ckey] && AllDataShowing[ckey] &&
                                                 <div className='m-0.5 mt-4 bg-white rounded-sm shadow-lg hover:shadow-2xl shadow-slate-400 shadow-xl'>
-                                                    <SiteAnalyticsCard ckeyr={ckeyr} AllDataShowing={AllDataShowing} innerkey={"innerkey"} ckey={ckey} headerName={DataShowCols[ckey]["name"]} fetchBackend={true} headers={dataCols[ckey]} variables={DataShowCols[ckey]} />
-                                                    {/* <SiteAnalyticsCard AllDataShowing={AllDataShowing} innerkey={"innerkey"} ckey={ckey} fetchBackend={false} headers={["Site ID", "Issue", "<1 KM", "1-5 KM",">5KM"]} /> */}
+                                                    <SiteAnalyticsCard ckeyr={ckeyr} AllDataShowing={AllDataShowing} ckey={ckey} headerName={DataShowCols[ckey]["name"]} variables={DataShowCols[ckey]} />
                                                 </div>
-                                                //     </>
-                                                //     })
                                             }
                                             {/* {
                                     ["6G", "4G", "3G", "2G"].map((innerkey) => {
@@ -534,15 +462,11 @@ const SiteAnalyticsPro = () => {
                                     ))
 
                                 }</div></div>
-                        })
+                        ))
 
                     }
 
                 </div>
-
-
-
-
 
                 {/* <div className='col-span-6'>
                     <div className='grid grid-cols-2 mt-4'>

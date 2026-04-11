@@ -146,14 +146,12 @@ const CustomQueryActions = {
             console.log(res, "postRunQuery")
             if (res?.status === 201 || res?.status === 200) {
                 const dtaa = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
-                console.log(dtaa.type == "File", dtaa.type == "Data", "dtaadtaa")
-                if (dtaa.type == "Data") {
-                    dispatch(RUN_QUERY(dtaa))
-                }
-                if (dtaa.type == "Error") {
-                    dispatch(RUN_QUERY(dtaa))
-                }
-                if (dtaa.type == "File") {
+                const responseType = dtaa.type?.toLowerCase()
+                if (responseType === "data") {
+                    dispatch(RUN_QUERY({ ...dtaa, type: 'Data' }))
+                } else if (responseType === "error") {
+                    dispatch(RUN_QUERY({ ...dtaa, type: 'Error' }))
+                } else if (responseType === "file") {
                     cb()
                     dispatch(CommonActions.commondownload(dtaa.data))
                     let msgdata = {
@@ -164,6 +162,8 @@ const CustomQueryActions = {
                         type: 1
                     }
                     dispatch(ALERTS(msgdata))
+                } else {
+                    dispatch(RUN_QUERY({ type: 'Error', msg: `Unexpected response from server (type: ${dtaa.type ?? 'none'}).` }))
                 }
 
             } else if (res?.status === 400) {

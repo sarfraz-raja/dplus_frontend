@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
 import CommonActions from '../../store/actions/common-actions';
@@ -237,6 +237,62 @@ const QueryWorkbench = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [errorModalOpen, setErrorModalOpen] = useState(false);
 
+    // ── Resizable splits ──
+    const [editorHeight, setEditorHeight] = useState(260);
+    const [sidebarWidth, setSidebarWidth] = useState(280);
+    const dragRef = useRef({ dragging: false, startY: 0, startH: 0 });
+    const hDragRef = useRef({ dragging: false, startX: 0, startW: 0 });
+
+    const getClientY = (e) => e.touches ? e.touches[0].clientY : e.clientY;
+    const getClientX = (e) => e.touches ? e.touches[0].clientX : e.clientX;
+
+    const onDividerMouseDown = (e) => {
+        e.preventDefault();
+        dragRef.current = { dragging: true, startY: getClientY(e), startH: editorHeight };
+        const onMove = (ev) => {
+            if (!dragRef.current.dragging) return;
+            const delta = getClientY(ev) - dragRef.current.startY;
+            const next = Math.max(140, Math.min(dragRef.current.startH + delta, window.innerHeight * 0.75));
+            setEditorHeight(next);
+        };
+        const onUp = () => {
+            dragRef.current.dragging = false;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        window.addEventListener('touchmove', onMove, { passive: false });
+        window.addEventListener('touchend', onUp);
+    };
+
+    const onSidebarDividerMouseDown = (e) => {
+        e.preventDefault();
+        hDragRef.current = { dragging: true, startX: getClientX(e), startW: sidebarWidth };
+        const onMove = (ev) => {
+            if (!hDragRef.current.dragging) return;
+            const delta = getClientX(ev) - hDragRef.current.startX;
+            const next = Math.max(180, Math.min(hDragRef.current.startW + delta, window.innerWidth * 0.45));
+            setSidebarWidth(next);
+        };
+        const onUp = () => {
+            hDragRef.current.dragging = false;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        window.addEventListener('touchmove', onMove, { passive: false });
+        window.addEventListener('touchend', onUp);
+    };
+
+    // Mobile sidebar toggle
+    const [showSidebar, setShowSidebar] = useState(false);
+
     // Visual Builder state — lifted here so it survives mode switches
     const [builderServer, setBuilderServer] = useState('');
     const [builderSchema, setBuilderSchema] = useState('');
@@ -270,7 +326,7 @@ const QueryWorkbench = () => {
         if (isLoading && runQuery?.type) setIsLoading(false);
     }, [runQuery]);
 
-    const hasError = runQuery?.type === 'Error' || (runQuery?.msg && runQuery?.type !== 'Data');
+    const hasError = runQuery?.type === 'Error';
     useEffect(() => {
         if (hasError) setErrorModalOpen(true);
     }, [hasError]);
@@ -309,12 +365,12 @@ const QueryWorkbench = () => {
 
     const exportCSV = () => {
         if (!activeQuery.trim() || !server) return;
-        dispatch(CustomQueryActions.postRunQuery(true, getFormData(), () => {}, Urls.querybuilder_downloadQuery + '/csv'));
+        dispatch(CustomQueryActions.postRunQuery(false, getFormData(), () => {}, Urls.querybuilder_downloadQuery + '/csv'));
     };
 
     const exportExcel = () => {
         if (!activeQuery.trim() || !server) return;
-        dispatch(CustomQueryActions.postRunQuery(true, getFormData(), () => {}, Urls.querybuilder_downloadQuery + '/excel'));
+        dispatch(CustomQueryActions.postRunQuery(false, getFormData(), () => {}, Urls.querybuilder_downloadQuery + '/excel'));
     };
 
     const saveQuery = (name, overrideServer, overrideQuery, visibleTo = 'self') => {
@@ -343,31 +399,42 @@ const QueryWorkbench = () => {
         dispatch(RUN_QUERY({}));
     };
 
+    const TABLE_ROW_LIMIT = 1000;
+
     const hasResults = runQuery?.type === 'Data';
     const columns = runQuery?.columns || [];
-    const rows = runQuery?.data || [];
+    const allRows = runQuery?.data || [];
+    const rows = allRows.slice(0, TABLE_ROW_LIMIT);
+    const rowsClipped = allRows.length > TABLE_ROW_LIMIT;
     const canExecute = activeQuery.trim() && server;
 
     return (
         <>
         <div
-            className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
-            style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
+            className="flex flex-col p-2 gap-2 overflow-hidden"
+            style={{ height: 'calc(100vh - 4rem)', background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
         >
             {/* ── Header ── */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
+                {/* Mobile sidebar toggle */}
+                <button
+                    className="sm:hidden p-1.5 rounded-lg border border-slate-200 bg-white shadow-sm shrink-0"
+                    onClick={() => setShowSidebar(s => !s)}
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
                 <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shadow-md shrink-0"
                     style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                         <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
                     </svg>
                 </div>
-                <h1 className="text-xl font-bold text-slate-800 leading-tight">Query Workbench</h1>
+                <h1 className="text-base font-bold text-slate-800 leading-tight">Query Workbench</h1>
 
                 {/* Mode Switcher */}
-                <div className="ml-4 flex rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-white">
+                <div className="ml-2 sm:ml-4 flex rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-white">
                     {[{ key: 'sql', label: 'SQL Mode' }, { key: 'builder', label: 'Visual Builder' }].map(m => (
                         <button
                             key={m.key}
@@ -385,14 +452,31 @@ const QueryWorkbench = () => {
             </div>
 
             {/* ── Two-Panel Layout ── */}
-            <div className="flex-1 flex gap-5 overflow-hidden">
+            <div className="flex-1 flex overflow-hidden">
+
+                {/* Mobile overlay backdrop */}
+                {showSidebar && (
+                    <div className="sm:hidden fixed inset-0 bg-black/30 z-10" onClick={() => setShowSidebar(false)} />
+                )}
 
                 {/* ── Left: Saved Query Library ── */}
                 <div
-                    className="w-80 flex flex-col gap-3 rounded-xl backdrop-blur-md border border-white/60 shadow-lg p-4 shrink-0"
-                    style={{ background: 'rgba(255,255,255,0.5)' }}
+                    className={`flex-col gap-3 rounded-xl backdrop-blur-md border border-white/60 shadow-lg p-3 shrink-0
+                        ${showSidebar
+                            ? 'flex fixed left-2 top-16 w-[min(288px,90vw)] max-h-[70vh] z-20 overflow-y-auto sm:relative sm:inset-auto sm:w-auto sm:max-h-none sm:overflow-visible sm:flex'
+                            : 'hidden sm:flex'
+                        }`}
+                    style={{ ...(typeof window !== 'undefined' && window.innerWidth >= 640 ? { width: sidebarWidth } : {}), background: 'rgba(255,255,255,0.97)' }}
                 >
-                    <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2 mb-1">Saved Queries</h2>
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-1">
+                        <h2 className="text-sm font-semibold text-slate-800">Saved Queries</h2>
+                        <button
+                            className="sm:hidden p-1 rounded hover:bg-slate-100 text-slate-500"
+                            onClick={() => setShowSidebar(false)}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                    </div>
                     <input
                         type="text"
                         placeholder="Search queries..."
@@ -412,34 +496,44 @@ const QueryWorkbench = () => {
                     </div>
                 </div>
 
+                {/* ── Horizontal Resize Handle (desktop only) ── */}
+                <div
+                    onMouseDown={onSidebarDividerMouseDown}
+                    onTouchStart={onSidebarDividerMouseDown}
+                    className="hidden sm:flex items-center justify-center w-3 cursor-col-resize group shrink-0 select-none touch-none"
+                    title="Drag to resize"
+                >
+                    <div className="w-1 h-16 rounded-full bg-slate-300 group-hover:bg-blue-400 transition-colors" />
+                </div>
+
                 {/* ── Right: Composer ── */}
-                <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+                <div className="flex-1 flex flex-col gap-1 overflow-hidden">
 
                     {/* Editor / Builder Panel */}
                     <div
-                        className="p-4 rounded-xl backdrop-blur-md border border-white/60 shadow-lg shrink-0"
-                        style={{ background: 'rgba(255,255,255,0.7)' }}
+                        className="flex flex-col p-4 rounded-xl backdrop-blur-md border border-white/60 shadow-lg overflow-hidden"
+                        style={{ height: editorHeight, background: 'rgba(255,255,255,0.7)' }}
                     >
                         {mode === 'sql' ? (
                             <>
                                 {/* Controls row */}
-                                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                                <div className="flex items-start sm:items-center gap-2 sm:gap-3 mb-3 flex-wrap shrink-0">
                                     <label className="text-xs font-semibold text-slate-700 shrink-0">
                                         DB Server <span className="text-red-500">*</span>
                                     </label>
                                     <div className="flex flex-col gap-0.5">
                                         <select
                                             value={server}
-                                            onChange={(e) => setServer(e.target.value)}
-                                            className={`w-56 px-3 py-1.5 text-xs rounded shadow-inner focus:outline-none transition-colors ${
+                                            onChange={(e) => setServer(String(e.target.value))}
+                                            className={`w-full sm:w-56 px-3 py-1.5 text-xs rounded outline-none transition-colors ${
                                                 !server
-                                                    ? 'border-2 border-red-400 bg-red-50 focus:border-red-500'
+                                                    ? 'border-2 border-red-400 bg-red-50'
                                                     : 'border border-slate-200 bg-white focus:border-blue-400'
                                             }`}
                                         >
                                             <option value="">— Select a DB Server —</option>
                                             {databaseList.map((db) => (
-                                                <option key={db.value} value={db.value}>{db.label}</option>
+                                                <option key={db.value} value={String(db.value)}>{db.label}</option>
                                             ))}
                                         </select>
                                         {!server && (
@@ -455,14 +549,14 @@ const QueryWorkbench = () => {
                                     onDrop={handleDrop}
                                     onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                                     onDragLeave={() => setIsDragOver(false)}
-                                    className="relative border-2 rounded-lg bg-white shadow-inner p-1 group transition-colors"
+                                    className="relative flex-1 min-h-0 border-2 rounded-lg bg-white shadow-inner p-1 group transition-colors"
                                     style={{ borderColor: isDragOver ? '#EC7D09' : '#e2e8f0', borderStyle: 'dashed' }}
                                 >
                                     <textarea
                                         value={activeQuery}
                                         onChange={(e) => setActiveQuery(e.target.value)}
                                         placeholder="Drag a saved query here or start writing..."
-                                        className="w-full h-40 px-3 py-2 font-mono text-xs border-0 focus:ring-0 focus:outline-none placeholder:text-slate-300 placeholder:italic resize-none"
+                                        className="w-full h-full px-3 py-2 font-mono text-xs border-0 focus:ring-0 focus:outline-none placeholder:text-slate-300 placeholder:italic resize-none"
                                     />
                                     {!activeQuery && (
                                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:bg-slate-50/50 transition-colors">
@@ -472,7 +566,7 @@ const QueryWorkbench = () => {
                                 </div>
 
                                 {/* Bottom action buttons */}
-                                <div className="flex justify-end items-center gap-3 mt-3 pt-3 border-t border-slate-100">
+                                <div className="flex justify-end items-center gap-3 mt-2 pt-1 border-t border-slate-100 shrink-0">
                                     {activeQuery.trim() && !server && (
                                         <p className="text-xs text-red-500 font-semibold mr-auto">
                                             ↑ Select a DB Server to run this query
@@ -509,6 +603,7 @@ const QueryWorkbench = () => {
                                 setSelectedTable={setSelectedTable}
                                 conditions={builderConditions}
                                 setConditions={setBuilderConditions}
+                                isLoading={isLoading}
                                 onGenerateQuery={(q, srv) => {
                                     setActiveQuery(q);
                                     if (srv) setServer(String(srv));
@@ -518,7 +613,6 @@ const QueryWorkbench = () => {
                                     setActiveQuery(q);
                                     const effectiveServer = srv || server;
                                     if (effectiveServer) setServer(String(effectiveServer));
-                                    // stay in Visual Builder — results panel shows below regardless of mode
                                     if (effectiveServer && q.trim()) {
                                         setIsLoading(true);
                                         dispatch(CustomQueryActions.postRunQuery(true, { dbServer: effectiveServer, queries: q }, () => {}, Urls.querybuilder_runQuery));
@@ -529,17 +623,39 @@ const QueryWorkbench = () => {
                         )}
                     </div>
 
-                    {/* ── Results Panel ── */}
+                    {/* ── Resize Divider + Row Count ── */}
+                    <div
+                        onMouseDown={onDividerMouseDown}
+                        onTouchStart={onDividerMouseDown}
+                        className="flex items-center h-4 cursor-row-resize group shrink-0 select-none px-1 touch-none"
+                        title="Drag to resize"
+                    >
+                        <div className="flex-1" />
+                        <div className="w-16 h-1 rounded-full bg-slate-300 group-hover:bg-blue-400 transition-colors" />
+                        <div className="flex-1 flex justify-end">
+                            {hasResults && (rowsClipped
+                                ? <span className="text-[11px] text-amber-700 font-medium">Showing 1,000 of {allRows.length.toLocaleString()} rows</span>
+                                : <span className="text-[11px] text-slate-500">{allRows.length.toLocaleString()} row{allRows.length !== 1 ? 's' : ''} returned</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ── Results Panel (or empty placeholder to hold layout) ── */}
+                    <div
+                        className="flex-1 overflow-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0"
+                        style={{ background: 'rgba(255,255,255,0.6)' }}
+                    >
+                    {!hasResults && (
+                        <div className="flex items-center justify-center h-full text-slate-400 text-sm select-none">
+                            Run a query to see results
+                        </div>
+                    )}
                     {hasResults && (
-                        <div
-                            className="flex-1 overflow-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0"
-                            style={{ background: 'rgba(255,255,255,0.6)' }}
-                        >
                             <table className="min-w-full text-left text-sm">
                                 <thead className="sticky top-0" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
                                     <tr>
                                         {columns.map(col => (
-                                            <th key={col} className="px-4 py-3 text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">{col}</th>
+                                            <th key={col} className="px-4 py-2 text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">{col}</th>
                                         ))}
                                     </tr>
                                 </thead>
@@ -553,14 +669,14 @@ const QueryWorkbench = () => {
                                             onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
                                         >
                                             {columns.map(col => (
-                                                <td key={col} className="px-4 py-3 text-xs whitespace-nowrap">{row[col] ?? '—'}</td>
+                                                <td key={col} className="px-4 py-1.5 text-xs whitespace-nowrap">{row[col] ?? '—'}</td>
                                             ))}
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
-                        </div>
-                    )}
+                        )}
+                     </div>
                 </div>
             </div>
         </div>
@@ -616,6 +732,7 @@ const VisualBuilder = ({
     builderSchema, setBuilderSchema,
     selectedTable, setSelectedTable,
     conditions, setConditions,
+    isLoading,
     onGenerateQuery, onGenerateAndRun, onSave,
 }) => {
     const databaseList = useSelector(s => s?.customQuery?.databaseList || []);
@@ -644,9 +761,9 @@ const VisualBuilder = ({
     };
 
     return (
-        <div className="flex gap-4" style={{ minHeight: 300, maxHeight: 380 }}>
+        <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
             {/* Tables list */}
-            <div className="w-52 shrink-0 flex flex-col gap-2 overflow-y-auto">
+            <div className="w-48 shrink-0 flex flex-col gap-2">
                 <label className="text-xs font-medium text-slate-600">Server</label>
                 <select
                     value={builderServer}
@@ -659,7 +776,7 @@ const VisualBuilder = ({
                     className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded bg-white shadow-inner focus:outline-none"
                 >
                     <option value="">Select Server</option>
-                    {databaseList.map(db => <option key={db.value} value={db.value}>{db.label}</option>)}
+                    {databaseList.map(db => <option key={db.value} value={String(db.value)}>{db.label}</option>)}
                 </select>
 
                 {dboList.length > 0 && (
@@ -680,30 +797,25 @@ const VisualBuilder = ({
                     </>
                 )}
 
-                <p className="text-xs font-medium text-slate-600 mt-1">Tables</p>
-                {tables.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">
-                        {!builderServer ? 'Select a server.' : !builderSchema ? 'Select a schema.' : 'No tables found.'}
-                    </p>
-                ) : tables.map(t => (
-                    <button
-                        key={t.name}
-                        onClick={() => setSelectedTable(t.name)}
-                        className="text-left px-3 py-2 rounded-lg border text-xs font-semibold transition-all"
-                        style={{
-                            background: selectedTable === t.name ? 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' : 'white',
-                            borderColor: selectedTable === t.name ? 'transparent' : '#e2e8f0',
-                            color: selectedTable === t.name ? 'white' : '#374151',
-                        }}
-                    >
-                        {t.name}
-                    </button>
-                ))}
+                <label className="text-xs font-medium text-slate-600 mt-1">Tables</label>
+                <select
+                    value={selectedTable || ''}
+                    onChange={e => setSelectedTable(e.target.value || null)}
+                    disabled={tables.length === 0}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded bg-white shadow-inner focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                    <option value="">
+                        {!builderServer ? 'Select a server first' : !builderSchema ? 'Select a schema first' : tables.length === 0 ? 'No tables found' : 'Select Table'}
+                    </option>
+                    {tables.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                </select>
             </div>
 
             {/* Conditions + preview */}
-            <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
-                <p className="text-xs font-medium text-slate-600">WHERE Conditions</p>
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <p className="text-xs font-medium text-slate-600 shrink-0 pb-1 border-b border-slate-100">WHERE Conditions</p>
+                {/* scrollable area */}
+                <div className="flex-1 overflow-y-auto flex flex-col gap-2 min-h-0 pr-1 pt-2">
 
                 {conditions.map((cond, i) => (
                     <div key={i} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
@@ -736,13 +848,15 @@ const VisualBuilder = ({
                 </button>
 
                 {selectedTable && (
-                    <div className="mt-1 rounded-lg overflow-hidden border border-slate-200 bg-slate-900">
-                        <p className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">Preview</p>
-                        <pre className="px-3 pb-2 text-xs font-mono text-green-400 whitespace-pre-wrap">{buildQuery()}</pre>
+                    <div className="mt-1 rounded-lg border border-slate-200 bg-slate-900 flex flex-col max-h-40 shrink-0">
+                        <p className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400 shrink-0 border-b border-slate-700">Preview</p>
+                        <pre className="px-3 py-2 text-xs font-mono text-green-400 whitespace-pre-wrap overflow-auto">{buildQuery()}</pre>
                     </div>
                 )}
+                </div>{/* end scrollable area */}
 
-                <div className="flex gap-3 pt-3 border-t border-slate-100 mt-auto">
+                {/* pinned buttons */}
+                <div className="flex gap-3 pt-3 border-t border-slate-100 shrink-0">
                     <button
                         onClick={() => onGenerateQuery(buildQuery(), builderServer)}
                         disabled={!selectedTable}
@@ -752,18 +866,21 @@ const VisualBuilder = ({
                     </button>
                     <button
                         onClick={() => onGenerateAndRun(buildQuery(), builderServer)}
-                        disabled={!selectedTable}
-                        className="px-5 py-2 text-sm font-semibold rounded text-white shadow-sm hover:opacity-90 transition-opacity disabled:opacity-40"
+                        disabled={!selectedTable || isLoading}
+                        className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded text-white shadow-sm hover:opacity-90 transition-opacity disabled:opacity-40"
                         style={{ background: '#EC7D09' }}
                     >
-                        Generate &amp; Run
+                        {isLoading && (
+                            <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                        )}
+                        {isLoading ? 'Running…' : 'Generate & Run'}
                     </button>
                     <SaveQueryPopover
                         disabled={!selectedTable || !builderServer}
                         onSave={(name, visibleTo) => onSave(name, builderServer, buildQuery(), visibleTo)}
                     />
                 </div>
-            </div>
+            </div>{/* end conditions panel */}
         </div>
     );
 };

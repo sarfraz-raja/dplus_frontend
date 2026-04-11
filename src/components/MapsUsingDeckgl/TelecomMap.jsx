@@ -24,7 +24,7 @@ import { ALERTS } from '../../store/reducers/component-reducer';
 import { FIXED_COLORS, getDriveTestColor } from "./Utils/colorEngine";
 import LegendBox from "./LegendBox";
 import LegendBoxV2 from "./LegendBoxV2";
-import { Check, Compass, Copy, Focus, Maximize, Minus, Plus, Ruler, Settings, X } from "lucide-react";
+import { Check, Compass, Copy, MapPin, Maximize, Minus, Plus, Ruler, Settings, X } from "lucide-react";
 import {
   buildDraftMeasurement,
   buildDraftMeasurementLineCollection,
@@ -2223,6 +2223,10 @@ const siteLayer = useMemo(() => {
   // Handle Closing of Legends
   const handleLegendClose = (layer) => {
     dispatch(MapActions.setLayerLegend(layer, false));
+    const updatedLegends = { ...layerLegends, [layer]: false };
+    dispatch(AuthActions.setupConf(true, {
+      saveLayerLegends: JSON.stringify(updatedLegends),
+    }, () => {}));
   };
 
   /* Previously: `widgets={[new CompassWidget({ placement: "top-right" })]}` — replaced by Datayog compass UI below. */
@@ -2823,7 +2827,7 @@ const siteLayer = useMemo(() => {
             onClick={fitToData}
             className={`${GIS_TRAY_BTN_CLASS} ${rawCells?.length ? "" : "pointer-events-none opacity-60"}`}
           >
-            <Focus className="h-5 w-5" aria-hidden />
+            <MapPin className="h-5 w-5" aria-hidden />
           </button>
 
           <TelecomMapStyleRightControl

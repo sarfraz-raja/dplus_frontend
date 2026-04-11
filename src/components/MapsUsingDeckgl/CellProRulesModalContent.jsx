@@ -79,37 +79,32 @@ const CellProRulesModalContent = ({ cellId, cellName }) => {
   const displayName = cellName || cellId || 'N/A';
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-2 h-full">
 
-      {/* Row 1: Cell Name */}
-      <div>
-        <label className="block text-xs text-slate-500 uppercase tracking-wide mb-1">Cell Name</label>
-        <input
-          value={displayName}
-          readOnly
-          className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-slate-50 font-medium text-slate-800"
-        />
-      </div>
-
-      {/* Row 2: Technology + Date + Submit */}
-      <div className="flex gap-3">
-        <div className="flex-1">
-          <label className="block text-xs text-slate-500 uppercase tracking-wide mb-1">Technology</label>
-          <input value={techFromData} readOnly className="w-full border border-slate-200 rounded px-3 py-2 text-sm bg-slate-50 text-slate-600 font-semibold text-center" />
+      {/* Row 1: Cell Name | Date | Submit */}
+      <div className="flex gap-2 items-stretch">
+        <div className="flex-[3] flex flex-col">
+          <label className="block text-[9px] text-slate-400 uppercase tracking-wide mb-0.5">Cell Name</label>
+          <input
+            value={displayName}
+            readOnly
+            className="flex-1 w-full border border-slate-300 rounded px-2 py-0 text-xs bg-slate-50 font-medium text-slate-800 h-7"
+          />
         </div>
-        <div className="flex-[2]">
-          <label className="block text-xs text-slate-500 uppercase tracking-wide mb-1">Date</label>
+        <div className="flex-[2] flex flex-col">
+          <label className="block text-[9px] text-slate-400 uppercase tracking-wide mb-0.5">Date</label>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
+            className="flex-1 w-full border border-slate-300 rounded px-2 py-0 text-xs h-7"
           />
         </div>
-        <div className="flex items-end">
+        <div className="flex flex-col">
+          <label className="block text-[9px] text-transparent uppercase tracking-wide mb-0.5">-</label>
           <button
             onClick={() => fetchCellProRules(date)}
-            className="px-5 py-2 text-white text-sm rounded font-semibold"
+            className="px-3 text-white text-xs rounded font-semibold h-7"
             style={{ background: '#1f2937' }}
           >
             Submit
@@ -117,33 +112,31 @@ const CellProRulesModalContent = ({ cellId, cellName }) => {
         </div>
       </div>
 
-      {/* Stat cards */}
+      {/* Row 2: Stat cards */}
       <div className="grid grid-cols-5 gap-2">
         {[
-          { label: 'Rules OK',     value: ok,            color: '#16a34a' },
-          { label: 'Issues',       value: issues,        color: '#dc2626' },
-          { label: 'Warnings',     value: warnings,      color: '#d97706' },
-          { label: 'Total rules',  value: total,         color: '#1e293b' },
-          { label: 'Health score', value: `${health}%`,  color: '#4f46e5' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="border rounded p-2 text-center bg-white shadow-sm">
-            <div style={{ color }} className="text-xl font-bold leading-tight">{value}</div>
-            <div className="text-[11px] text-slate-400 uppercase mt-1 leading-tight">{label}</div>
+          { label: 'Rules OK',     value: ok,           color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+          { label: 'Issues',       value: issues,        color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+          { label: 'Warnings',     value: warnings,      color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+          { label: 'Total Rules',  value: total,         color: '#1e293b', bg: '#f8fafc', border: '#e2e8f0' },
+          { label: 'Health',       value: `${health}%`,  color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe' },
+        ].map(({ label, value, color, bg, border }) => (
+          <div key={label} className="rounded-lg p-2 text-center flex flex-col items-center justify-center gap-0.5"
+            style={{ background: bg, border: `1.5px solid ${border}` }}>
+            <span style={{ color }} className="text-lg font-bold leading-none">{value}</span>
+            <span className="text-[10px] uppercase leading-none font-medium" style={{ color }}>{label}</span>
           </div>
         ))}
       </div>
 
-      {/* Separator */}
-      <hr className="border-slate-200" />
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-slate-500 font-semibold mr-1">Filter:</span>
+      {/* Row 3: Filters */}
+      <div className="flex items-center gap-1">
+        <span className="text-[9px] text-slate-400 font-semibold uppercase mr-1 shrink-0">Filter:</span>
         {FILTERS.map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className="py-1 px-2.5 text-xs rounded border transition-colors"
+            className="py-0.5 px-1.5 text-[10px] rounded border transition-colors whitespace-nowrap"
             style={filter === f
               ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
               : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }}
