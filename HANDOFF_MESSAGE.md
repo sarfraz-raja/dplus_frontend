@@ -133,4 +133,4 @@ npm run dev          # Dev server should start on :5173
 
 ---
 
-**Prepared by Zeno AI · www.kalpitevolution.com**
+**— End of Handoff —**
