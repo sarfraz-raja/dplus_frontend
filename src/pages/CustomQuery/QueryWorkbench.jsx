@@ -475,6 +475,7 @@ const QueryWorkbench = () => {
         return `${noLimit} LIMIT ${limit}${hasSemicolon ? ';' : ''}`;
     };
 
+    
     const getFormData = (limit) => {
         const finalQuery = appendLimit(
             quotePostgresIdentifiers(applyDatetimeParams(activeQuery)),
