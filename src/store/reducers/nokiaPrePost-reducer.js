@@ -7,8 +7,9 @@ const initialState = {
     proRulesOutput: [],
     cellproRulesOutput:[],
     uniqueCellId:[],
-    networkAnalyticsPro:{},
-    networkAnalyticsProSorter:{}
+    networkAnalyticsPro:[],
+    networkAnalyticsProSorter:{},
+    showCols:[]
 }
 
 const nokiaPrePost = createSlice({
@@ -69,13 +70,21 @@ const nokiaPrePost = createSlice({
                 state.uniqueCellId = [...state.uniqueCellId, ...payload.dataAll];
             }
         },
+        // GET_NETWORK_ANALYTICS_PRO: (state, { payload }) => {
+        //     if(payload.reset){
+        //         state.networkAnalyticsPro = payload.dataAll
+        //     }else{
+        //         state.networkAnalyticsPro = [...state.networkAnalyticsPro, ...payload.dataAll];
+        //     }
+        // },
         GET_NETWORK_ANALYTICS_PRO: (state, { payload }) => {
-            if(payload.reset){
-                state.networkAnalyticsPro = payload.dataAll
-            }else{
-                state.networkAnalyticsPro = [...state.networkAnalyticsPro, ...payload.dataAll];
-            }
-        },
+    if(payload.reset){
+        state.networkAnalyticsPro = payload.dataAll;
+    } else {
+        // This only works if state.networkAnalyticsPro is an array
+        state.networkAnalyticsPro = [...state.networkAnalyticsPro, ...payload.dataAll];
+    }
+},
         GET_NETWORK_ANALYTICS_PRO_SORTER: (state, { payload }) => {
             if(payload.reset){
                 state.networkAnalyticsProSorter = payload.dataSorter
@@ -83,7 +92,6 @@ const nokiaPrePost = createSlice({
                 state.networkAnalyticsProSorter = {...state.networkAnalyticsProSorter, ...payload.dataSorter};
             }
         },
-
         
         GET_NETWORK_ANALYTICS_SHOW_COLS: (state, { payload }) => {
             if(payload.reset){
@@ -96,7 +104,6 @@ const nokiaPrePost = createSlice({
         RESET_STATE: (state) => {
             state.databaseList = [];
             state.tableList = {};
-            generatedSqlQuery:{}
         }
     }
 })

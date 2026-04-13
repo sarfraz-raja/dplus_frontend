@@ -241,6 +241,14 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
 
     }, [techMeta, regions]);
 
+    // Only push config to parent after all init effects settle (setTimeout fires after every
+    // React effect — including secondary siteScale re-sync — completes for this mount).
+    const initDone = useRef(false);
+    useEffect(() => {
+        const t = setTimeout(() => { initDone.current = true; }, 0);
+        return () => clearTimeout(t);
+    }, []);
+
     const hasInitialized = useRef(false);
 
     useEffect(() => {
@@ -443,6 +451,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
     useEffect(() => {
 
         if (!setSiteThematicsConfig) return;
+        if (!initDone.current) return;
 
         const payload = {
             type: tempType,

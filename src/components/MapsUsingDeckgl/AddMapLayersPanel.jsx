@@ -1569,6 +1569,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     const [isDirty, setIsDirty] = useState(false);
     const markDirty = () => setIsDirty(true);
 
+
     const hasAppliedLayers = !!(
         layerVisibility.CELLS || layerVisibility.SITES || layerVisibility.BOUNDARY ||
         layerVisibility.RF || layerVisibility.DRIVE_TEST
@@ -1632,27 +1633,15 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         });
     }, [layerLegends]);
 
-    // Auto-sync legends with layer selection state
+    // Auto-hide legend when layer is turned OFF (never auto-enable — respects manual legend close)
     useEffect(() => {
-        setPendingLegends(prev => ({ ...prev, CELLS: pendingVisibility.CELLS || false }));
+        if (!pendingVisibility.CELLS) setPendingLegends(prev => ({ ...prev, CELLS: false }));
     }, [pendingVisibility.CELLS]);
 
     useEffect(() => {
-        setPendingLegends(prev => ({ ...prev, SITES: pendingVisibility.SITES || false }));
+        if (!pendingVisibility.SITES) setPendingLegends(prev => ({ ...prev, SITES: false }));
     }, [pendingVisibility.SITES]);
 
-    useEffect(() => {
-        const any = boundaryGroups.some(g => (pendingBoundarySelections[g.shapegroup] || []).length > 0);
-        setPendingLegends(prev => ({ ...prev, BOUNDARY: any }));
-    }, [pendingBoundarySelections]);
-
-    useEffect(() => {
-        setPendingLegends(prev => ({ ...prev, RF: pendingRfRegions.length > 0 }));
-    }, [pendingRfRegions]);
-
-    useEffect(() => {
-        setPendingLegends(prev => ({ ...prev, DRIVE_TEST: selectedDriveSessions.length > 0 }));
-    }, [selectedDriveSessions]);
 
     // SYNC Redux colors to local state when they change
     useEffect(() => {
@@ -2097,9 +2086,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
                     <SiteThematicsPanel
                         setSiteThematicsConfig={setSiteThematicsConfig}
                         tempLegend={pendingLegends.SITES}
-                        setTempLegend={(val) =>
-                            setPendingLegends(prev => ({ ...prev, SITES: val }))
-                        }
+                        setTempLegend={(val) => { setPendingLegends(prev => ({ ...prev, SITES: val })); markDirty(); }}
                         layerEnabled={pendingVisibility.SITES}
                     />                    
                     </div>
@@ -2129,9 +2116,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
                         <CellThematicsPanel
                             setCellThematicsConfig={setCellThematicsConfig}
                             tempLegend={pendingLegends.CELLS}
-                            setTempLegend={(val) =>
-                                setPendingLegends(prev => ({ ...prev, CELLS: val }))
-                            }
+                            setTempLegend={(val) => { setPendingLegends(prev => ({ ...prev, CELLS: val })); markDirty(); }}
                             layerEnabled={pendingVisibility.CELLS}
                         />
                     </div>

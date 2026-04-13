@@ -31,7 +31,6 @@ const AddMapLayersPanelFloatingLayout = ({
   toggleFloatingSection,
   clearActiveLayerSectionDraft,
   applySelectedMapLayers,
-  resetAllPendingChanges,
   clearAllMapLayers,
   isDirty,
   markDirty,
@@ -212,18 +211,11 @@ const AddMapLayersPanelFloatingLayout = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (allBoundariesSelected) {
-                        const cleared = {};
-                        boundaryGroups.forEach((g) => { cleared[g.shapegroup] = []; });
-                        setPendingBoundarySelections((prev) => ({ ...prev, ...cleared }));
-                        boundaryGroups.forEach((g) => setPendingVisibility((prev) => ({ ...prev, [g.shapegroup]: false })));
-                      } else {
-                        const all = {};
-                        boundaryGroups.forEach((g) => { all[g.shapegroup] = g.shapenames || []; });
-                        setPendingBoundarySelections((prev) => ({ ...prev, ...all }));
-                        boundaryGroups.forEach((g) => setPendingVisibility((prev) => ({ ...prev, [g.shapegroup]: true })));
-                        if (!anyBoundarySelected) setActiveLayerSection("BOUNDARY");
-                      }
+                      if (!anyBoundarySelected) return;
+                      const cleared = {};
+                      boundaryGroups.forEach((g) => { cleared[g.shapegroup] = []; });
+                      setPendingBoundarySelections((prev) => ({ ...prev, ...cleared }));
+                      boundaryGroups.forEach((g) => setPendingVisibility((prev) => ({ ...prev, [g.shapegroup]: false })));
                       markDirty();
                     }}
                     className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors self-center"
@@ -251,7 +243,7 @@ const AddMapLayersPanelFloatingLayout = ({
                     >
                       Boundaries
                     </span>
-                    <Settings className="h-2 w-2 shrink-0 text-white/70" aria-hidden />
+                    <Settings className="h-2 w-2 shrink-0 text-white" aria-hidden />
                   </button>
                 </div>
                 <button
@@ -277,14 +269,9 @@ const AddMapLayersPanelFloatingLayout = ({
                 <button
                     type="button"
                     onClick={() => {
-                      if (allRfSelected) {
-                        setPendingVisibility((prev) => ({ ...prev, RF: false }));
-                        setPendingRfRegions([]);
-                      } else {
-                        setPendingVisibility((prev) => ({ ...prev, RF: true }));
-                        setPendingRfRegions([...rfRegions]);
-                        if (!anyRfSelected) setActiveLayerSection("RF");
-                      }
+                      if (!anyRfSelected) return;
+                      setPendingVisibility((prev) => ({ ...prev, RF: false }));
+                      setPendingRfRegions([]);
                       markDirty();
                     }}
                     className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors self-center"
@@ -312,7 +299,7 @@ const AddMapLayersPanelFloatingLayout = ({
                   >
                     RF predictions
                   </span>
-                  <Settings className="h-2 w-2 shrink-0 text-white/35" aria-hidden />
+                  <Settings className="h-2 w-2 shrink-0 text-white" aria-hidden />
                 </button>
               </div>
               <button
@@ -337,14 +324,9 @@ const AddMapLayersPanelFloatingLayout = ({
                 <button
                     type="button"
                     onClick={() => {
-                      if (allDriveSelected) {
-                        setPendingVisibility((prev) => ({ ...prev, DRIVE_TEST: false }));
-                        setSelectedDriveSessions([]);
-                      } else {
-                        setPendingVisibility((prev) => ({ ...prev, DRIVE_TEST: true }));
-                        setSelectedDriveSessions([...sessionIds]);
-                        if (!anyDriveSelected) setActiveLayerSection("DRIVE_TEST");
-                      }
+                      if (!anyDriveSelected) return;
+                      setPendingVisibility((prev) => ({ ...prev, DRIVE_TEST: false }));
+                      setSelectedDriveSessions([]);
                       markDirty();
                     }}
                     className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors self-center"
@@ -372,7 +354,7 @@ const AddMapLayersPanelFloatingLayout = ({
                   >
                     Drive test
                   </span>
-                  <Settings className="h-2 w-2 shrink-0 text-white/35" aria-hidden />
+                  <Settings className="h-2 w-2 shrink-0 text-white" aria-hidden />
                 </button>
               </div>
               <button
@@ -390,26 +372,15 @@ const AddMapLayersPanelFloatingLayout = ({
             </div>
           </div>
 
-          {/* ── Revert / Clear / Apply rail buttons ── */}
-          <div className="mt-1 flex gap-1">
-            <button
-              type="button"
-              onClick={resetAllPendingChanges}
-              disabled={!isDirty}
-              title="Revert unsaved changes"
-              className={`flex-1 rounded-lg border-0 px-1.5 py-1 text-[8px] font-semibold uppercase tracking-wider text-white transition-colors ${
-                isDirty ? "bg-[#F26522] hover:bg-[#d95f1a]" : "cursor-not-allowed bg-[#b1b1b1]"
-              }`}
-            >
-              Revert
-            </button>
+          {/* ── Clear / Apply rail buttons ── */}
+          <div className="mt-1 flex gap-1.5">
             <button
               type="button"
               onClick={clearAllMapLayers}
               disabled={!hasAppliedLayers}
               title="Clear all layers from map"
-              className={`flex-1 rounded-lg border-0 px-1.5 py-1 text-[8px] font-semibold uppercase tracking-wider text-white transition-colors ${
-                hasAppliedLayers ? "bg-[#F26522] hover:bg-[#d95f1a]" : "cursor-not-allowed bg-[#b1b1b1]"
+              className={`flex-1 rounded-lg border-0 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white transition-colors ${
+                hasAppliedLayers ? "bg-[#F26522] hover:bg-[#d95f1a]" : "cursor-not-allowed bg-[#989898]"
               }`}
             >
               Clear
@@ -419,8 +390,8 @@ const AddMapLayersPanelFloatingLayout = ({
               onClick={applySelectedMapLayers}
               disabled={!isDirty}
               title="Apply pending changes to map"
-              className={`flex-1 rounded-lg border-0 px-1.5 py-1 text-[8px] font-semibold uppercase tracking-wider text-white transition-colors ${
-                isDirty ? "bg-[#F26522] hover:bg-[#d95f1a]" : "cursor-not-allowed bg-[#b1b1b1]"
+              className={`flex-1 rounded-lg border-0 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white transition-colors ${
+                isDirty ? "bg-[#F26522] hover:bg-[#d95f1a]" : "cursor-not-allowed bg-[#989898]"
               }`}
             >
               Apply
@@ -430,7 +401,7 @@ const AddMapLayersPanelFloatingLayout = ({
 
         {/* ── RIGHT DETAIL PANEL ── */}
         {activeLayerSection ? (
-          <div className="min-w-0 flex-1">
+          <div className="w-[min(56vw,220px)] shrink-0">
             <div className="flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[#27365C] bg-[linear-gradient(180deg,#0C1931_0%,#0B1730_100%)] shadow-[0_16px_32px_rgba(3,8,24,0.4)]">
               {/* Panel header — title + close only */}
               <div className="flex h-7 shrink-0 items-center justify-between gap-2 border-b border-[#27365C]/90 px-2">
@@ -453,7 +424,7 @@ const AddMapLayersPanelFloatingLayout = ({
                   <SiteThematicsPanel
                     setSiteThematicsConfig={setSiteThematicsConfig}
                     tempLegend={pendingLegends.SITES}
-                    setTempLegend={(val) => setPendingLegends((prev) => ({ ...prev, SITES: val }))}
+                    setTempLegend={(val) => { setPendingLegends((prev) => ({ ...prev, SITES: val })); markDirty(); }}
                   />
                 </div>
               ) : null}
@@ -463,7 +434,7 @@ const AddMapLayersPanelFloatingLayout = ({
                   <CellThematicsPanel
                     setCellThematicsConfig={setCellThematicsConfig}
                     tempLegend={pendingLegends.CELLS}
-                    setTempLegend={(val) => setPendingLegends((prev) => ({ ...prev, CELLS: val }))}
+                    setTempLegend={(val) => { setPendingLegends((prev) => ({ ...prev, CELLS: val })); markDirty(); }}
                   />
                 </div>
               ) : null}
@@ -475,12 +446,10 @@ const AddMapLayersPanelFloatingLayout = ({
                     <input
                       type="checkbox"
                       checked={!!pendingLegends.BOUNDARY}
-                      onChange={(e) =>
-                        setPendingLegends((prev) => ({
-                          ...prev,
-                          BOUNDARY: e.target.checked,
-                        }))
-                      }
+                      onChange={(e) => {
+                        setPendingLegends((prev) => ({ ...prev, BOUNDARY: e.target.checked }));
+                        markDirty();
+                      }}
                     />
                   </div>
                   <OpacitySlider
@@ -546,12 +515,10 @@ const AddMapLayersPanelFloatingLayout = ({
                     <input
                       type="checkbox"
                       checked={!!pendingLegends.RF}
-                      onChange={(e) =>
-                        setPendingLegends((prev) => ({
-                          ...prev,
-                          RF: e.target.checked,
-                        }))
-                      }
+                      onChange={(e) => {
+                        setPendingLegends((prev) => ({ ...prev, RF: e.target.checked }));
+                        markDirty();
+                      }}
                     />
                   </div>
                   <OpacitySlider
@@ -613,12 +580,10 @@ const AddMapLayersPanelFloatingLayout = ({
                     <input
                       type="checkbox"
                       checked={!!pendingLegends.DRIVE_TEST}
-                      onChange={(e) =>
-                        setPendingLegends((prev) => ({
-                          ...prev,
-                          DRIVE_TEST: e.target.checked,
-                        }))
-                      }
+                      onChange={(e) => {
+                        setPendingLegends((prev) => ({ ...prev, DRIVE_TEST: e.target.checked }));
+                        markDirty();
+                      }}
                     />
                   </div>
                   <OpacitySlider

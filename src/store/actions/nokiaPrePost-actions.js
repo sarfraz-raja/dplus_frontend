@@ -189,6 +189,8 @@ const nokiaPrePostActions = {
             let dataSorter=res.data.sorter
             let showCols=res.data.showCols
 
+            console.log(dataAll,"dataAlldataAll")
+            console.log(showCols,"showColsshowCols")
             console.log(dataSorter,"dataSorterdataSorter")
             dispatch(GET_NETWORK_ANALYTICS_PRO({dataAll,reset}))
             dispatch(GET_NETWORK_ANALYTICS_PRO_SORTER({dataSorter,reset}))
