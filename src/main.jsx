@@ -10,21 +10,21 @@ if (typeof window !== 'undefined') {
   window.Swal = Swal
 }
 
-import 'mapbox-gl/dist/mapbox-gl.css'
-
-import "maplibre-gl/dist/maplibre-gl.css";
-import '@deck.gl/widgets/stylesheet.css';
+/* Map CSS moved to their lazy-loaded components to avoid loading ~200KB CSS on every page */
 
 import { BrowserRouter } from 'react-router-dom'  
 import { Provider } from 'react-redux'
 import store from './store'
-import * as Unicons from '@iconscout/react-unicons';
+/* Unicons imported per-component via named imports for tree-shaking */
+import { ThemeProvider } from './context/ThemeContext.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   // <React.StrictMode>
     <Provider store={store}>
       <BrowserRouter basename='/'>
-        <App />
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
       </BrowserRouter>
     </Provider>
   // </React.StrictMode>,

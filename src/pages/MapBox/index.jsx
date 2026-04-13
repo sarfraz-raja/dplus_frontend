@@ -1025,6 +1025,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 // import ReactMapGL, { Layer, Source } from 'react-map-gl';
 import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import { useDispatch, useSelector } from 'react-redux';
 import MapActions from '../../store/actions/map-actions';
 import MapFilters from '../../components/MapComponents/MapFilters';

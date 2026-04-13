@@ -462,9 +462,10 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
       />
 
       <aside
+        data-dy3-sidebar
         className={`
           fixed bottom-0 left-0 top-[78px] z-[35] h-[calc(100vh-78px)] overflow-hidden
-          bg-[linear-gradient(180deg,#09001A_0%,#0A1240_38%,#071224_100%)] text-[#ffffff]
+          border-r border-slate-200 text-slate-800 dark:border-r-0 dark:text-white
           w-[290px] transition-transform duration-300 ease-in-out
           ${mobileVisible ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           lg:absolute lg:inset-y-0 lg:left-0 lg:z-30 lg:h-full lg:rounded-none
@@ -486,18 +487,18 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                     isExpanded ? 'justify-start gap-3 px-3 py-3 ml-2 mr-3' : 'justify-center px-2 py-3 ml-2 mr-3'
                   } ${
                     activeItem === 'Dashboard'
-                      ? 'border-[#F26522]/40 bg-[rgba(43,19,37,0.88)] text-[#ffffff] shadow-[inset_0_0_0_1px_rgba(242,101,34,0.1)]'
-                      : 'border-transparent text-[#ffffff] hover:border-white/10 hover:bg-white/5'
+                      ? 'border-[#F26522]/40 bg-orange-50 text-slate-900 shadow-[inset_0_0_0_1px_rgba(242,101,34,0.12)] dark:bg-[rgba(43,19,37,0.88)] dark:text-[#ffffff] dark:shadow-[inset_0_0_0_1px_rgba(242,101,34,0.1)]'
+                      : 'border-transparent text-slate-800 hover:border-[#F26522]/20 hover:bg-[#F26522]/5 dark:text-white dark:hover:border-white/10 dark:hover:bg-white/5'
                   }`}
                 >
                   <LayoutDashboard
                     className={`h-5 w-5 shrink-0 transition-all duration-200 ${
-                      activeItem === 'Dashboard' ? 'text-[#F26522]' : 'text-[#ffffff] group-hover:text-[#F26522]'
+                      activeItem === 'Dashboard' ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
                     }`}
                   />
                   {isExpanded ? (
                     <span
-                      className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-[#ffffff] ${
+                      className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-slate-800 dark:text-white ${
                         activeItem === 'Dashboard' ? 'font-bold' : 'font-medium'
                       }`}
                     >
@@ -526,21 +527,21 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                           ${isExpanded ? 'justify-start gap-3 px-3 py-3 ml-2 mr-3' : 'justify-center px-2 py-3 ml-2 mr-3'}
                           ${
                             isActive
-                              ? 'border-[#F26522]/40 bg-[rgba(43,19,37,0.88)] text-[#ffffff] shadow-[inset_0_0_0_1px_rgba(242,101,34,0.1)]'
-                              : 'border-transparent text-[#ffffff] hover:border-white/10 hover:bg-white/5'
+                              ? 'border-[#F26522]/40 bg-orange-50 text-slate-900 shadow-[inset_0_0_0_1px_rgba(242,101,34,0.12)] dark:bg-[rgba(43,19,37,0.88)] dark:text-[#ffffff] dark:shadow-[inset_0_0_0_1px_rgba(242,101,34,0.1)]'
+                              : 'border-transparent text-slate-800 hover:border-[#F26522]/20 hover:bg-[#F26522]/5 dark:text-white dark:hover:border-white/10 dark:hover:bg-white/5'
                           }
                         `}
                       >
                         <Icon
                           className={`h-5 w-5 shrink-0 transition-all duration-200 ${
-                            isActive ? 'text-[#F26522]' : 'text-[#ffffff] group-hover:text-[#F26522]'
+                            isActive ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
                           }`}
                         />
                         {isExpanded ? (
                           <span
-                            className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-[#ffffff] ${
-                              isActive ? 'font-bold' : 'font-medium'
-                            }`}
+                            className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-slate-800 dark:text-white ${
+                            isActive ? 'font-bold' : 'font-medium'
+                          }`}
                           >
                             {item.title}
                           </span>
@@ -558,8 +559,8 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                         ${sidebarOpen ? 'justify-between px-3 py-3 ml-2 mr-3' : 'justify-center px-2 py-3 ml-2 mr-3'}
                         ${
                           isSelected
-                            ? 'border-[#F26522]/40 bg-[rgba(43,19,37,0.88)] text-[#ffffff] shadow-[inset_0_0_0_1px_rgba(242,101,34,0.1)]'
-                            : 'border-transparent text-[#ffffff] hover:border-white/10 hover:bg-white/5'
+                            ? 'border-[#F26522]/40 bg-orange-50 text-slate-900 shadow-[inset_0_0_0_1px_rgba(242,101,34,0.12)] dark:bg-[rgba(43,19,37,0.88)] dark:text-[#ffffff] dark:shadow-[inset_0_0_0_1px_rgba(242,101,34,0.1)]'
+                            : 'border-transparent text-slate-800 hover:border-[#F26522]/20 hover:bg-[#F26522]/5 dark:text-white dark:hover:border-white/10 dark:hover:bg-white/5'
                         }
                       `}
                     >
@@ -571,12 +572,12 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                       >
                         <Icon
                           className={`h-5 w-5 shrink-0 transition-all duration-200 ${
-                            isSelected ? 'text-[#F26522]' : 'text-[#ffffff] group-hover:text-[#F26522]'
+                            isSelected ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
                           }`}
                         />
                         {isExpanded ? (
                           <span
-                            className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-[#ffffff] ${
+                            className={`min-w-0 flex-1 truncate text-left text-[18px] tracking-[0.01em] text-slate-800 dark:text-white ${
                               isSelected ? 'font-bold' : 'font-medium'
                             }`}
                           >
@@ -592,13 +593,13 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                           aria-label={isDropdownOpen ? `Collapse ${item.title}` : `Expand ${item.title}`}
                           className={`ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 ${
                             isDropdownOpen || isSelected
-                              ? 'border-[#F26522]/35 bg-[rgba(43,19,37,0.88)] text-[#F26522]'
-                              : 'border-white/10 text-[#ffffff] hover:border-[#F26522]/35 hover:bg-white/5 hover:text-[#F26522]'
+                              ? 'border-[#F26522]/35 bg-orange-100 text-[#F26522] dark:bg-[rgba(43,19,37,0.88)]'
+                              : 'border-slate-200 text-slate-600 hover:border-[#F26522]/35 hover:bg-[#F26522]/5 hover:text-[#F26522] dark:border-white/10 dark:text-white dark:hover:bg-white/5'
                           }`}
                         >
                           <ChevronDown
                             className={`h-4 w-4 shrink-0 transition-all duration-300 ${
-                              isDropdownOpen ? 'rotate-180 text-[#F26522]' : 'text-[#ffffff]'
+                              isDropdownOpen ? 'rotate-180 text-[#F26522]' : 'text-slate-500 dark:text-white'
                             }`}
                           />
                         </button>
@@ -607,7 +608,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
 
                     {isExpanded && isDropdownOpen && item.children ? (
                       item.title === 'Insights Engine' ? (
-                        <div className="ml-4 mt-2 border-l border-white/10 pl-3">
+                        <div className="ml-4 mt-2 border-l border-slate-200 pl-3 dark:border-white/10">
                           <div className="space-y-1">
                             {item.children.map((child) => {
                               const isNestedGroup = Array.isArray(child.children) && child.children.length > 0;
@@ -625,8 +626,8 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                                         group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
                                         ${
                                           isNestedSelected
-                                            ? 'bg-white/8 text-[#ffffff]'
-                                            : 'text-[#ffffff] hover:bg-white/5 hover:pl-4'
+                                            ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
+                                            : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
                                         }
                                       `}
                                     >
@@ -634,12 +635,12 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                                         {ChildIcon ? (
                                           <ChildIcon
                                             className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
-                                              isNestedSelected ? 'text-[#F26522]' : 'text-[#ffffff] group-hover:text-[#F26522]'
+                                              isNestedSelected ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
                                             }`}
                                           />
                                         ) : null}
                                         <span
-                                          className={`min-w-0 truncate text-[#ffffff] ${
+                                          className={`min-w-0 truncate text-slate-800 dark:text-white ${
                                             isNestedSelected ? 'font-bold' : 'font-medium'
                                           }`}
                                         >
@@ -648,13 +649,13 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                                       </div>
                                       <ChevronDown
                                         className={`h-4 w-4 shrink-0 transition-all duration-300 ${
-                                          isNestedOpen ? 'rotate-180 text-[#F26522]' : 'text-[#ffffff] group-hover:text-[#F26522]'
+                                          isNestedOpen ? 'rotate-180 text-[#F26522]' : 'text-slate-500 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
                                         }`}
                                       />
                                     </button>
 
                                     {isNestedOpen ? (
-                                      <div className="space-y-1 border-l border-white/10 pl-4">
+                                      <div className="space-y-1 border-l border-slate-200 pl-4 dark:border-white/10">
                                         {child.children.map((grandchild) => {
                                           const GrandchildIcon = getSidebarChildIcon(grandchild.title);
                                           return (
@@ -666,20 +667,20 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                                                 group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
                                                 ${
                                                   activeItem === grandchild.title
-                                                    ? 'bg-white/8 text-[#ffffff]'
-                                                    : 'text-[#ffffff] hover:bg-white/5 hover:pl-4'
+                                                    ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
+                                                    : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
                                                 }
                                               `}
                                             >
                                               {GrandchildIcon ? (
                                                 <GrandchildIcon
                                                   className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
-                                                    activeItem === grandchild.title ? 'text-[#F26522]' : 'text-[#ffffff] group-hover:text-[#F26522]'
+                                                    activeItem === grandchild.title ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
                                                   }`}
                                                 />
                                               ) : null}
                                               <span
-                                                className={`min-w-0 truncate text-[#ffffff] ${
+                                                className={`min-w-0 truncate text-slate-800 dark:text-white ${
                                                   activeItem === grandchild.title ? 'font-bold' : 'font-medium'
                                                 }`}
                                               >
@@ -703,20 +704,20 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                                     group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
                                     ${
                                       activeItem === child.title
-                                        ? 'bg-white/8 text-[#ffffff]'
-                                        : 'text-[#ffffff] hover:bg-white/5 hover:pl-4'
+                                        ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
+                                        : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
                                     }
                                   `}
                                 >
                                   {ChildIcon ? (
                                     <ChildIcon
                                       className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
-                                        activeItem === child.title ? 'text-[#F26522]' : 'text-[#ffffff] group-hover:text-[#F26522]'
+                                        activeItem === child.title ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
                                       }`}
                                     />
                                   ) : null}
                                   <span
-                                    className={`min-w-0 truncate text-[#ffffff] ${
+                                    className={`min-w-0 truncate text-slate-800 dark:text-white ${
                                       activeItem === child.title ? 'font-bold' : 'font-medium'
                                     }`}
                                   >
@@ -728,7 +729,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                           </div>
                         </div>
                       ) : (
-                        <div className="ml-4 mt-2 border-l border-white/10 pl-3">
+                        <div className="ml-4 mt-2 border-l border-slate-200 pl-3 dark:border-white/10">
                           <div className="space-y-1">
                             {item.children.map((child) => {
                               const ChildIcon = getSidebarChildIcon(child.title);
@@ -741,20 +742,20 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                                     group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
                                     ${
                                       activeItem === child.title
-                                        ? 'bg-white/8 text-[#ffffff]'
-                                        : 'text-[#ffffff] hover:bg-white/5 hover:pl-4'
+                                        ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
+                                        : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
                                     }
                                   `}
                                 >
                                   {ChildIcon ? (
                                     <ChildIcon
                                       className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
-                                        activeItem === child.title ? 'text-[#F26522]' : 'text-[#ffffff] group-hover:text-[#F26522]'
+                                        activeItem === child.title ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
                                       }`}
                                     />
                                   ) : null}
                                   <span
-                                    className={`min-w-0 truncate text-[#ffffff] ${
+                                    className={`min-w-0 truncate text-slate-800 dark:text-white ${
                                       activeItem === child.title ? 'font-bold' : 'font-medium'
                                     }`}
                                   >

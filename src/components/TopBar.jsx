@@ -8,18 +8,26 @@ import {
   ChevronDown,
   Globe,
   LogOut,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Radio,
   Search,
   Sparkles,
+  Sun,
   User,
   X,
 } from 'lucide-react';
 import CommonActions from '../store/actions/common-actions';
+import { useTheme } from '../context/ThemeContext.jsx';
 
 /** Neutral session hint — not live infra telemetry (avoids misleading demo alerts). */
-const HEADER_SESSION_STATUS = {
+const HEADER_SESSION_LIGHT = {
+  text: 'Session active',
+  dot: 'bg-emerald-500',
+  tone: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+};
+const HEADER_SESSION_DARK = {
   text: 'Session active',
   dot: 'bg-emerald-400',
   tone: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
@@ -129,6 +137,8 @@ const readLocalUser = () => {
 };
 
 const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
+  const { theme, toggleTheme } = useTheme();
+  const sessionStatus = theme === 'dark' ? HEADER_SESSION_DARK : HEADER_SESSION_LIGHT;
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const storedUser = useSelector((state) => state?.auth?.user);
@@ -239,12 +249,16 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
 
   return (
     <>
-      <header ref={headerRef} className="relative z-[1200] flex h-[78px] shrink-0 items-center justify-between border-b border-white/5 bg-[linear-gradient(90deg,#09001A_0%,#0A1240_42%,#071224_100%)] px-4 py-3 text-white shadow-[0_20px_40px_rgba(1,3,14,0.28)] sm:px-5 lg:px-6">
+      <header
+        ref={headerRef}
+        data-dy3-topbar
+        className="relative z-[1200] flex h-[78px] shrink-0 items-center justify-between border-b px-4 py-3 sm:px-5 lg:px-6"
+      >
         <div className="flex min-w-0 items-center space-x-2 sm:space-x-4 lg:space-x-0">
           <button
             type="button"
             onClick={onSidebarToggle}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/5 text-gray-300 transition-all duration-300 hover:border-[#F26522]/40 hover:bg-[#F26522]/10 hover:text-[#F26522] focus:outline-none lg:hidden"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-slate-200 bg-slate-50 text-slate-600 transition-all duration-300 hover:border-[#F26522]/40 hover:bg-orange-50 hover:text-[#F26522] focus:outline-none focus-visible:ring-0 active:scale-95 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:border-[#F26522]/40 dark:hover:bg-[#F26522]/10 dark:hover:text-[#F26522] lg:hidden"
             aria-label={isSidebarOpen ? 'Close Sidebar' : 'Open Sidebar'}
             title={isSidebarOpen ? 'Close Sidebar' : 'Open Sidebar'}
           >
@@ -304,12 +318,12 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
     
     {/* Brand Name */}
     <span className="font-['Quantico'] inline-flex w-max max-w-full min-w-0 items-baseline text-[24px] font-extrabold tracking-[0.08em] sm:text-[28px] lg:text-[30px]">
-      <span className="text-[#ffffff]">DATA</span>
+      <span className="dy3-brand-data text-slate-900">DATA</span>
       <span className="text-[#F26522]">PLUS</span>
     </span>
 
-    {/* Subtext - Aligned to the Right of the "PLUS" */}
-    <span className="flex w-full min-w-0 items-end justify-end whitespace-nowrap text-[4px] font-medium leading-none tracking-[0.12em] text-[#ffffff] sm:text-[10px] lg:text-[10px] mt-0.5 sm:mt-1">
+    {/* Subtext — dark: #fff via index.css (.dy3-brand-sub) */}
+    <span className="dy3-brand-sub mt-0.5 flex w-full min-w-0 items-end justify-end whitespace-nowrap text-[4px] font-medium leading-none tracking-[0.12em] text-slate-500 sm:mt-1 sm:text-[10px] lg:text-[10px]">
       <span className="shrink-0">Powered by DataYog</span>
     </span>
     
@@ -318,13 +332,13 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
             </button>
           </div>
 
-          <div className="absolute left-[290px] top-1/2 hidden h-12 w-px -translate-y-1/2 bg-white/10 lg:block" />
+          <div className="pointer-events-none absolute left-[290px] top-1/2 hidden h-12 w-px -translate-y-1/2 bg-slate-200 dark:bg-white/10 lg:block" />
 
           <div className="relative hidden lg:ml-6 lg:flex lg:flex-shrink-0 lg:items-center lg:gap-4">
             <button
               type="button"
               onClick={onSidebarToggle}
-              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/5 text-gray-300 transition-all duration-300 hover:border-[#F26522]/40 hover:bg-[#F26522]/10 hover:text-[#F26522] focus:outline-none ${isSidebarOpen ? '' : 'ring-1 ring-[#F26522]/35'}`}
+              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-slate-200 bg-slate-50 text-slate-600 transition-all duration-300 hover:border-[#F26522]/40 hover:bg-orange-50 hover:text-[#F26522] focus:outline-none focus-visible:ring-0 active:scale-95 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:border-[#F26522]/40 dark:hover:bg-[#F26522]/10 dark:hover:text-[#F26522] ${isSidebarOpen ? '' : 'ring-1 ring-[#F26522]/35'}`}
               aria-label={isSidebarOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
               title={isSidebarOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
             >
@@ -335,35 +349,37 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
             <button
               type="button"
               onClick={() => toggleDropdown('timezone')}
-              className={`group flex items-center gap-3 rounded-[8px] px-3 py-1.5 transition-all focus:outline-none ${
+              className={`group flex items-center gap-3 rounded-[8px] px-3 py-1.5 transition-all focus:outline-none focus-visible:ring-0 active:scale-[0.98] ${
                 activeDropdown === 'timezone'
-                  ? 'border border-[#F26522]/50 bg-[#F26522]/10 shadow-[0_0_15px_rgba(242,101,34,0.15)]'
-                  : 'border border-white/10 bg-white/5 hover:bg-[#F26522]/10 hover:border-[#F26522]/50'
+                  ? 'border border-[#F26522]/50 bg-orange-50 shadow-[0_0_15px_rgba(242,101,34,0.12)] dark:border-[#F26522]/50 dark:bg-[#F26522]/10 dark:shadow-[0_0_15px_rgba(242,101,34,0.15)]'
+                  : 'border border-slate-200 bg-slate-50 hover:border-[#F26522]/50 hover:bg-orange-50/80 dark:border-white/10 dark:bg-white/5 dark:hover:border-[#F26522]/50 dark:hover:bg-[#F26522]/10'
               }`}
             >
-              <CalendarDays className={`h-4 w-4 transition-all duration-300 ${activeDropdown === 'timezone' ? 'text-[#F26522]' : 'text-gray-300 group-hover:text-[#F26522]'}`} />
+              <CalendarDays className={`h-4 w-4 transition-all duration-300 ${activeDropdown === 'timezone' ? 'text-[#F26522]' : 'text-slate-500 group-hover:text-[#F26522] dark:text-gray-300 dark:group-hover:text-[#F26522]'}`} />
               <div className="flex flex-col text-left leading-none">
-                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/55">{dateStr}</span>
-                <span className="font-mono text-xs font-medium text-white">{timeStr} <span className="ml-1 font-mono font-bold text-[#F26522]">{selectedTimezoneCode}</span></span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-500 dark:text-white/55">{dateStr}</span>
+                <span className="font-mono text-xs font-medium text-slate-800 dark:text-white">
+                  {timeStr} <span className="ml-1 font-mono font-bold text-[#F26522]">{selectedTimezoneCode}</span>
+                </span>
               </div>
             </button>
 
             {activeDropdown === 'timezone' ? (
-              <div className="absolute left-0 top-full z-50 mt-3 w-[20.5rem] overflow-hidden rounded-[12px] border border-[#F26522]/30 bg-[#0B101E]/95 shadow-[0_8px_32px_0_rgba(242,101,34,0.15)]">
-                <div className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-[#F26522]">
+              <div className="absolute left-0 top-full z-50 mt-3 w-[20.5rem] overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-lg dark:border-[#F26522]/30 dark:bg-[#0B101E]/95 dark:shadow-[0_8px_32px_0_rgba(242,101,34,0.15)]">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 text-[#F26522] dark:border-b-white/5">
                   <div className="flex items-center gap-2"><Globe className="h-4 w-4" /><span className="text-xs font-semibold">Select Timezone</span></div>
-                  <button type="button" onClick={() => setActiveDropdown(null)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-gray-300 transition-all hover:border-[#F26522]/40 hover:bg-[#F26522]/10 hover:text-[#F26522]"><X className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => setActiveDropdown(null)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition-all hover:border-[#F26522]/40 hover:bg-orange-50 hover:text-[#F26522] dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:border-[#F26522]/40 dark:hover:bg-[#F26522]/10 dark:hover:text-[#F26522]"><X className="h-4 w-4" /></button>
                 </div>
                 <div className="px-4 py-3">
-                  <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
-                    <Search className="h-4 w-4 text-white/40" />
-                    <input type="text" value={timezoneQuery} onChange={(event) => setTimezoneQuery(event.target.value)} placeholder="Search timezone..." className="ml-2 w-full bg-transparent text-sm text-white outline-none placeholder:text-white/25" />
+                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
+                    <Search className="h-4 w-4 text-slate-400 dark:text-white/40" />
+                    <input type="text" value={timezoneQuery} onChange={(event) => setTimezoneQuery(event.target.value)} placeholder="Search timezone..." className="ml-2 w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-white/25" />
                   </div>
                 </div>
                 <div className="max-h-80 space-y-1 overflow-y-auto px-2 pb-3">
                   {filteredTimezones.map((tz) => (
-                    <button key={tz.value} type="button" onClick={() => { setSelectedTz(tz.value); setActiveDropdown(null); setTimezoneQuery(''); }} className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-gray-200 transition-colors hover:bg-[#F26522]/10 hover:text-[#F26522]">
-                      <div className="min-w-0 text-left"><span className="block truncate font-medium">{tz.name}</span><span className="block truncate text-[11px] text-white/35">{tz.value}</span></div>
+                    <button key={tz.value} type="button" onClick={() => { setSelectedTz(tz.value); setActiveDropdown(null); setTimezoneQuery(''); }} className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-orange-50 hover:text-[#F26522] dark:text-gray-200 dark:hover:bg-[#F26522]/10 dark:hover:text-[#F26522]">
+                      <div className="min-w-0 text-left"><span className="block truncate font-medium">{tz.name}</span><span className="block truncate text-[11px] text-slate-400 dark:text-white/35">{tz.value}</span></div>
                       <span className="ml-3 text-xs font-semibold text-[#F26522] opacity-80">{tz.code}</span>
                     </button>
                   ))}
@@ -375,9 +391,9 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
         </div>
 
         <div className="flex shrink-0 items-center space-x-2 sm:space-x-5">
-          <div className={`hidden min-w-0 items-center gap-3 rounded-[8px] border px-3 py-1.5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] lg:flex ${HEADER_SESSION_STATUS.tone}`}>
-            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${HEADER_SESSION_STATUS.dot}`} />
-            <span className="max-w-[min(240px,18vw)] truncate whitespace-nowrap">{HEADER_SESSION_STATUS.text}</span>
+          <div className={`hidden min-w-0 items-center gap-3 rounded-[8px] border px-3 py-1.5 text-sm font-semibold lg:flex ${theme === 'light' ? 'shadow-[inset_0_1px_0_rgba(0,0,0,0.03)]' : 'shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]'} ${sessionStatus.tone}`}>
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${sessionStatus.dot}`} />
+            <span className="max-w-[min(240px,18vw)] truncate whitespace-nowrap">{sessionStatus.text}</span>
           </div>
 
           {/* <button
@@ -395,41 +411,55 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#F26522]" />
           </button> */}
 
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleTheme();
+              event.currentTarget.blur();
+            }}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-slate-200 bg-slate-50 text-slate-600 transition-colors duration-200 hover:border-[#F26522]/40 hover:bg-orange-50 hover:text-[#F26522] focus:outline-none focus:border-slate-200 focus-visible:ring-0 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:border-[#F26522]/40 dark:hover:bg-[#F26522]/10 dark:hover:text-[#F26522] dark:focus:border-white/10"
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          >
+            {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+          </button>
+
           <div className="relative">
             <button
               type="button"
               onClick={() => toggleDropdown('profile')}
               className={`group flex h-10 items-center gap-2 rounded-[8px] border px-1.5 pr-3 text-left transition-all duration-300 ${
                 activeDropdown === 'profile'
-                  ? 'border-[#F26522]/50 bg-[#F26522]/10 shadow-[0_0_15px_rgba(242,101,34,0.15)]'
-                  : 'border-white/10 bg-white/5 hover:border-[#F26522]/50 hover:bg-[#F26522]/10'
+                  ? 'border-[#F26522]/50 bg-orange-50 shadow-[0_0_15px_rgba(242,101,34,0.12)] dark:border-[#F26522]/50 dark:bg-[#F26522]/10 dark:shadow-[0_0_15px_rgba(242,101,34,0.15)]'
+                  : 'border-slate-200 bg-slate-50 hover:border-[#F26522]/50 hover:bg-orange-50/90 dark:border-white/10 dark:bg-white/5 dark:hover:border-[#F26522]/50 dark:hover:bg-[#F26522]/10'
               }`}
             >
-              <img src={profileImage} alt="User" className="h-9 w-9 rounded-[7px] border border-white/10 bg-white object-cover p-0.5" onError={(e) => { e.currentTarget.src = '/icon1.png'; }} />
+              <img src={profileImage} alt="User" className="h-9 w-9 rounded-[7px] border border-slate-200 bg-white object-cover p-0.5 dark:border-white/10" onError={(e) => { e.currentTarget.src = '/icon1.png'; }} />
               <div className="hidden min-w-0 sm:block">
-                <p className="truncate text-xs font-bold text-white">{displayName}</p>
-                <p className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.22em] text-white/45">{displayRole}</p>
+                <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{displayName}</p>
+                <p className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500 dark:text-white/45">{displayRole}</p>
               </div>
-              <ChevronDown className={`hidden h-4 w-4 transition-transform duration-200 sm:block ${activeDropdown === 'profile' ? 'rotate-180 text-[#F26522]' : 'text-white/55'}`} />
+              <ChevronDown className={`hidden h-4 w-4 transition-transform duration-200 sm:block ${activeDropdown === 'profile' ? 'rotate-180 text-[#F26522]' : 'text-slate-400 dark:text-white/55'}`} />
             </button>
 
             {activeDropdown === 'profile' ? (
-              <div onClick={(event) => event.stopPropagation()} className="absolute right-0 z-50 mt-3 w-56 rounded-[12px] border border-[#F26522]/30 bg-[#0B101E]/95 py-2 shadow-[0_8px_32px_0_rgba(242,101,34,0.15)] backdrop-blur-3xl sm:w-64">
+              <div onClick={(event) => event.stopPropagation()} className="absolute right-0 z-50 mt-3 w-56 rounded-[12px] border border-slate-200 bg-white py-2 shadow-lg dark:border-[#F26522]/30 dark:bg-[#0B101E]/95 dark:shadow-[0_8px_32px_0_rgba(242,101,34,0.15)] dark:backdrop-blur-3xl sm:w-64">
                 <div className="mt-2 space-y-1 px-2">
-                  <button type="button" onClick={() => { setActiveDropdown(null); navigate('/profile'); }} className="group flex w-full items-center rounded-lg px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-[#F26522]/10 hover:text-[#F26522]">
-                    <User className="mr-3 h-[18px] w-[18px] text-gray-400 transition-all group-hover:scale-110 group-hover:text-[#F26522]" /> Profile
+                  <button type="button" onClick={() => { setActiveDropdown(null); navigate('/profile'); }} className="group flex w-full items-center rounded-lg px-3 py-2.5 text-sm text-slate-700 transition-colors hover:bg-orange-50 hover:text-[#F26522] dark:text-gray-200 dark:hover:bg-[#F26522]/10">
+                    <User className="mr-3 h-[18px] w-[18px] text-slate-400 transition-all group-hover:scale-110 group-hover:text-[#F26522] dark:text-gray-400" /> Profile
                   </button>
-                  <button type="button" onClick={() => { setActiveDropdown(null); navigate('/home'); }} className="group flex w-full items-center rounded-lg px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-[#F26522]/10 hover:text-[#F26522]">
-                    <Bell className="mr-3 h-[18px] w-[18px] text-gray-400 transition-all group-hover:scale-110 group-hover:text-[#F26522]" /> Notifications
+                  <button type="button" onClick={() => { setActiveDropdown(null); navigate('/home'); }} className="group flex w-full items-center rounded-lg px-3 py-2.5 text-sm text-slate-700 transition-colors hover:bg-orange-50 hover:text-[#F26522] dark:text-gray-200 dark:hover:bg-[#F26522]/10">
+                    <Bell className="mr-3 h-[18px] w-[18px] text-slate-400 transition-all group-hover:scale-110 group-hover:text-[#F26522] dark:text-gray-400" /> Notifications
                   </button>
-                  <button type="button" onClick={() => { setActiveDropdown(null); navigate('/home'); }} className="group flex w-full items-center rounded-lg px-3 py-2.5 text-sm text-gray-200 transition-colors hover:bg-[#F26522]/10 hover:text-[#F26522]">
-                    <Sparkles className="mr-3 h-[18px] w-[18px] text-gray-400 transition-all group-hover:scale-110 group-hover:text-[#F26522]" /> Nexa AI
+                  <button type="button" onClick={() => { setActiveDropdown(null); navigate('/home'); }} className="group flex w-full items-center rounded-lg px-3 py-2.5 text-sm text-slate-700 transition-colors hover:bg-orange-50 hover:text-[#F26522] dark:text-gray-200 dark:hover:bg-[#F26522]/10">
+                    <Sparkles className="mr-3 h-[18px] w-[18px] text-slate-400 transition-all group-hover:scale-110 group-hover:text-[#F26522] dark:text-gray-400" /> Nexa AI
                   </button>
                 </div>
-                <div className="my-2 border-t border-white/10" />
+                <div className="my-2 border-t border-slate-100 dark:border-white/10" />
                 <div className="px-2 pb-2">
-                  <button type="button" onClick={() => { setActiveDropdown(null); setIsLogoutModalOpen(true); }} className="group flex w-full items-center rounded-lg px-3 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300">
-                    <LogOut className="mr-3 h-[18px] w-[18px] text-red-400 transition-all group-hover:scale-110 group-hover:text-red-300" /> Logout
+                  <button type="button" onClick={() => { setActiveDropdown(null); setIsLogoutModalOpen(true); }} className="group flex w-full items-center rounded-lg px-3 py-2.5 text-sm text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-300">
+                    <LogOut className="mr-3 h-[18px] w-[18px] text-red-500 transition-all group-hover:scale-110 dark:text-red-400 dark:group-hover:text-red-300" /> Logout
                   </button>
                 </div>
               </div>
