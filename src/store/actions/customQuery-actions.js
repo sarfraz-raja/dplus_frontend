@@ -147,6 +147,7 @@ const CustomQueryActions = {
             if (res?.status === 201 || res?.status === 200) {
                 const dtaa = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
                 const responseType = dtaa.type?.toLowerCase()
+
                 if (responseType === "data") {
                     dispatch(RUN_QUERY({ ...dtaa, type: 'Data' }))
                 } else if (responseType === "error") {
@@ -162,6 +163,9 @@ const CustomQueryActions = {
                         type: 1
                     }
                     dispatch(ALERTS(msgdata))
+                } else if (Array.isArray(dtaa.columns) && Array.isArray(dtaa.data)) {
+                    // No type field, but has valid data structure → treat as successful data response
+                    dispatch(RUN_QUERY({ type: 'Data', columns: dtaa.columns, data: dtaa.data, msg: dtaa.msg }))
                 } else {
                     dispatch(RUN_QUERY({ type: 'Error', msg: `Unexpected response from server (type: ${dtaa.type ?? 'none'}).` }))
                 }

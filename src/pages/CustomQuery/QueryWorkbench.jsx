@@ -225,6 +225,43 @@ const SavedQueryCard = ({ item, onDragStart, onClick, onEdit, onDelete }) => {
     );
 };
 
+// ─── PostgreSQL identifier quoting ────────────────────────────────────────────
+// PostgreSQL folds unquoted identifiers to lowercase. Any table/column name
+// that was created with mixed/upper case must be double-quoted to match exactly.
+// This function walks the SQL, skips string literals and already-quoted
+// identifiers, and wraps any mixed-case word that isn't a SQL keyword.
+const PG_KEYWORDS = new Set([
+    'SELECT','FROM','WHERE','AND','OR','NOT','IN','IS','NULL','JOIN','LEFT',
+    'RIGHT','INNER','OUTER','FULL','CROSS','ON','GROUP','BY','ORDER','HAVING',
+    'LIMIT','OFFSET','DISTINCT','AS','CASE','WHEN','THEN','ELSE','END',
+    'INSERT','INTO','VALUES','UPDATE','SET','DELETE','CREATE','TABLE','DROP',
+    'ALTER','INDEX','VIEW','WITH','UNION','ALL','EXISTS','BETWEEN','LIKE',
+    'ILIKE','ASC','DESC','NULLS','FIRST','LAST','TRUE','FALSE','COUNT','SUM',
+    'AVG','MIN','MAX','COALESCE','CAST','PRIMARY','KEY','FOREIGN','REFERENCES',
+    'UNIQUE','DEFAULT','RETURNING','BEGIN','COMMIT','ROLLBACK','TRANSACTION',
+    'OVER','PARTITION','WINDOW','FILTER','LATERAL','NATURAL','USING',
+    'TABLESAMPLE','RECURSIVE','EXCEPT','INTERSECT','DO','TRIGGER','FUNCTION',
+    'PROCEDURE','LANGUAGE','INTEGER','VARCHAR','TEXT','BOOLEAN','FLOAT',
+    'DOUBLE','NUMERIC','DATE','TIME','TIMESTAMP','INTERVAL','ARRAY','JSON',
+    'JSONB','SERIAL','BIGSERIAL','SMALLINT','BIGINT','REAL','CHAR','EXTRACT',
+    'NOW','NULLIF','GREATEST','LEAST','ROW','ROWS','FOLLOWING','PRECEDING',
+    'UNBOUNDED','CURRENT','TIES','ONLY','RANGE','IF','RETURN',
+]);
+
+const quotePostgresIdentifiers = (sql) => {
+    // Split into preserved segments (single-quoted strings, already double-quoted
+    // identifiers) and plain SQL. Odd-index parts are preserved as-is.
+    const parts = sql.split(/(\'(?:[^\'\\]|\\.)*\'|"[^"]*")/);
+    return parts.map((part, i) => {
+        if (i % 2 === 1) return part;
+        return part.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (match) => {
+            if (PG_KEYWORDS.has(match.toUpperCase())) return match;
+            if (/[A-Z]/.test(match)) return `"${match}"`;
+            return match;
+        });
+    }).join('');
+};
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 const QueryWorkbench = () => {
     const dispatch = useDispatch();
@@ -236,6 +273,53 @@ const QueryWorkbench = () => {
     const [isDragOver, setIsDragOver] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [errorModalOpen, setErrorModalOpen] = useState(false);
+
+    // ── DateTime params (@starttime / @endtime) ──
+    const [startTime,     setStartTime]     = useState('');
+    const [endTime,       setEndTime]       = useState('');
+    const [timePrecision, setTimePrecision] = useState('minute'); // 'date' | 'hour' | 'minute' | 'second'
+
+    // Normalize time to match the selected precision level
+    const normalizeTimeForPrecision = (timeStr, precision) => {
+        if (!timeStr) return '';
+        // For date precision: input is "YYYY-MM-DD", output is "YYYY-MM-DD"
+        if (precision === 'date') {
+            return timeStr.slice(0, 10); // just the date part
+        }
+        // For time precisions: input is "YYYY-MM-DDTHH:MM" or "YYYY-MM-DDTHH:MM:SS"
+        const date = timeStr.slice(0, 10);
+        const hh = timeStr.slice(11, 13);
+        const mm = timeStr.slice(14, 16);
+        const ss = timeStr.slice(17, 19) || '00';
+
+        if (precision === 'hour')   return `${date}T${hh}:00`;
+        if (precision === 'second') return `${date}T${hh}:${mm}:${ss}`;
+        return `${date}T${hh}:${mm}`; // minute
+    };
+
+    // When precision changes, re-normalize existing times
+    const handlePrecisionChange = (newPrecision) => {
+        setTimePrecision(newPrecision);
+        if (startTime) setStartTime(normalizeTimeForPrecision(startTime, newPrecision));
+        if (endTime) setEndTime(normalizeTimeForPrecision(endTime, newPrecision));
+    };
+
+    // Returns current local datetime in the format inputs expect
+    const nowForInput = () => {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        // For date input: YYYY-MM-DD, for datetime-local: YYYY-MM-DDTHH:MM
+        return timePrecision === 'date'
+            ? d.toISOString().slice(0, 10)
+            : d.toISOString().slice(0, 16);
+    };
+
+    // step attribute for datetime-local input based on chosen precision
+    const dtStep = timePrecision === 'hour' ? 3600 : timePrecision === 'second' ? 1 : 60;
+
+    const dtError = startTime && endTime && startTime > endTime
+        ? 'Start time must be before or equal to end time'
+        : null;
 
     // ── Resizable splits ──
     const [editorHeight, setEditorHeight] = useState(260);
@@ -355,22 +439,65 @@ const QueryWorkbench = () => {
     };
 
     // ── Actions ──
-    const getFormData = () => ({ dbServer: server, queries: activeQuery });
+    // Replace @starttime / @endtime placeholders with the picked datetime values.
+    // Format: PostgreSQL-compatible timestamp string, e.g. '2024-01-15 14:30:00'
+    // Normalise datetime-local value to a PostgreSQL timestamp string.
+    // Precision controls how much of the time component is included.
+    // Format for both display and SQL — format depends on precision
+    const fmtPgTs = (dtLocal) => {
+        if (timePrecision === 'date') {
+            // Date input format: "YYYY-MM-DD"
+            return dtLocal;
+        }
+        // DateTime input format: "YYYY-MM-DDTHH:MM" or "YYYY-MM-DDTHH:MM:SS"
+        const hh = dtLocal.slice(11, 13);
+        const mm = dtLocal.slice(14, 16);
+        const ss = dtLocal.length >= 19 ? dtLocal.slice(17, 19) : '00';
+        const date = dtLocal.slice(0, 10);
+        return `${date} ${hh}:${mm}:${ss}`;
+    };
+
+    const applyDatetimeParams = (sql) => {
+        let result = sql;
+        // Replace @starttime and @endtime with formatted values (same param names, different formats)
+        if (startTime) result = result.replace(/@starttime/gi, `'${fmtPgTs(startTime)}'`);
+        if (endTime)   result = result.replace(/@endtime/gi,   `'${fmtPgTs(endTime)}'`);
+        return result;
+    };
+
+    // Helper to safely append LIMIT to SQL query (removes existing LIMIT if present)
+    const appendLimit = (query, limit) => {
+        if (!query || !limit) return query;
+        // Remove any existing LIMIT clause (case-insensitive, including semicolons and line breaks)
+        let noLimit = query.replace(/\bLIMIT\s+\d+\s*(?:OFFSET\s+\d+)?\s*;?\s*$/im, '').trim();
+        const hasSemicolon = noLimit.endsWith(';');
+        if (hasSemicolon) noLimit = noLimit.slice(0, -1).trim();
+        return `${noLimit} LIMIT ${limit}${hasSemicolon ? ';' : ''}`;
+    };
+
+    const getFormData = (limit) => {
+        const finalQuery = appendLimit(
+            quotePostgresIdentifiers(applyDatetimeParams(activeQuery)),
+            limit
+        );
+        console.log('📊 Query being sent to backend:', { dbServer: server, queries: finalQuery, limit });
+        return { dbServer: server, queries: finalQuery };
+    };
 
     const executeQuery = () => {
         if (!activeQuery.trim() || !server) return;
         setIsLoading(true);
-        dispatch(CustomQueryActions.postRunQuery(true, getFormData(), () => {}, Urls.querybuilder_runQuery));
+        dispatch(CustomQueryActions.postRunQuery(true, getFormData(1000), () => {}, Urls.querybuilder_runQuery));
     };
 
     const exportCSV = () => {
         if (!activeQuery.trim() || !server) return;
-        dispatch(CustomQueryActions.postRunQuery(false, getFormData(), () => {}, Urls.querybuilder_downloadQuery + '/csv'));
+        dispatch(CustomQueryActions.postRunQuery(false, getFormData(500000), () => {}, Urls.querybuilder_downloadQuery + '/csv'));
     };
 
     const exportExcel = () => {
         if (!activeQuery.trim() || !server) return;
-        dispatch(CustomQueryActions.postRunQuery(false, getFormData(), () => {}, Urls.querybuilder_downloadQuery + '/excel'));
+        dispatch(CustomQueryActions.postRunQuery(false, getFormData(500000), () => {}, Urls.querybuilder_downloadQuery + '/excel'));
     };
 
     const saveQuery = (name, overrideServer, overrideQuery, visibleTo = 'self') => {
@@ -544,6 +671,82 @@ const QueryWorkbench = () => {
                                     <ExportDropdown onExportCSV={exportCSV} onExportExcel={exportExcel} disabled={!canExecute} />
                                 </div>
 
+                                {/* DateTime params row — only shown when query has content */}
+                                {activeQuery.trim() && (
+                                    <div className="flex flex-wrap items-center gap-3 mb-2 px-1 shrink-0">
+                                        {/* Precision toggle */}
+                                        <div className="flex items-center overflow-hidden rounded border border-slate-200 shrink-0">
+                                            {[
+                                                { key: 'date',   label: 'DATE' },
+                                                { key: 'hour',   label: 'HH' },
+                                                { key: 'minute', label: 'HH:MM' },
+                                                { key: 'second', label: 'HH:MM:SS' },
+                                            ].map(p => (
+                                                <button
+                                                    key={p.key}
+                                                    onClick={() => handlePrecisionChange(p.key)}
+                                                    className="px-2 py-1 text-[10px] font-mono transition-colors"
+                                                    style={{
+                                                        background: timePrecision === p.key ? '#2563eb' : 'white',
+                                                        color:      timePrecision === p.key ? 'white'   : '#64748b',
+                                                    }}
+                                                >
+                                                    {p.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Start time */}
+                                        <div className="flex items-center gap-1.5">
+                                            <label className="text-[10px] font-semibold text-slate-500 shrink-0">@starttime</label>
+                                            <input
+                                                type={timePrecision === 'date' ? 'date' : 'datetime-local'}
+                                                step={timePrecision === 'date' ? undefined : dtStep}
+                                                value={startTime}
+                                                max={endTime || nowForInput()}
+                                                onChange={e => setStartTime(e.target.value)}
+                                                className="px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:border-blue-400"
+                                            />
+                                        </div>
+                                        {/* End time */}
+                                        <div className="flex items-center gap-1.5">
+                                            <label className="text-[10px] font-semibold text-slate-500 shrink-0">@endtime</label>
+                                            <input
+                                                type={timePrecision === 'date' ? 'date' : 'datetime-local'}
+                                                step={timePrecision === 'date' ? undefined : dtStep}
+                                                value={endTime}
+                                                min={startTime || undefined}
+                                                max={nowForInput()}
+                                                onChange={e => setEndTime(e.target.value)}
+                                                className="px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:border-blue-400"
+                                            />
+                                        </div>
+                                        {/* Clear both */}
+                                        {(startTime || endTime) && (
+                                            <button
+                                                onClick={() => { setStartTime(''); setEndTime(''); }}
+                                                className="text-[10px] text-slate-400 hover:text-red-500 transition-colors"
+                                            >
+                                                ✕ clear
+                                            </button>
+                                        )}
+                                        {dtError && (
+                                            <p className="text-[10px] text-red-500 font-medium">{dtError}</p>
+                                        )}
+                                        {!dtError && (startTime || endTime) && (
+                                            <p className="text-[10px] text-slate-400 font-mono">
+                                                {startTime && <span>→ <span className="text-green-700">'{fmtPgTs(startTime)}'</span></span>}
+                                                {startTime && endTime && <span className="mx-1 text-slate-300">|</span>}
+                                                {endTime   && <span>→ <span className="text-green-700">'{fmtPgTs(endTime)}'</span></span>}
+                                            </p>
+                                        )}
+                                        {!startTime && !endTime && (
+                                            <p className="text-[10px] text-slate-400 italic">
+                                                Type <span className="font-mono font-semibold text-slate-500">@starttime</span> or <span className="font-mono font-semibold text-slate-500">@endtime</span> in your query. Format depends on the selected precision (DATE, HH, HH:MM, or HH:MM:SS)
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
                                 {/* Drop Zone / SQL Editor */}
                                 <div
                                     onDrop={handleDrop}
@@ -615,7 +818,9 @@ const QueryWorkbench = () => {
                                     if (effectiveServer) setServer(String(effectiveServer));
                                     if (effectiveServer && q.trim()) {
                                         setIsLoading(true);
-                                        dispatch(CustomQueryActions.postRunQuery(true, { dbServer: effectiveServer, queries: q }, () => {}, Urls.querybuilder_runQuery));
+                                        const queryWithLimit = appendLimit(quotePostgresIdentifiers(q), 1000);
+                                        console.log('📊 Visual Builder query being sent to backend:', { dbServer: effectiveServer, queries: queryWithLimit, limit: 1000 });
+                                        dispatch(CustomQueryActions.postRunQuery(true, { dbServer: effectiveServer, queries: queryWithLimit }, () => {}, Urls.querybuilder_runQuery));
                                     }
                                 }}
                                 onSave={(name, srv, q, visibleTo) => saveQuery(name, srv, q, visibleTo)}
@@ -651,31 +856,39 @@ const QueryWorkbench = () => {
                         </div>
                     )}
                     {hasResults && (
-                            <table className="min-w-full text-left text-sm">
-                                <thead className="sticky top-0" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
-                                    <tr>
-                                        {columns.map(col => (
-                                            <th key={col} className="px-4 py-2 text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">{col}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {rows.map((row, idx) => (
-                                        <tr
-                                            key={idx}
-                                            className="border-b border-white/40 transition-colors text-slate-700"
-                                            style={{ background: idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)' }}
-                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.6)'}
-                                            onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
-                                        >
+                        <>
+                            {allRows.length === 0 ? (
+                                <div className="flex items-center justify-center h-full text-slate-400 text-sm select-none">
+                                    No data found — query returned 0 rows
+                                </div>
+                            ) : (
+                                <table className="min-w-full text-left text-sm">
+                                    <thead className="sticky top-0" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
+                                        <tr>
                                             {columns.map(col => (
-                                                <td key={col} className="px-4 py-1.5 text-xs whitespace-nowrap">{row[col] ?? '—'}</td>
+                                                <th key={col} className="px-4 py-2 text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">{col}</th>
                                             ))}
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
+                                    </thead>
+                                    <tbody>
+                                        {rows.map((row, idx) => (
+                                            <tr
+                                                key={idx}
+                                                className="border-b border-white/40 transition-colors text-slate-700"
+                                                style={{ background: idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.6)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
+                                            >
+                                                {columns.map(col => (
+                                                    <td key={col} className="px-4 py-1.5 text-xs whitespace-nowrap">{row[col] ?? '—'}</td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </>
+                    )}
                      </div>
                 </div>
             </div>
@@ -753,7 +966,10 @@ const VisualBuilder = ({
     const buildQuery = () => {
         if (!selectedTable) return '';
         const cols = selectedTableCols.length ? selectedTableCols.join(', ') : '*';
-        const qualifiedTable = builderSchema ? `${builderSchema}.${selectedTable}` : selectedTable;
+        // builderSchema holds the API identifier (may include server path/UUID).
+        // Use the display label for the actual SQL schema name.
+        const schemaName = dboList.find(d => d.value === builderSchema)?.label || '';
+        const qualifiedTable = schemaName ? `${schemaName}.${selectedTable}` : selectedTable;
         const wheres = conditions.filter(c => c.col && c.op).map(c =>
             c.op === 'IS NULL' || c.op === 'IS NOT NULL' ? `${c.col} ${c.op}` : `${c.col} ${c.op} '${c.val}'`
         );
