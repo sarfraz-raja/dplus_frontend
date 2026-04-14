@@ -403,11 +403,17 @@ const Login = () => {
                 <img
                   src="/dy-globe-only.png"
                   alt="DataPlus Globe"
+                  width="56"
+                  height="56"
+                  decoding="async"
                   className="h-11 w-auto drop-shadow-[0_0_12px_rgba(242,101,34,0.3)] sm:h-14"
                 />
                 <img
                   src="/dy-white-orange.png"
                   alt="DataPlus"
+                  width="80"
+                  height="20"
+                  decoding="async"
                   className="-ml-1 h-[15px] w-auto sm:-ml-1.5 sm:h-5"
                 />
               </div>

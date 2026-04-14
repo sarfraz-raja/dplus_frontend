@@ -1,58 +1,59 @@
 
-import * as Unicons from '@iconscout/react-unicons';
-import CommonPowerBI from '../pages/CommonPowerBI';
-import DBConfig from '../pages/CustomQuery/DBConfig';
-import QueryWorkbench from '../pages/CustomQuery/QueryWorkbench';
+import React, { Suspense } from 'react';
+import { UilReact, UilChannel, UilCheckCircle, UilChartLine, UilLayerGroup } from '@iconscout/react-unicons';
 
-// import AlertConfigure from '../pages/AlertMonitoringSystem/AlertConfigure';
-import XAlertConfigure from '../pages/AlertMonitoringSystem/XAlertConfigure';
+const PageLoader = () => (
+    <div className="flex items-center justify-center h-full min-h-[200px]">
+        <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+);
 
-import ISONForm from '../pages/iSON/iSonForm';
-import UserManagement from '../pages/Admin/UserManagement/UserManagement';
-import XAlertScheduler from '../pages/AlertMonitoringSystem/XAlertScheduler';
+function lazy(importFn) {
+    const LazyComp = React.lazy(importFn);
+    return function LazyWrapper(props) {
+        return <Suspense fallback={<PageLoader />}><LazyComp {...props} /></Suspense>;
+    };
+}
 
-import RoleManagement from '../pages/Admin/RoleManagement/RoleManagement';
-
-// import NetworkAnalyticsPro from '../pages/DataPlusAnalytics/NetworkAnalyticsPro';
-import MapChart from '../pages/MapBox/MapChart';
-import SiteAnalyticsProPage from '../pages/DataPlusAnalytics/SiteAnalyticsProPage';
-import KPICheckRulesPage from '../pages/DataPlusAnalytics/KPICheckRulesPage';
-import SiteProRulesOutputPage from '../pages/DataPlusAnalytics/SiteProRulesOutputPage';
-import ProRulesManagementPage from '../pages/DataPlusAnalytics/ProRulesManagementPage';
-import Scripting from '../pages/CX_IXSupport/Scripting';
-import ParameterAudit from '../pages/CX_IXSupport/ParameterAudit';
-import ScriptingPattern from '../pages/CX_IXSupport/ScriptingPattern';
-import ScriptingPatternForm from '../pages/CX_IXSupport/ScriptingPatternFormOld';
-import DBUpdate from '../pages/CX_IXSupport/DBUpdate';
-import ScriptingPatternList from '../pages/CX_IXSupport/ScriptingPatternList';
-import AuditPatternForm from '../pages/CX_IXSupport/AuditPatternForm';
-import AuditPatternList from '../pages/CX_IXSupport/AuditPatternList';
-import AuditPattern from '../pages/CX_IXSupport/AuditPattern';
-import CellProRulesQueryOutput from '../pages/ProRules/CellProRulesQueryOutput';
-
-import CellProRulesPage from '../pages/DataPlusAnalytics/CellProRulesPage';
-import CellAnalyticsProPage from '../pages/DataPlusAnalytics/CellAnalyticsProPage';
-
-import Home from '../pages/Home';
-import Profile from '../pages/Profile';
-import ComingSoon from '../pages/ComingSoon';
-import SupersetDashboard from '../pages/SuperSet/SupersetDashboard';
-import NetworkDashboard from '../pages/InsightsEngine/NetworkDashboard.jsx';
-import ParameterAuditDashboard from '../pages/InsightsEngine/ParameterAuditDashboard.jsx';
-
-import MssDashboard from '../pages/InsightsEngine/CoreDashboards/MssDashboard.jsx';
-import UgwDashboard from '../pages/InsightsEngine/CoreDashboards/UgwDashboard.jsx';
-import MgwDashboard from '../pages/InsightsEngine/CoreDashboards/MgwDashboard.jsx';
-
-import WorstCellsDashboard from '../pages/InsightsEngine/RanDashboards/WorstCellsDashboard.jsx';
-import Huawei4GDashboard from '../pages/InsightsEngine/RanDashboards/Huawei4GDashboard.jsx';
-import Huawei5GDashboard from '../pages/InsightsEngine/RanDashboards/Huawei5GDashboard.jsx';
-import NSAtoSA5GPrePostDashboard from '../pages/InsightsEngine/RanDashboards/NSAtoSA5GPrePostDashboard.jsx';
-// import MapTesting from '../pages/InsightsEngine/MapTesting.jsx';
-import TelecomMapsPage from '../pages/TelecomMapsPage.jsx';
-import TelecomMultipleMapsPage from '../pages/TelecomMultipleMapsPage.jsx';
-import TicketsPage from '../pages/Tickets/index.jsx';
-import NifiViewer from '../pages/nifi/index.jsx';
+const Home = lazy(() => import('../pages/Home'));
+const Profile = lazy(() => import('../pages/Profile'));
+const ComingSoon = lazy(() => import('../pages/ComingSoon'));
+const CommonPowerBI = lazy(() => import('../pages/CommonPowerBI'));
+const SupersetDashboard = lazy(() => import('../pages/SuperSet/SupersetDashboard'));
+const DBConfig = lazy(() => import('../pages/CustomQuery/DBConfig'));
+const QueryWorkbench = lazy(() => import('../pages/CustomQuery/QueryWorkbench'));
+const XAlertConfigure = lazy(() => import('../pages/AlertMonitoringSystem/XAlertConfigure'));
+const XAlertScheduler = lazy(() => import('../pages/AlertMonitoringSystem/XAlertScheduler'));
+const ISONForm = lazy(() => import('../pages/iSON/iSonForm'));
+const UserManagement = lazy(() => import('../pages/Admin/UserManagement/UserManagement'));
+const RoleManagement = lazy(() => import('../pages/Admin/RoleManagement/RoleManagement'));
+const NokiaToolManagementQuery = lazy(() => import('../pages/NokiaToolManagement/NokiaToolManagementQuery'));
+const SiteAnalyticsPro = lazy(() => import('../pages/DataPlusAnalytics/SiteAnalyticsPro'));
+const CellAnalyticsPro = lazy(() => import('../pages/DataPlusAnalytics/CellAnalyticsPro'));
+const ProRulesQuery = lazy(() => import('../pages/ProRules/ProRulesQuery'));
+const ProRulesQueryOutput = lazy(() => import('../pages/ProRules/ProRulesQueryOutput'));
+const CellProRulesQueryOutput = lazy(() => import('../pages/ProRules/CellProRulesQueryOutput'));
+const MapChart = lazy(() => import('../pages/MapBox/MapChart'));
+const Scripting = lazy(() => import('../pages/CX_IXSupport/Scripting'));
+const ParameterAudit = lazy(() => import('../pages/CX_IXSupport/ParameterAudit'));
+const ScriptingPattern = lazy(() => import('../pages/CX_IXSupport/ScriptingPattern'));
+const DBUpdate = lazy(() => import('../pages/CX_IXSupport/DBUpdate'));
+const ScriptingPatternList = lazy(() => import('../pages/CX_IXSupport/ScriptingPatternList'));
+const AuditPatternList = lazy(() => import('../pages/CX_IXSupport/AuditPatternList'));
+const AuditPattern = lazy(() => import('../pages/CX_IXSupport/AuditPattern'));
+const NetworkDashboard = lazy(() => import('../pages/InsightsEngine/NetworkDashboard'));
+const ParameterAuditDashboard = lazy(() => import('../pages/InsightsEngine/ParameterAuditDashboard'));
+const MssDashboard = lazy(() => import('../pages/InsightsEngine/CoreDashboards/MssDashboard'));
+const UgwDashboard = lazy(() => import('../pages/InsightsEngine/CoreDashboards/UgwDashboard'));
+const MgwDashboard = lazy(() => import('../pages/InsightsEngine/CoreDashboards/MgwDashboard'));
+const WorstCellsDashboard = lazy(() => import('../pages/InsightsEngine/RanDashboards/WorstCellsDashboard'));
+const Huawei4GDashboard = lazy(() => import('../pages/InsightsEngine/RanDashboards/Huawei4GDashboard'));
+const Huawei5GDashboard = lazy(() => import('../pages/InsightsEngine/RanDashboards/Huawei5GDashboard'));
+const NSAtoSA5GPrePostDashboard = lazy(() => import('../pages/InsightsEngine/RanDashboards/NSAtoSA5GPrePostDashboard'));
+const TelecomMapsPage = lazy(() => import('../pages/TelecomMapsPage'));
+const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsPage'));
+const TicketsPage = lazy(() => import('../pages/Tickets/index'));
+const DiscussionPage = lazy(() => import('../pages/DiscussionForum/DiscussionPage'));
 
 export const Sidebar_content = {
     temp: [],
@@ -122,34 +123,34 @@ export const Sidebar_content = {
         // {
         //     name: "Topology Layer",
         //     link: "/topology-layer",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [],
         //     component: <ComingSoon />,
         // },
         // {
         //     name: "Layer View",
         //     link: "/layer-view",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [{
         //         name: "Site Layer",
         //         link: "/layer-view/site-layer",
         //         subMenu: [],
         //         component: <LaverView />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     },
         //     {
         //         name: "Carrier Layer",
         //         link: "/layer-view/carrier-layer",
         //         subMenu: [],
         //         component: <MapView />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     },
         //     {
         //         name: "Cell Layer",
         //         link: "/map-box/carrier-layer",
         //         subMenu: [],
         //         component: <MapBoxView />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     }],
 
         // },
@@ -288,21 +289,21 @@ export const Sidebar_content = {
         {
             name: "Insights Engine",
             link: "/insights-engine",
-            icon: <Unicons.UilReact />,
+            icon: <UilReact />,
             subMenu: [
             //     {
             //     name: "RAN Dashboard",
             //     link: "/insights-engine/ran-dashboard",
             //     subMenu: [],
             //     component: <CommonPowerBI reportId={"971a078b-5783-41e8-a676-fd154fe0e597"} src={"https://app.powerbi.com/reportEmbed?reportId=971a078b-5783-41e8-a676-fd154fe0e597&autoAuth=true&ctid=8d2d9b81-d0ec-49f4-9466-732d6e42831c"} />,
-            //     icon: <Unicons.UilChannel size="16" />
+            //     icon: <UilChannel size="16" />
             // }, 
             // {
             //     name: "Access Dashboard",
             //     link: "/insights-engine/access-dashboard",
             //     subMenu: [],
             //     component: <CommonPowerBI reportId={"971a078b-5783-41e8-a676-fd154fe0e597"} src={"https://app.powerbi.com/reportEmbed?reportId=971a078b-5783-41e8-a676-fd154fe0e597&autoAuth=true&ctid=8d2d9b81-d0ec-49f4-9466-732d6e42831c"} />,
-            //     icon: <Unicons.UilChannel size="16" />
+            //     icon: <UilChannel size="16" />
             // }, 
             {
                 name: "Core Dashboards",
@@ -313,25 +314,25 @@ export const Sidebar_content = {
                         link: "/insights-engine/core-dashboard/mss",
                         subMenu: [],
                         component:  <MssDashboard /> ,
-                        icon: <Unicons.UilChartLine size="16" />
+                        icon: <UilChartLine size="16" />
                     }, 
                      {
                         name: "UGW Dashboard",
                         link: "/insights-engine/core-dashboard/ugw",
                         subMenu: [],
                         component:  <UgwDashboard /> ,
-                        icon: <Unicons.UilChartLine size="16" />
+                        icon: <UilChartLine size="16" />
                     }, 
                      {
                         name: "MGW Dashboard",
                         link: "/insights-engine/core-dashboard/mgw",
                         subMenu: [],
                         component:  <MgwDashboard /> ,
-                        icon: <Unicons.UilChartLine size="16" />
+                        icon: <UilChartLine size="16" />
                     }, 
                 ],
                 // component:  ,
-                icon: <Unicons.UilLayerGroup size="16" />
+                icon: <UilLayerGroup size="16" />
             }, 
             {
                 name: "RAN Dashboards",
@@ -342,78 +343,78 @@ export const Sidebar_content = {
                         link: "/insights-engine/ran-dashboard/worstcells",
                         subMenu: [],
                         component:  <WorstCellsDashboard/>,
-                        icon: <Unicons.UilChartLine size="16" />
+                        icon: <UilChartLine size="16" />
                     }, 
                     {
                         name: "4G Dashboard",
                         link: "/insights-engine/ran-dashboard/huawei4g",
                         subMenu: [],
                         component:  <Huawei4GDashboard/>,
-                        icon: <Unicons.UilChartLine size="16" />
+                        icon: <UilChartLine size="16" />
                     }, 
                      {
                         name: "5G NSA to SA Pre-Post Dashboard",
                         link: "/insights-engine/ran-dashboard/5GNSAtoSAPrePostDashboard",
                         subMenu: [],
                         component:  <NSAtoSA5GPrePostDashboard/>,
-                        icon: <Unicons.UilChartLine size="16" />
+                        icon: <UilChartLine size="16" />
                     }, 
                                          {
                         name: "5G Dashboard",
                         link: "/insights-engine/ran-dashboard/huawei5g",
                         subMenu: [],
                         component:  <Huawei5GDashboard/>,
-                        icon: <Unicons.UilChartLine size="16" />
+                        icon: <UilChartLine size="16" />
                     }, 
                 ],
-                icon: <Unicons.UilLayerGroup size="16" />
+                icon: <UilLayerGroup size="16" />
             },
             {
                 name: "Network Dashboard",
                 link: "/insights-engine/network-dashboard",
                 subMenu: [],
                 component:  <NetworkDashboard /> ,
-                icon: <Unicons.UilChartLine size="16" />
+                icon: <UilChartLine size="16" />
             },
              {
                 name: "Parameter Audit Dashboard",
                 link: "/insights-engine/parameter-audit-dashboard",
                 subMenu: [],
                 component:  <ParameterAuditDashboard /> ,
-                icon: <Unicons.UilChartLine size="16" />
+                icon: <UilChartLine size="16" />
             },
             // {
             //     name: "Map Testing",
             //     link: "/insights-engine/map-testing",
             //     subMenu: [],
             //     component:  <MapTesting /> ,
-            //     icon: <Unicons.UilChartLine size="16" />
+            //     icon: <UilChartLine size="16" />
             // },
              // {
             //     name: "Security Dashboard",
             //     link: "/insights-engine/security-dashboard",
             //     subMenu: [],
             //     component: <CommonPowerBI reportId={"971a078b-5783-41e8-a676-fd154fe0e597"} src={"https://app.powerbi.com/reportEmbed?reportId=971a078b-5783-41e8-a676-fd154fe0e597&autoAuth=true&ctid=8d2d9b81-d0ec-49f4-9466-732d6e42831c"} />,
-            //     icon: <Unicons.UilChannel size="16" />
+            //     icon: <UilChannel size="16" />
             // },
         ]
         },
         // {
         //     name: "Reporting Suite",
         //     link: "/reporting-suite",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [{
         //         name: "Customized Report",
         //         link: "/reporting-suite/report-customization",
         //         subMenu: [],
         //         component: <ComingSoon />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     }, {
         //         name: "Repository",
         //         link: "/reporting-suite/repository",
         //         subMenu: [],
         //         component: <ComingSoon />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     },
         // ],
         // },
@@ -427,49 +428,49 @@ export const Sidebar_content = {
         {
             name: "Configuration Management",
             link: "/configuration-management",
-            icon: <Unicons.UilReact />,
+            icon: <UilReact />,
             subMenu: [{
                 name: "Parameter Audit",
                 link: "/configuration-management/parameter-audit",
                 subMenu: [],
                 component: <CommonPowerBI reportId={"35d0fc8b-6ef7-4c75-85a2-59e309ea6ff2"} src={""} />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }, {
                 name: "Neighbour Audit",
                 link: "/configuration-management/neighbour-audit",
                 subMenu: [],
                 component: <CommonPowerBI reportId={"0a37d9e6-571d-421b-98ac-0b37945c8037"} src={"https://app.powerbi.com/reportEmbed?reportId=0a37d9e6-571d-421b-98ac-0b37945c8037&autoAuth=true&ctid=8d2d9b81-d0ec-49f4-9466-732d6e42831c"} />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             },
             // {
             //     name: "CM",
             //     link: "/configuration-management/cm",
             //     subMenu: [],
-            //     icon: <Unicons.UilChannel size="16" />
+            //     icon: <UilChannel size="16" />
             // }, 
             {
                 name: "Daily Parameter Audit",
                 link: "/configuration-management/daily-parameter-audit",
                 subMenu: [],
                 component: <ComingSoon />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }],
         },{
             name: "iSON",
             link: "/ison",
             subMenu: [],
             component: <ISONForm />,
-            icon: <Unicons.UilReact />,
+            icon: <UilReact />,
         },  {
             name: "Custom Query",
             link: "/custom-query",
-            icon: <Unicons.UilReact />,
+            icon: <UilReact />,
             subMenu: [{
                 name: "DB Config",
                 link: "/custom-query/db-config",
                 subMenu: [],
                 component: <DBConfig />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }, 
             {
                 name: "Query workbench",
@@ -477,35 +478,35 @@ export const Sidebar_content = {
                 subMenu: [],
                 component: <QueryWorkbench />,
                 // component: <AdvancedQueryBuilderComponent />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }, 
             // {
             //     name: "Run Query",
             //     link: "/custom-query/run-query",
             //     subMenu: [],
             //     component: <RunQuery />,
-            //     icon: <Unicons.UilChannel size="16" />
+            //     icon: <UilChannel size="16" />
             // }, 
             // {
                 //     name: "Query Builder",
                 //     link: "/custom-query/query-builder",
                 //     subMenu: [],
                 //     component:<QueryBuilderComponent />,
-                //     icon: <Unicons.UilChannel size="16" />
+                //     icon: <UilChannel size="16" />
             // },
             // {
             //     name: "Save Query",
             //     link: "/custom-query/save-query",
             //     subMenu: [],
             //     component: <AdvancedQueryBuilderComponent />,
-            //     icon: <Unicons.UilChannel size="16" />
+            //     icon: <UilChannel size="16" />
             // }, 
             // {
             //     name: "Saved Query List",
             //     link: "/custom-query/saved-query-list",
             //     subMenu: [],
             //     component: <SavedQueries />,
-            //     icon: <Unicons.UilChannel size="16" />
+            //     icon: <UilChannel size="16" />
             // },
         ],
         },
@@ -519,45 +520,45 @@ export const Sidebar_content = {
                 subMenu: [],
                 // component: <AlertConfigure />,
                 component: <XAlertConfigure />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }, {
                 name: "Alert Scheduler",
                 link: "/xalerts/alert-scheduler",
                 subMenu: [],
                 component: <XAlertScheduler />,
                 // component: <AlertScheduler />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }
 
                 // {
                 //     name: "CM",
                 //     link: "/configuration-management/cm",
                 //     subMenu: [],
-                //     icon: <Unicons.UilChannel size="16" />
+                //     icon: <UilChannel size="16" />
                 // },
             ],
         },{
             name: "CX/IX Support",
             link: "/cx-ix-support",
-            icon: <Unicons.UilReact />,
+            icon: <UilReact />,
             subMenu: [{
                 name: "Scripting",
                 link: "/cx-ix-support/scripting",
                 subMenu: [],
                 component: <Scripting />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }, {
                 name: "Parameter Audit",
                 link: "/cx-ix-support/parameteraudit",
                 subMenu: [],
                 component: <ParameterAudit />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }, {
                 name: "DB Update",
                 link: "/cx-ix-support/dbupdate",
                 subMenu: [],
                 component: <DBUpdate />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }],
         },
         // {
@@ -565,7 +566,7 @@ export const Sidebar_content = {
         //     link: "/network-complaints/view-network-complaints",
         //     subMenu: [],
         //     component: <ViewMtandaoComplaints />,
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         // },
         
 
@@ -577,106 +578,106 @@ export const Sidebar_content = {
         // {
         //     name: "Fault Management",
         //     link: "/fault-management",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [],
         //     component: <ComingSoon />,
         // },
         // {
         //     name: "Capacity Management",
         //     link: "/capacity-management",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [{
         //         name: "Resource Utilization",
         //         link: "/capacity-management/resource-utilization",
         //         subMenu: [],
         //         component: <ComingSoon />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     }],
         // },
         // {
         //     name: "Revenue Assurance",
         //     link: "/revenue-assurance",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [],
         //     component: <ComingSoon />,
         // },
         //     name: "DataPlus Analytics Pro",
         //     link: "/network-analytics",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [{
         //         name: "Pre Post Comparison",
         //         link: "/network-analytics/pre-post-comparison",
         //         subMenu: [],
         //         component: <DataPlusAnalytics />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     }],
         // }, {
            
         // {
         //     name: "Work Force Management",
         //     link: "/work-force-management",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [{
         //         name: "Auto TT Dispatch",
         //         link: "/work-force-management/auto-tt-dispatch",
         //         subMenu: [],
         //         component: <ComingSoon />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     }],
         // },
         // {
         //     name: "Change Management",
         //     link: "/change-management",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [{
         //         name: "Plan Work Order",
         //         link: "/change-management/plan-work-order",
         //         subMenu: [],
         //         component: <ComingSoon />,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     }],
         // },
         // {
         //     name: "Testing",
         //     link: "/testing",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [{
         //         name: "Table",
         //         link: "/testing/table",
         //         subMenu: [],
         //         component: <TestTable></TestTable>,
-        //         icon: <Unicons.UilChannel size="16" />
+        //         icon: <UilChannel size="16" />
         //     }],
         // },
         {
             name: "Network Inventory",
             link: "/network-inventory",
-            icon: <Unicons.UilReact />,
+            icon: <UilReact />,
             subMenu: [{
                 name: "Site Database",
                 link: "/network-inventory/site-database",
                 subMenu: [],
                 component: <ComingSoon />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }, {
                 name: "Auto Discovery",
                 link: "/network-inventory/auto-discovery",
                 subMenu: [],
                 component: <ComingSoon />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }],
         },
         // {
         //     name: "Nokia Tool Management Query",
         //     link: "/nokia-tool-management-query",
         //     component: <NokiaToolManagementQuery/>,
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [],
         // },
         // {
         //     name: "Map Settings",
         //     link: "/selectSettings",
-        //     icon: <Unicons.UilReact />,
+        //     icon: <UilReact />,
         //     subMenu: [],
         //     component:<SettingConfigForm />
         // },
@@ -691,15 +692,15 @@ export const Sidebar_content = {
                 link: "/admin/user-management",
                 subMenu: [],
                 component: <UserManagement />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }, {
                 name: "Role Management",
                 link: "/admin/role-management",
                 subMenu: [],
                 component: <RoleManagement />,
-                icon: <Unicons.UilChannel size="16" />
+                icon: <UilChannel size="16" />
             }],
-            icon: <Unicons.UilReact />,
+            icon: <UilReact />,
         },
     ]
 }

@@ -1,8 +1,4 @@
-@import "@fontsource/slabo-27px/400.css";
-@import "@fontsource/dancing-script/400.css";
-@import "@fontsource/dancing-script/500.css";
-@import "@fontsource/dancing-script/600.css";
-@import "@fontsource/dancing-script/700.css";
+/* Removed unused @fontsource/dancing-script (4 weights ~450KB) and slabo-27px */
 
 @font-face {
   font-family: "DatayogQuantico";
@@ -24,13 +20,13 @@
   --mainprimary: linear-gradient(to left, #101c4c, #1b0027);
   --mainsec: #EC7D09;
   --topbar: linear-gradient(to right, #101c4c, #1b0027);
-  background-color: #f3eee6;
+  background-color: #ffffff;
 }
 
 body {
   margin: 0;
   font-family: "Aptos", "Aptos Display", "Segoe UI", Arial, sans-serif;
-  background: #f3eee6;
+  background: #ffffff;
   color: #0f172a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -83,25 +79,75 @@ textarea {
   z-index: 1000000;
 }
 
-::-webkit-scrollbar {
+/* Kill all CSS transitions during theme switch to prevent border/bg flash glitches */
+html.dy3-no-transitions,
+html.dy3-no-transitions *,
+html.dy3-no-transitions *::before,
+html.dy3-no-transitions *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* App theme = data-theme ONLY. `only` keyword blocks Chrome Auto-Dark Mode entirely. */
+html[data-theme="light"] {
+  color-scheme: only light !important;
+}
+
+html[data-theme="dark"] {
+  color-scheme: only dark !important;
+}
+
+html[data-theme="light"] body {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="dark"] body {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar {
+  background-color: #f1f1f1;
+  width: 2px;
+  height: 4px;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-track {
+  background-color: #f5f5f5;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background-color: #ec7d09;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #d96f08;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-track:hover {
+  background-color: #e8e8e8;
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar {
   background-color: #1b0027;
   width: 2px;
   height: 4px;
 }
 
-::-webkit-scrollbar-track {
+html[data-theme="dark"] ::-webkit-scrollbar-track {
   background-color: #04003a;
 }
 
-::-webkit-scrollbar-thumb {
-  background-color: #EC7D09;
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background-color: #ec7d09;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background-color: #EC7D09;
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #ec7d09;
 }
 
-::-webkit-scrollbar-track:hover {
+html[data-theme="dark"] ::-webkit-scrollbar-track:hover {
   background-color: #04003a3f;
 }
 
@@ -212,4 +258,44 @@ textarea {
   --button-corner-radius: 6px;
   --button-stroke: rgba(15, 23, 42, 0.14);
   --button-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+/*
+ * Chrome backgrounds: single source of truth + !important so Tailwind `bg-white` never flashes.
+ * Text/icons stay on components (no forced sidebar `color` — keeps orange chevrons like original).
+ */
+html[data-theme="light"] [data-dy3-topbar] {
+  color: #1e293b !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-bottom-color: rgb(226 232 240 / 0.9) !important;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05) !important;
+}
+
+html[data-theme="dark"] [data-dy3-topbar] {
+  color: #ffffff !important;
+  background-color: transparent !important;
+  background-image: linear-gradient(90deg, #09001a 0%, #0a1240 42%, #071224 100%) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+  box-shadow: 0 20px 40px rgba(1, 3, 14, 0.28) !important;
+}
+
+html[data-theme="light"] [data-dy3-sidebar] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-right-color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] [data-dy3-sidebar] {
+  color: #ffffff !important;
+  background-color: transparent !important;
+  background-image: linear-gradient(180deg, #09001a 0%, #0a1240 38%, #071224 100%) !important;
+  border-right-color: transparent !important;
+}
+
+/* TopBar: brand text #fff in dark (button + inner span) */
+html[data-theme="dark"] [data-dy3-topbar] .dy3-brand-data,
+html[data-theme="dark"] [data-dy3-topbar] .dy3-brand-sub,
+html[data-theme="dark"] [data-dy3-topbar] .dy3-brand-sub * {
+  color: #ffffff !important;
 }

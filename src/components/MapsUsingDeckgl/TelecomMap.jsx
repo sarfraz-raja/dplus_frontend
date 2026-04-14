@@ -1,5 +1,7 @@
 import React, { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import "maplibre-gl/dist/maplibre-gl.css";
+import '@deck.gl/widgets/stylesheet.css';
 
 import Map from "react-map-gl/maplibre";
 import DeckGL from "@deck.gl/react";
