@@ -1,36 +1,24 @@
 
 import * as Unicons from '@iconscout/react-unicons';
-import RunQuery from '../pages/CustomQuery/RunQuery';
-import QueryBuilderComponent from '../pages/CustomQuery/QueryBuilder';
-// import BIDashboard from '../pages/InsightsEngine/BIDashboard.js';
-import AdvancedQueryBuilderComponent from '../pages/CustomQuery/AdvancedQueryBuilder';
-import TestTable from '../pages/DataPlusAnalytics/TestTable';
 import CommonPowerBI from '../pages/CommonPowerBI';
-import DataPlusAnalytics from '../pages/DataPlusAnalytics';
-import LaverView from '../pages/LaverView';
 import DBConfig from '../pages/CustomQuery/DBConfig';
 import QueryWorkbench from '../pages/CustomQuery/QueryWorkbench';
 
-import SavedQueries from '../pages/CustomQuery/SavedQueries';
 // import AlertConfigure from '../pages/AlertMonitoringSystem/AlertConfigure';
 import XAlertConfigure from '../pages/AlertMonitoringSystem/XAlertConfigure';
 
-import ViewMtandaoComplaints from '../pages/MtandaoComplaints/ViewMtandaoComplaints';
 import ISONForm from '../pages/iSON/iSonForm';
-// import AlertScheduler from '../pages/AlertMonitoringSystem/AlertScheduler';
 import UserManagement from '../pages/Admin/UserManagement/UserManagement';
-import AlertScheduler from '../pages/AlertMonitoringSystem/AlertScheduler';
 import XAlertScheduler from '../pages/AlertMonitoringSystem/XAlertScheduler';
 
 import RoleManagement from '../pages/Admin/RoleManagement/RoleManagement';
-import NokiaToolManagementQuery from '../pages/NokiaToolManagement/NokiaToolManagementQuery';
+
 // import NetworkAnalyticsPro from '../pages/DataPlusAnalytics/NetworkAnalyticsPro';
-import SiteAnalyticsPro from '../pages/DataPlusAnalytics/SiteAnalyticsPro';
-import ProRulesQuery from '../pages/ProRules/ProRulesQuery';
-import MapView from '../pages/Map';
-import MapBoxView from '../pages/MapBox';
-import SettingConfigForm from '../pages/SettingConfig/SettingConfigForm';
 import MapChart from '../pages/MapBox/MapChart';
+import SiteAnalyticsProPage from '../pages/DataPlusAnalytics/SiteAnalyticsProPage';
+import KPICheckRulesPage from '../pages/DataPlusAnalytics/KPICheckRulesPage';
+import SiteProRulesOutputPage from '../pages/DataPlusAnalytics/SiteProRulesOutputPage';
+import ProRulesManagementPage from '../pages/DataPlusAnalytics/ProRulesManagementPage';
 import Scripting from '../pages/CX_IXSupport/Scripting';
 import ParameterAudit from '../pages/CX_IXSupport/ParameterAudit';
 import ScriptingPattern from '../pages/CX_IXSupport/ScriptingPattern';
@@ -40,9 +28,11 @@ import ScriptingPatternList from '../pages/CX_IXSupport/ScriptingPatternList';
 import AuditPatternForm from '../pages/CX_IXSupport/AuditPatternForm';
 import AuditPatternList from '../pages/CX_IXSupport/AuditPatternList';
 import AuditPattern from '../pages/CX_IXSupport/AuditPattern';
-import CellAnalyticsPro from '../pages/DataPlusAnalytics/CellAnalyticsPro';
-import ProRulesQueryOutput from '../pages/ProRules/ProRulesQueryOutput';
 import CellProRulesQueryOutput from '../pages/ProRules/CellProRulesQueryOutput';
+
+import CellProRulesPage from '../pages/DataPlusAnalytics/CellProRulesPage';
+import CellAnalyticsProPage from '../pages/DataPlusAnalytics/CellAnalyticsProPage';
+
 import Home from '../pages/Home';
 import Profile from '../pages/Profile';
 import ComingSoon from '../pages/ComingSoon';
@@ -61,9 +51,7 @@ import NSAtoSA5GPrePostDashboard from '../pages/InsightsEngine/RanDashboards/NSA
 // import MapTesting from '../pages/InsightsEngine/MapTesting.jsx';
 import TelecomMapsPage from '../pages/TelecomMapsPage.jsx';
 import TelecomMultipleMapsPage from '../pages/TelecomMultipleMapsPage.jsx';
-import SupportDesk from '../pages/SupportDesk.jsx';
 import TicketsPage from '../pages/Tickets/index.jsx';
-import DiscussionPage from '../pages/DiscussionForum/DiscussionPage.jsx';
 import NifiViewer from '../pages/nifi/index.jsx';
 
 export const Sidebar_content = {
@@ -108,7 +96,7 @@ export const Sidebar_content = {
         },
         {
             name: "Scripting Pattern Form",
-            link: "/ScriptingPatternForm/:uid",
+            link: "/cx-ix-support/scripting-pattern-form/:uid",
             subMenu: [],
             component: <ScriptingPatternList/>,
             
@@ -122,7 +110,7 @@ export const Sidebar_content = {
         },
         {
             name: "Audit Pattern Form",
-            link: "/AuditPatternPatternForm/:uid",
+            link: "/cx-ix-support/audit-pattern-form/:uid",
             subMenu: [],
             component: <AuditPatternList/>,
             
@@ -167,13 +155,13 @@ export const Sidebar_content = {
         // },
         {
             name: "Analytics Pro",
-            link: "/dataplus-analytics-pro",
+            link: "/analytics-pro",
             icon: <Unicons.UilReact />,
             subMenu: [{
                 name: "Site Analytics",
-                link: "/dataplus-analytics-pro/site-analytics",
+                link: "/analytics-pro/site-analytics",
                 subMenu: [],
-                component: <SiteAnalyticsPro />,
+                component: <SiteAnalyticsProPage />,
                 icon:     <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 viewBox="0 0 24 24"
@@ -194,9 +182,9 @@ export const Sidebar_content = {
                             </svg> 
             },{
                 name: "Site Pro Rules",
-                link: "/dataplus-analytics-pro/site-pro-rules",
+                link: "/analytics-pro/site-pro-rules",
                 subMenu: [],
-                component: <ProRulesQueryOutput />,
+                component: <SiteProRulesOutputPage />,
                 icon: <svg
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 24 24"
@@ -225,9 +213,9 @@ export const Sidebar_content = {
                     </svg> 
             },{
                 name: "Cell Analytics",
-                link: "/dataplus-analytics-pro/cell-analytics",
+                link: "/analytics-pro/cell-analytics",
                 subMenu: [],
-                component: <CellAnalyticsPro />,
+                component: <CellAnalyticsProPage />,
                 icon: <svg
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 24 24"
@@ -244,9 +232,9 @@ export const Sidebar_content = {
                     </svg>
             },{
                 name: "Cell Pro Rules",
-                link: "/dataplus-analytics-pro/cell-pro-rules",
+                link: "/analytics-pro/cell-pro-rules",
                 subMenu: [],
-                component: <CellProRulesQueryOutput />,
+                component: <CellProRulesPage />,
                 icon: <svg
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 24 24"
@@ -271,18 +259,32 @@ export const Sidebar_content = {
                     </svg>
             },{
                 name: "KPI Check Rules",
-                link: "/dataplus-analytics-pro/kpi-check-rules",
+                link: "/analytics-pro/kpi-check-rules",
                 subMenu: [],
-                component: <NokiaToolManagementQuery />,
+                component: <KPICheckRulesPage />,
                 icon: <Unicons.UilCheckCircle size="16" />
             },{
                 name: "Pro Rules Management",
-                link: "/dataplus-analytics-pro/pro-rules-management",
+                link: "/analytics-pro/pro-rules-management",
                 subMenu: [],
-                component: <ProRulesQuery />,
+                component: <ProRulesManagementPage />,
                 icon: <Unicons.UilChannel size="16" />
             }],
-        }, 
+        },
+        {
+            name: "Tickets",
+            link: "/tickets",
+            icon: <Unicons.UilReact />,
+            component: <TicketsPage />,
+            subMenu: [],
+        },
+        {
+            name: "Multi-Map View",
+            link: "/multi-map-view",
+            subMenu: [],
+            component: <TelecomMultipleMapsPage />,
+            icon: <Unicons.UilReact />,
+        },
         {
             name: "Insights Engine",
             link: "/insights-engine",
@@ -415,48 +417,11 @@ export const Sidebar_content = {
         //     },
         // ],
         // },
-        // {
-        //     name: "Discussions",
-        //     link: "/discussions",
-        //     // icon: <Unicons.UilComment size="16" />,
-        //     icon: <Unicons.UilReact />,
-        //     component: <DiscussionPage />,
-        //     // component: <SupportDesk />,
-        //     subMenu: [],
-        // },
-        {
-            name: "Discussions",
-            link: "/discussions",
-            // icon: <Unicons.UilComment size="16" />,
-            icon: <Unicons.UilReact />,
-            component: <TicketsPage />,
-            // component: <DiscussionPage />,
-            // component: <SupportDesk />,
-            subMenu: [],
-        },
-        // {
-        //     name: "NiFi",
-        //     link: "/nifi-app",
-        //     // icon: <Unicons.UilComment size="16" />,
-        //     icon: <Unicons.UilReact />,
-        //     component: <NifiViewer />,
-        //     // component: <DiscussionPage />,
-        //     // component: <SupportDesk />,
-        //     subMenu: [],
-        // },
-        
         {
             name: "GIS Engine",
-            link: "/telecom-maps",
+            link: "/gis-engine",
             subMenu: [],
-            component:  <TelecomMapsPage /> ,
-            icon: <Unicons.UilReact />,
-        },
-        {
-            name: "Multi-Map View",
-            link: "/telecom-multi-maps",
-            subMenu: [],
-            component: <TelecomMultipleMapsPage />,
+            component: <TelecomMapsPage />,
             icon: <Unicons.UilReact />,
         },
         {
@@ -491,7 +456,7 @@ export const Sidebar_content = {
             }],
         },{
             name: "iSON",
-            link: "/iSon/file-with-form",
+            link: "/ison",
             subMenu: [],
             component: <ISONForm />,
             icon: <Unicons.UilReact />,
@@ -508,7 +473,7 @@ export const Sidebar_content = {
             }, 
             {
                 name: "Query workbench",
-                link: "/custom-query/advanced-query-builder",
+                link: "/custom-query/workbench",
                 subMenu: [],
                 component: <QueryWorkbench />,
                 // component: <AdvancedQueryBuilderComponent />,
@@ -546,18 +511,18 @@ export const Sidebar_content = {
         },
         {
             name: "xAlerts",
-            link: "/report-scheduler",
+            link: "/xalerts",
             icon: <Unicons.UilReact />,
             subMenu: [{
                 name: "Configure Scheduler",
-                link: "/xAlerts/configure-scheduler",
+                link: "/xalerts/configure-scheduler",
                 subMenu: [],
                 // component: <AlertConfigure />,
                 component: <XAlertConfigure />,
                 icon: <Unicons.UilChannel size="16" />
             }, {
                 name: "Alert Scheduler",
-                link: "/xAlerts/alert-scheduler",
+                link: "/xalerts/alert-scheduler",
                 subMenu: [],
                 component: <XAlertScheduler />,
                 // component: <AlertScheduler />,

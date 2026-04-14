@@ -186,6 +186,8 @@
 // export default DBConfig;
 import { useEffect, useState } from 'react';
 import Modal from '../../components/Modal';
+import Table from '../../components/Table';
+import Button from '../../components/Button';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
 import DBConfigForm from './DBConfigForm';
@@ -348,12 +350,13 @@ const DBConfig = () => {
 
                 <div className="flex items-center gap-2 relative">
                     {/* Columns toggle */}
-                    <button
+                    <Button
                         onClick={() => setShowColToggle(prev => !prev)}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-sm transition-colors"
+                        variant="secondary"
+                        className="flex items-center gap-2"
                     >
                         <span>⊞</span> Columns
-                    </button>
+                    </Button>
                     {showColToggle && (
                         <div className="absolute right-36 top-11 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-3 min-w-[160px]">
                             {COLUMNS.map(col => (
@@ -370,17 +373,17 @@ const DBConfig = () => {
                     )}
 
                     {/* Add connection */}
-                    <button
+                    <Button
                         onClick={() => {
                             setmodalOpen(true)
                             dispatch(CustomQueryActions.getUserList())
                             setmodalBody(<DBConfigForm setIsOpen={setmodalOpen} resetting={true} formValue={{}} />)
                         }}
-                        style={{ background: '#EC7D09' }}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg shadow-sm hover:opacity-90 transition-opacity"
+                        variant="primary"
+                        className="flex items-center gap-2"
                     >
                         + Add connection
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -401,17 +404,7 @@ const DBConfig = () => {
             {/* Table — glass */}
             <div className="flex-1 overflow-auto rounded-xl min-h-0 backdrop-blur-md border border-white/60 shadow-lg"
                 style={{ background: 'rgba(255,255,255,0.55)' }}>
-                <table className="min-w-full text-left text-sm">
-                    <thead className="sticky top-0"
-                        style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
-                        <tr>
-                            {visibleCols.map(col => (
-                                <th key={col.key} className="px-4 py-3 text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">
-                                    {col.label}
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
+                <Table headers={visibleCols.map(col => col.label)} className="min-w-full text-left text-sm">
                     <tbody>
                         {pageRows.length === 0 ? (
                             <tr>
@@ -436,7 +429,7 @@ const DBConfig = () => {
                             ))
                         )}
                     </tbody>
-                </table>
+                </Table>
             </div>
 
             {/* Footer */}

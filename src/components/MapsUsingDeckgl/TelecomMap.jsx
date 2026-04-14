@@ -1524,7 +1524,7 @@ const siteLayer = useMemo(() => {
       radiusUnits: "pixels",
       getRadius: 5,
       radiusMinPixels: 3,
-      radiusScale: config.mapScale / 2,
+      radiusScale: (driveTestFilters?.driveTestScale ?? 1) / 2,
 
       getFillColor: d => {
         const quality = getSignalQuality(d.rssi);
@@ -1536,7 +1536,7 @@ const siteLayer = useMemo(() => {
       // opacity: 0.9
     });
 
-  }, [driveTestData, activeDriveSessions, driveTestFilters, config.mapScale, blockMapDataPick]);
+  }, [driveTestData, activeDriveSessions, driveTestFilters, blockMapDataPick]);
 
   // for hover values(color of string), dot colors
   const getSignalQuality = (rssi) => {
@@ -2169,9 +2169,9 @@ const siteLayer = useMemo(() => {
       dispatch(CommonActions.setLastName(true, 'Site Analytics'));
       const id = encodeURIComponent(siteUniqueFromPopup(data));
       if (from === 'one') {
-          navigate('/dataplus-analytics-pro/site-analytics?uniqueId=' + id);
+          navigate('/analytics-pro/site-analytics?uniqueId=' + id);
       } else {
-          const newWin = window.open('/dataplus-analytics-pro/site-analytics?uniqueId=' + id, '_blank', 'noopener,noreferrer');
+          const newWin = window.open('/analytics-pro/site-analytics?uniqueId=' + id, '_blank', 'noopener,noreferrer');
           if (newWin) newWin.opener = null;
       }
   };
@@ -2180,9 +2180,9 @@ const siteLayer = useMemo(() => {
       dispatch(CommonActions.setLastName(true, 'Cell Analytics'));
       const id = encodeURIComponent(cellUniqueFromPopup(data));
       if (from === 'one') {
-          navigate('/dataplus-analytics-pro/cell-analytics?uniqueId=' + id);
+          navigate('/analytics-pro/cell-analytics?uniqueId=' + id);
       } else {
-          const newWin = window.open('/dataplus-analytics-pro/cell-analytics?uniqueId=' + id, '_blank', 'noopener,noreferrer');
+          const newWin = window.open('/analytics-pro/cell-analytics?uniqueId=' + id, '_blank', 'noopener,noreferrer');
           if (newWin) newWin.opener = null;
       }
   };
@@ -2191,9 +2191,9 @@ const siteLayer = useMemo(() => {
       dispatch(CommonActions.setLastName(true, 'Site Pro Rules'));
       const id = encodeURIComponent(siteUniqueFromPopup(data));
       if (from === 'one') {
-          navigate('/dataplus-analytics-pro/site-pro-rules?uniqueId=' + id);
+          navigate('/analytics-pro/site-pro-rules?uniqueId=' + id);
       } else {
-          const newWin = window.open('/dataplus-analytics-pro/site-pro-rules?uniqueId=' + id, '_blank', 'noopener,noreferrer');
+          const newWin = window.open('/analytics-pro/site-pro-rules?uniqueId=' + id, '_blank', 'noopener,noreferrer');
           if (newWin) newWin.opener = null;
       }
   };
@@ -2202,9 +2202,9 @@ const siteLayer = useMemo(() => {
       dispatch(CommonActions.setLastName(true, 'Cell Pro Rules'));
       const id = encodeURIComponent(cellUniqueFromPopup(data));
       if (from === 'one') {
-          navigate('/dataplus-analytics-pro/cell-pro-rules?uniqueId=' + id);
+          navigate('/analytics-pro/cell-pro-rules?uniqueId=' + id);
       } else {
-          const newWin = window.open('/dataplus-analytics-pro/cell-pro-rules?uniqueId=' + id, '_blank', 'noopener,noreferrer');
+          const newWin = window.open('/analytics-pro/cell-pro-rules?uniqueId=' + id, '_blank', 'noopener,noreferrer');
           if (newWin) newWin.opener = null;
       }
   };

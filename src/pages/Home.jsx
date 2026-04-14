@@ -1,6 +1,5 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Database, Zap, TrendingUp, AlertCircle, Ticket } from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -43,7 +42,7 @@ const Home = () => {
                   </div>
                 </div>
                 <button 
-                  onClick={() => handleNavigation('/telecom-maps')}
+                  onClick={() => handleNavigation('/gis-engine')}
                   className="rounded-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
                 >
                   <span>Launch GIS</span>
@@ -85,7 +84,7 @@ const Home = () => {
                 </div>
                 <p className="text-xs text-gray-400 mb-4">Execute complex SQL queries against real-time data sources</p>
                 <button 
-                  onClick={() => handleNavigation('/custom-query/advanced-query-builder')}
+                  onClick={() => handleNavigation('/custom-query/workbench')}
                   className="rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-6 transition-all"
                 >
                   Open Workbench
@@ -102,7 +101,7 @@ const Home = () => {
                 <p className="mt-2 text-sm text-gray-400">Threshold-based alerts on network KPIs with intelligent escalation.</p>
                 <p className="mt-4 text-xs text-gray-400">Get notified when critical thresholds are breached</p>
                 <button 
-                  onClick={() => handleNavigation('/report-scheduler')}
+                  onClick={() => handleNavigation('/xalerts')}
                   className="mt-4 inline-flex items-center gap-2 text-sm text-orange-500 font-bold hover:text-orange-400 transition-all"
                 >
                   <Zap className="w-4 h-4" />
@@ -118,7 +117,7 @@ const Home = () => {
                     <h3 className="mt-3 text-xl font-black text-white">Ticketing System</h3>
                     <p className="mt-2 text-sm text-gray-400">Track, assign and escalate network tickets across teams with full audit trail and escalation management.</p>
                     <button 
-                      onClick={() => handleNavigation('/discussions')}
+                      onClick={() => handleNavigation('/tickets')}
                       className="mt-6 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-6 transition-all"
                     >
                       Open Ticketing

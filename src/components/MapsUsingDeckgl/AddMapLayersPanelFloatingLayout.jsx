@@ -78,6 +78,8 @@ const AddMapLayersPanelFloatingLayout = ({
   ranges,
   setRanges,
   driveThematicOptions,
+  driveTestScale,
+  setDriveTestScale,
 }) => {
   // RF / Drive Test selection status (computed locally from props)
   const anyRfSelected = pendingRfRegions.length > 0;
@@ -590,6 +592,21 @@ const AddMapLayersPanelFloatingLayout = ({
                     value={pendingOpacity.DRIVE_TEST}
                     onChange={(val) => { setPendingOpacity((prev) => ({ ...prev, DRIVE_TEST: val })); markDirty(); }}
                   />
+                  <div className="pb-2 pt-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-gray-500">Dot Scale</span>
+                      <span className="text-xs text-gray-600">{driveTestScale}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.1}
+                      max={10}
+                      step={0.1}
+                      value={driveTestScale}
+                      onChange={(e) => { setDriveTestScale(parseFloat(e.target.value)); markDirty(); }}
+                      className="w-full"
+                    />
+                  </div>
                   <span className="text-xs font-semibold text-gray-500">Select layers</span>
                   <div className="max-h-[120px] overflow-y-auto rounded border border-white/10 p-2">
                     {sessionIds.map((session) => (

@@ -1,9 +1,7 @@
 
-import React from 'react';
 import { Sidebar_content } from './utils/sidebar_values';
 import { Route, Routes } from 'react-router-dom';
 import Layout from './pages/Layout';
-import BIDashboard from './pages/InsightsEngine/BIDashboard';
 import Profile from './pages/Profile';
 
 const safeParse = (value) => {
@@ -18,7 +16,6 @@ const safeParse = (value) => {
 const Navigation = ({ sidebarOpen,sidebarPos, setSidebarPos }) => {
 
 
-    let permission=safeParse(localStorage.getItem("permission"))
     let user=safeParse(localStorage.getItem("user"))
     let rolename=user?.rolename
 

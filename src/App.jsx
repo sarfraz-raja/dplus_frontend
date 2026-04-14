@@ -136,12 +136,14 @@ function App() {
                                 sidebarOpen ? 'lg:pl-[202px]' : 'lg:pl-0'
                             }`}
                         >
-                            <Navigation sidebarOpen={sidebarOpen} />
+                            <div className="relative flex min-h-0 flex-1 flex-col">
+                                <Navigation sidebarOpen={sidebarOpen} />
+                                <Loaders />
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <Loaders />
                 <SweetAlerts />
             </main>
         </ErrorBoundary>

@@ -82,7 +82,8 @@ const initialState = {
     driveTestFilters: {
         sessions: [],
         thematic: "RSSI",
-        ranges: []
+        ranges: [],
+        driveTestScale: 1,
     },
     activeDriveSessions: [],
 

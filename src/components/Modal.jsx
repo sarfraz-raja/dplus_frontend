@@ -51,22 +51,33 @@ const Modal = ({ size, modalHead = "", children, isOpen, setIsOpen, closeButton 
     }
 
     return (
-        <div className={isOpen ? 'z-[4000] flex justify-around place-items-center bg-white fixed rm-scroll overflow-hidden top-0 bottom-0 right-0 left-0' : 'hidden'} style={{ background: 'rgba(6, 6, 6, 0.9)' }} onClick={() => { setIsOpen(prev => !prev) }}>
-            <div onClick={(e) => e.stopPropagation()} className={`relative bg-white  ${sizeType[size]} rounded-2xl overflow-auto modal-inner `}>
+        <div
+            className={isOpen ? 'z-[4000] flex justify-around place-items-center fixed rm-scroll overflow-hidden top-0 bottom-0 right-0 left-0' : 'hidden'}
+            style={{ background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)' }}
+            onClick={() => { setIsOpen(prev => !prev) }}
+        >
+            <div
+                onClick={(e) => e.stopPropagation()}
+                className={`relative bg-white ${sizeType[size]} rounded-2xl overflow-auto modal-inner shadow-2xl`}
+            >
                 {showHeader && (
-                    <div className='sticky bg-primaryLine h-10 top-0 right-0'>
-                        <h1 className='text-white text-lg pt-2 pl-4'>{modalHead}</h1>
-                        <div onClick={() => { setIsOpen(prev => !prev) }} className='absolute ml-auto w-fit top-1 right-3 p-1 hover:bg-main bg-transparent cursor-pointer rounded-md transition-all duration-300 shadow-md'>
-                            <UilTimesCircle className={"text-white"} size="24" />
-                        </div>
+                    <div className='sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-2xl'
+                        style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
+                        <h1 className='text-white font-semibold text-base tracking-wide'>{modalHead}</h1>
+                        <button
+                            onClick={() => { setIsOpen(prev => !prev) }}
+                            className='text-white/70 hover:text-white transition-colors'
+                        >
+                            <UilTimesCircle size="22" />
+                        </button>
                     </div>
                 )}
-                <div className='bg-white dark:bg-white overflow-x-hidden p-2'>
+                <div className='bg-white overflow-x-hidden p-4'>
                     {children}
                 </div>
                 {closeButton &&
                     <div className='w-24 absolute bottom-4 right-4'>
-                        <Button name={"Close"} onClick={(e)=>{ setIsOpen(prev => !prev) }}/>
+                        <Button name={"Close"} onClick={(e) => { setIsOpen(prev => !prev) }} />
                     </div>
                 }
             </div>

@@ -26,12 +26,13 @@ import { GET_PRO_RULES_OUTPUT } from '../../store/reducers/nokiaPrePost-reducer'
 const ProRulesQueryOutput = () => {
 
 
-    const [modalOpen, setmodalOpen] = useState(true)
+    const [modalOpen, setmodalOpen] = useState(false)
     const [modalFullOpen, setmodalFullOpen] = useState(false)
     const [fileOpen, setFileOpen] = useState(false)
     const [modalBody, setmodalBody] = useState(<></>)
     const [modalHead, setmodalHead] = useState(<></>)
     const [datalist, setDatalist] = useState([])
+    const [socketSent, setSocketSent] = useState(false)
 
 
     const url = new URL(window.location.href);
@@ -53,18 +54,6 @@ const ProRulesQueryOutput = () => {
 
 
         let interdata = state?.nokiaPrePost?.proRulesOutput || []
-
-
-
-        if (modalOpen && interdata && interdata.length > 0) {
-            setmodalOpen(false)
-            interdata.map((itm) => {
-                dispatch(WebsocketActions.send_to_socket(WebSocketUrls.proRules, {
-                    ...itm,
-                    Code: itm.technology
-                }, itm.technology + "_" + itm.id))
-            })
-        }
 
         return interdata.map((itm) => {
             let updateditm = {
@@ -148,12 +137,24 @@ const ProRulesQueryOutput = () => {
     let dbConfigTotalCount = useSelector((state) => {
         let interdata = state?.nokiaPrePost?.proRulesOutput
 
-        if (interdata.length > 0) {
+        if (interdata && interdata.length > 0) {
             return interdata[0]["overall_table_count"]
         } else {
             return 0
         }
     })
+
+    useEffect(() => {
+        if (!socketSent && dbConfigList && dbConfigList.length > 0) {
+            setSocketSent(true)
+            dbConfigList.forEach((itm) => {
+                dispatch(WebsocketActions.send_to_socket(WebSocketUrls.proRules, {
+                    ...itm,
+                    Code: itm.technology
+                }, itm.technology + "_" + itm.id))
+            })
+        }
+    }, [dbConfigList, socketSent, dispatch])
 
     // let Form = [
     //     { label: "DB Server", value: "", option: ["Please Select Your DB Server"], type: "select" },
@@ -225,10 +226,10 @@ const ProRulesQueryOutput = () => {
     const hitDatatoGetOutput = (data) => {
         console.log(data, "hitDatatoGetOutputdatadata")
 
-        // setmodalOpen(true)
         dispatch(GET_PRO_RULES_OUTPUT({ dataAll: [], reset: true }));
         dispatch(nokiaPrePostActions.ProRulesOutput(data, true, () => {
-            setmodalOpen(true)
+            // Keep modal closed on submit; table is rendered directly below.
+            setmodalOpen(false)
         }))
     }
     const onTableViewSubmit = (data) => {
@@ -284,94 +285,78 @@ const ProRulesQueryOutput = () => {
 
     console.log(datalist, "dbConfigListdbConfigList")
 
-    return <>
+    return (
+        <div className="w-full min-h-full bg-slate-50">
+            <div className="flex flex-col min-h-full" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}>
+                <div className="px-6 py-6">
+                    <div className="mx-auto max-w-7xl space-y-6">
+                        <div className="flex flex-col gap-6">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-md" style={{ background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)' }}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M7 15l5-5 5 5" />
+                                            <path d="M12 20V4" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h1 className="text-2xl font-bold text-slate-900">Site Pro Rules</h1>
+                                        <p className="text-sm text-slate-500">Query site rule outputs with the same clean page layout used by Cell Pro Rules.</p>
+                                    </div>
+                                </div>
+                            </div>
 
-        {dbConfigList && dbConfigList.length > 0 ? <>
-            <AdvancedTable
-                showHeaderRight={true}
-                headerRightButton={
-                    <>
-                        <div className='flex place-items-end'>
-                            <div className='mx-2'>
-                                <label className='w-full'>{idSelector[0]["label"]}</label>
-                                <AutoSuggestion itm={idSelector[0]} errors={errors} handleSubmit={handleSubmit} setValue={setValue} getValues={getValues} register={register} />
+                            <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
+                                <div className="grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_minmax(240px,1fr)_minmax(240px,1fr)_auto] gap-4 items-end">
+                                    <div className="flex flex-col min-w-0">
+                                        <label className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">{idSelector[0].label}</label>
+                                        <AutoSuggestion itm={idSelector[0]} errors={errors} handleSubmit={handleSubmit} setValue={setValue} getValues={getValues} register={register} />
+                                    </div>
+                                    <div className="flex flex-col min-w-0">
+                                        <label className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">{idSelector[1].label}</label>
+                                        <DatePicking itm={idSelector[1]} errors={errors} handleSubmit={handleSubmit} setValue={setValue} getValues={getValues} register={register} />
+                                    </div>
+                                    <div className="flex flex-col min-w-0">
+                                        <label className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">{idSelector[2].label}</label>
+                                        <DatePicking itm={idSelector[2]} errors={errors} handleSubmit={handleSubmit} setValue={setValue} getValues={getValues} register={register} />
+                                    </div>
+                                    <div className="flex items-end justify-end min-w-0">
+                                        <Button classes="w-full md:w-auto" name={dbConfigList && dbConfigList.length > 0 ? "Submit" : "Filter"} onClick={handleSubmit(hitDatatoGetOutput)} />
+                                    </div>
+                                </div>
                             </div>
-                            <div className='mx-2'>
-                                <label className='w-full'>{idSelector[1]["label"]}</label>
-                                <DatePicking itm={idSelector[1]} errors={errors} handleSubmit={handleSubmit} setValue={setValue} getValues={getValues} register={register} />
-                            </div>
-                            <div className='mx-2'>
-                                <Button name={"Submit"} onClick={handleSubmit(hitDatatoGetOutput)} />
-                            </div>
-
                         </div>
-                    </>
-                }
 
-                headerButton={<>
-
-
-                    <div className='flex gap-0.5'>
-                        {/* <Button
-                        classes='w-22'
-                        onClick={(e) => {
-                            setmodalOpen(prev => !prev)
-                            dispatch(AdminManagementActions.getUsersList())
-                            setmodalHead("New Pro Rules")
-                            setmodalBody(<ProRulesForm isOpen={modalOpen} setIsOpen={setmodalOpen} resetting={true} formValue={{}} />)
-                        }}
-                        name={"Add Pro Rules"}></Button> */}
-                        {/* 
-                    <Button
-                        classes={"w-28 "}
-                        onClick={(e) => {
-                            setFileOpen(prev => !prev)
-                        }}
-                        name={"Upload File"}></Button> */}
-
-
-
-
+                        {dbConfigList && dbConfigList.length > 0 && (
+                            <div className="min-h-0 overflow-auto px-0 pb-0">
+                                <div className="mx-auto max-w-7xl rounded-xl border border-slate-200 shadow-lg overflow-hidden backdrop-blur-md bg-white/90 p-6">
+                                    <AdvancedTable
+                                        showHeaderRight={false}
+                                        headerRightButton={<></>}
+                                        headerButton={<></>}
+                                        table={table}
+                                        filterAfter={onSubmit}
+                                        tableName={"UserListTable"}
+                                        handleSubmit={handleSubmit}
+                                        data={dbConfigList}
+                                        errors={errors}
+                                        register={register}
+                                        setValue={setValue}
+                                        getValues={getValues}
+                                        totalCount={dbConfigTotalCount}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
-                </>}
-                table={table}
-                filterAfter={onSubmit}
-                tableName={"UserListTable"}
-                handleSubmit={handleSubmit}
-                data={dbConfigList}
-                errors={errors}
-                register={register}
-                setValue={setValue}
-                getValues={getValues}
-                totalCount={dbConfigTotalCount}
-            />
+                </div>
+            </div>
 
             <FileUploader fileUploadUrl={Urls.PrePostBulkUpload} isOpen={fileOpen} onTableViewSubmit={onTableViewSubmit} setIsOpen={setFileOpen} />
             <Modal size={"xl"} modalHead={modalHead} children={modalBody} isOpen={modalOpen} setIsOpen={setmodalOpen} />
             <Modal size={"xl"} modalHead={modalHead} children={modalBody} isOpen={modalFullOpen} setIsOpen={setmodalFullOpen} />
-
-            {/* <CommonForm/> */}
-        </> : <>
-            <>
-                <div className='flex place-items-end'>
-                    <div className='mx-2'>
-                        <label className='w-full'>{idSelector[0]["label"]}</label>
-                        <AutoSuggestion itm={idSelector[0]} errors={errors} handleSubmit={handleSubmit} setValue={setValue} getValues={getValues} register={register} />
-                    </div>
-                    <div className='mx-2'>
-                        <label className='w-full'>{idSelector[1]["label"]}</label>
-                        <DatePicking itm={idSelector[1]} errors={errors} handleSubmit={handleSubmit} setValue={setValue} getValues={getValues} register={register} />
-                    </div>
-                    <div className='mx-2'>
-                        <Button name={"Filter"} onClick={handleSubmit(hitDatatoGetOutput)} />
-                    </div>
-
-                </div>
-            </>
-        </>}
-    </>
-
-
+        </div>
+    );
 };
 
 export default ProRulesQueryOutput;

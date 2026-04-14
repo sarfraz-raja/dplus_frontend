@@ -1543,6 +1543,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     );
     const [selectedThematic, setSelectedThematic] = useState(driveTestFilters?.thematic || "RSSI");
     const [thematicMode, setThematicMode]         = useState(driveTestFilters?.thematicMode || "Default");
+    const [driveTestScale, setDriveTestScale]     = useState(driveTestFilters?.driveTestScale ?? 1);
 
     const [expandedLayer, setExpandedLayer]         = useState(null);
 
@@ -1606,6 +1607,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         setPendingRfRegions(normalizedRf);
 
         setSelectedDriveSessions(driveTestFilters?.sessions || []);
+        setDriveTestScale(driveTestFilters?.driveTestScale ?? 1);
         setRfParameter(mapConfig?.rfParameter || "RSRP");
     }, [layerVisibility, selectedBoundaries, driveTestFilters, mapConfig?.rfParameter]);
 
@@ -1806,6 +1808,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
             sessions: selectedDriveSessions,
             startDateTime, endDateTime,
             thematic: selectedThematic, thematicMode, ranges,
+            driveTestScale,
         }));
         dispatch(MapActions.setActiveDriveSessions(selectedDriveSessions));
         dispatch(MapActions.getDriveTestData());
@@ -1900,6 +1903,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         setRanges(deepCopyRanges(KPI_RANGE_DEFAULTS["RSSI"]));
         setStartDateTime("");
         setEndDateTime("");
+        setDriveTestScale(1);
 
         setPendingOpacity({ BOUNDARY: 1, RF: 1, DRIVE_TEST: 1 });
         dispatch(MapActions.clearBoundaryLayer());
@@ -2037,6 +2041,8 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
                 ranges={ranges}
                 setRanges={setRanges}
                 driveThematicOptions={driveThematicOptions}
+                driveTestScale={driveTestScale}
+                setDriveTestScale={setDriveTestScale}
             />
         );
     }

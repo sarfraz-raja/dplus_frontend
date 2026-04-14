@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
 import AlertConfigurationActions from '../../store/actions/alertConfiguration-actions';
+import Button from '../../components/Button';
 import moment from 'moment';
 
 const ORANGE = '#EC7D09';
@@ -172,15 +173,12 @@ const XAlertConfigureForm = ({ setIsOpen, resetting, formValue = {} }) => {
 
             {/* Buttons */}
             <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setIsOpen(false)}
-                    className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
+                <Button type="button" onClick={() => setIsOpen(false)} variant="secondary" className="px-5 py-2 text-sm font-semibold">
                     Cancel
-                </button>
-                <button type="button" onClick={handleSubmit(onSubmit)}
-                    style={{ background: ORANGE }}
-                    className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm">
+                </Button>
+                <Button type="button" onClick={handleSubmit(onSubmit)} variant="primary" className="px-6 py-2 text-sm font-semibold">
                     {resetting ? 'Add' : 'Save Changes'}
-                </button>
+                </Button>
             </div>
         </div>
     );

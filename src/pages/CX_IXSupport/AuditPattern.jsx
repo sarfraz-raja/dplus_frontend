@@ -87,7 +87,7 @@ const AuditPattern = () => {
                     <div
                         className={`${itm.color} ' shadow-md hover:shadow-rxl w-full flex h-24 cursor-pointer'`}
                         onClick={() => {
-                            navigate(`/AuditPatternPatternForm/${itm["uid"]}`)
+                            navigate(`/cx-ix-support/audit-pattern-form/${itm["uid"]}`)
                             dispatch(CommonActions.setLastName(true,itm["name"]))
                         }}
                     >
