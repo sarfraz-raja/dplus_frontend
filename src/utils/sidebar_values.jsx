@@ -73,7 +73,7 @@ export const Sidebar_content = {
             name: "Not Found",
             link: "*",
             subMenu: [],
-            component: <>Coming Soon.</>,
+            component: <ComingSoon />,
         },{
             name: "Home",
             link: "/home",

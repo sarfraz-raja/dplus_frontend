@@ -583,10 +583,17 @@ const boundaryLegendThematic = useMemo(() => {
   const fitToData = useCallback(() => {
     if (!rawCells || rawCells.length === 0) return;
 
-    const bounds = rawCells
+    // Only include cells with genuinely valid coordinates (null → 0 passes isNaN, so use isFinite)
+    const coords = rawCells
       .map(d => [Number(d.longitude), Number(d.latitude)])
-      .filter(([lng, lat]) => !isNaN(lng) && !isNaN(lat));
-    if (bounds.length === 0) return;
+      .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat) && (lng !== 0 || lat !== 0));
+    if (coords.length === 0) return;
+
+    // fitBounds needs [[minLng, minLat], [maxLng, maxLat]], not the raw point array
+    const lngs = coords.map(([lng]) => lng);
+    const lats = coords.map(([, lat]) => lat);
+    const sw = [Math.min(...lngs), Math.min(...lats)];
+    const ne = [Math.max(...lngs), Math.max(...lats)];
 
     const el = mapAreaRef.current;
     const width = el?.clientWidth || window.innerWidth;
@@ -595,7 +602,7 @@ const boundaryLegendThematic = useMemo(() => {
     const viewport = new WebMercatorViewport({ width, height });
 
     let { longitude, latitude, zoom } =
-      viewport.fitBounds(bounds, { padding: 40 });
+      viewport.fitBounds([sw, ne], { padding: 40 });
 
     zoom = Math.min(zoom, 13);
 
