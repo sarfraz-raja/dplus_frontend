@@ -1,6 +1,6 @@
-import { Component, useEffect, useState } from 'react'
+import { Component, Suspense, lazy, useEffect, useState } from 'react'
 import './App.css'
-import Login from './pages/Login'
+const Login = lazy(() => import('./pages/Login'))
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import Navigation from './Navigation'
@@ -93,7 +93,7 @@ function App() {
             <>
                 <Routes>
                     <Route path='/' element={<Navigate to='/login' replace />} />
-                    <Route path='/login' element={<Login />} />
+                    <Route path='/login' element={<Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#02030a]"><div className="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent" /></div>}><Login /></Suspense>} />
                     <Route path='*' element={<Navigate to='/login' replace />} />
                 </Routes>
                 <Loaders />
@@ -104,7 +104,7 @@ function App() {
 
     return (
         <ErrorBoundary>
-            <main className='flex h-screen overflow-hidden bg-gray-200'>
+            <main data-dy3-shell className='flex h-screen overflow-hidden bg-white'>
                 <WebSocketClient />
 
                 <div className="flex flex-1 flex-col min-w-0">
@@ -136,12 +136,14 @@ function App() {
                                 sidebarOpen ? 'lg:pl-[202px]' : 'lg:pl-0'
                             }`}
                         >
-                            <Navigation sidebarOpen={sidebarOpen} />
+                            <div className="relative flex min-h-0 flex-1 flex-col">
+                                <Navigation sidebarOpen={sidebarOpen} />
+                                <Loaders />
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <Loaders />
                 <SweetAlerts />
             </main>
         </ErrorBoundary>

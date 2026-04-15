@@ -1,7 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content:["./src/**/*.{js,jsx}"],
-  darkMode: 'media',
+  darkMode: ['selector', '[data-theme="dark"]'],
 
   
   theme: {
@@ -15,8 +15,7 @@ export default {
     extend: {
       
       fontFamily: {
-        sans: ['"Slabo 27px"', 'sans-serif'],
-        display: ['"Dancing Script"', 'cursive'],
+        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
       },
       colors:{
         "primaryLine":"var(--mainprimary)",
@@ -26,7 +25,6 @@ export default {
         // "topbarLine":"#6102af",
       },
       backgroundImage: {
-        'login': "url('/login_background.jpg')",
         "primaryLine":"var(--mainprimary)",
         // "topbarLine":"var(--topbar)",
         

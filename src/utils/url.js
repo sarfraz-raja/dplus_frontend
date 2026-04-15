@@ -84,6 +84,7 @@ export const Urls={
 
     gis_ta: "/kpi/multi-vendor/gis-ta",
     cell_pro_rules: "/kpi/multi-vendor/cell-pro-rules",
+    site_pro_rules: "/kpi/multi-vendor/site-pro-rules",
 
     cxix_scripting:"/cxix_scripting",
     cxix_audit:"/cxix_audit",

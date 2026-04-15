@@ -1,11 +1,59 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/favico.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- `only` keyword blocks Chrome Auto-Dark Mode from touching the page -->
+  <meta name="color-scheme" content="only light" />
+  <!--
+    First-paint shell: runs before Vite/CSS bundles — avoids wrong background flash on refresh.
+    Keep in sync with index.css body rules for html[data-theme="light"|"dark"] body.
+  -->
+  <style>
+    html,
+    body {
+      margin: 0;
+    }
+
+    html[data-theme="light"],
+    html[data-theme="light"] body {
+      background-color: #ffffff;
+      color: #0f172a;
+    }
+
+    html[data-theme="dark"],
+    html[data-theme="dark"] body {
+      background-color: #ffffff;
+      color: #0f172a;
+    }
+
+    #root {
+      min-height: 100vh;
+    }
+  </style>
   <title>DATAPLUS</title>
+  <script>
+    (function () {
+      var dark = false;
+      try {
+        var t = localStorage.getItem('dy3-theme');
+        if (t === 'dark') dark = true;
+        else if (t !== 'light' && t != null) {
+          try {
+            localStorage.setItem('dy3-theme', 'light');
+          } catch (_) {}
+        }
+      } catch (_) {
+        /* Storage blocked in some profiles / private modes — keep default light */
+      }
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      document.documentElement.classList.toggle('dark', dark);
+      var m = document.querySelector('meta[name="color-scheme"]');
+      if (m) m.setAttribute('content', dark ? 'only dark' : 'only light');
+    })();
+  </script>
 </head>
 <!-- <body class="bg-hero" style="background-position: 50% 5%; background-image: url('/login_background.jpg');"> -->
 

@@ -150,9 +150,7 @@ import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
 
-const ORANGE = '#EC7D09';
-
-const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
+const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
 const errorCls = "text-xs text-red-500 mt-0.5";
 
@@ -200,24 +198,7 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
     }
 
     return (
-        <div className="p-5">
-
-            {/* Form header */}
-            <div
-                style={{ background: ORANGE }}
-                className="flex items-center justify-between px-4 py-3 rounded-lg mb-5 shadow-sm"
-            >
-                <h2 className="text-white font-semibold text-lg">
-                    {resetting ? 'Add DB Configuration' : 'Edit DB Configuration'}
-                </h2>
-                <button
-                    type="button"
-                    onClick={() => setIsOpen(false)}
-                    className="text-white/80 hover:text-white text-xl leading-none"
-                >
-                    ✕
-                </button>
-            </div>
+        <>
 
             {/* 2-column field grid */}
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
@@ -326,14 +307,14 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
                 <button
                     type="button"
                     onClick={handleSubmit(onTableViewSubmit)}
-                    style={{ background: ORANGE }}
+                    style={{ background: '#EC7D09' }}
                     className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm"
                 >
                     {resetting ? 'Add' : 'Save Changes'}
                 </button>
             </div>
 
-        </div>
+        </>
     )
 }
 

@@ -5,7 +5,6 @@ import { Urls } from "../../utils/url"
 import { ALERTS } from "../reducers/component-reducer"
 import { CONFIGURE_ALERT_LIST, DB_CONFIG_LIST, GENERATED_SQL_QUERY, RUN_QUERY, SAVED_QUERY_LIST, TABLES_LIST, USERS_LIST } from "../reducers/alertConfiguration-reducer"
 import CommonActions from "./common-actions"
-import { MTANDAO_COMPLAINTS_LIST } from "../reducers/mtandaoComplaints-reducer"
 import { GET_ISON_FORM } from "../reducers/isonForm-reducer"
 // import Notify from "./notify-actions"
 

@@ -3,14 +3,13 @@ import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
 import AlertConfigurationActions from '../../store/actions/alertConfiguration-actions';
+import Button from '../../components/Button';
 import moment from 'moment';
 
-const ORANGE = '#EC7D09';
-
-const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
+const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
 const errorCls = "text-xs text-red-500 mt-0.5";
-const textareaCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none h-20";
+const textareaCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none h-20";
 
 const FREQ_OPTIONS = [5,10,15,20,25,30,35,40,45,50,55,60];
 
@@ -55,14 +54,7 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {} }) => {
     };
 
     return (
-        <div className="p-5">
-            {/* Header */}
-            <div style={{ background: ORANGE }} className="flex items-center justify-between px-4 py-3 rounded-lg mb-5 shadow-sm">
-                <h2 className="text-white font-semibold text-lg">
-                    {resetting ? 'Add Alert Scheduler' : 'Edit Alert Scheduler'}
-                </h2>
-                <button type="button" onClick={() => setIsOpen(false)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
-            </div>
+        <>
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
 
@@ -171,17 +163,14 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {} }) => {
 
             {/* Buttons */}
             <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setIsOpen(false)}
-                    className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
+                <Button type="button" onClick={() => setIsOpen(false)} variant="secondary" className="px-5 py-2 text-sm font-semibold">
                     Cancel
-                </button>
-                <button type="button" onClick={handleSubmit(onSubmit)}
-                    style={{ background: ORANGE }}
-                    className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm">
+                </Button>
+                <Button type="button" onClick={handleSubmit(onSubmit)} variant="primary" className="px-6 py-2 text-sm font-semibold">
                     {resetting ? 'Add' : 'Save Changes'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </>
     );
 };
 

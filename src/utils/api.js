@@ -159,6 +159,7 @@ instancenoload.interceptors.response.use((response) => {
 
 axiosInstanceblobFile.interceptors.request.use((request) => {
     request.headers.Authorization = "Bearer " + localStorage.getItem("token");
+    store.dispatch(ComponentActions.loaders(true));
     return request;
 }, (error) => {
     logApiError(error, "request-blob");

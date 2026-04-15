@@ -3,7 +3,7 @@ import { createSlice } from "@reduxjs/toolkit";
 const initialState = {
     popmenu: "",
     alerts:{},
-    loader:false,
+    loader:0,
     table_pagination:""
 }
 
@@ -22,7 +22,9 @@ const component = createSlice({
             state.alerts=payload
         },
         LOADERS:(state, { payload }) => {
-            state.loader=payload
+            state.loader = payload === true
+                ? state.loader + 1
+                : Math.max(0, state.loader - 1);
         },
         RESET_STATE: (state) => {
             state.alerts={};

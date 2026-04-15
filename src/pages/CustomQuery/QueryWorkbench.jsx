@@ -5,6 +5,8 @@ import CommonActions from '../../store/actions/common-actions';
 import { Urls } from '../../utils/url';
 import { RUN_QUERY } from '../../store/reducers/customQuery-reducer';
 import Modal from '../../components/Modal';
+import Table from '../../components/Table';
+import Button from '../../components/Button';
 
 // ─── Save Query Popover (with query name input) ────────────────────────────────
 const VISIBILITY_OPTIONS = [
@@ -28,14 +30,14 @@ const SaveQueryPopover = ({ onSave, disabled }) => {
 
     return (
         <div className="relative inline-block text-left">
-            <button
+            <Button
                 onClick={() => setOpen(!open)}
                 disabled={disabled}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
-                style={{ background: '#EC7D09' }}
+                variant="primary"
+                className="flex items-center gap-2"
             >
                 Save Query
-            </button>
+            </Button>
             {open && (
                 <div className="absolute left-0 top-11 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-3 min-w-[240px]">
                     <p className="text-xs font-semibold text-slate-700 mb-2">Query Name</p>
@@ -72,20 +74,21 @@ const SaveQueryPopover = ({ onSave, disabled }) => {
                         ))}
                     </div>
                     <div className="flex gap-2">
-                        <button
+                        <Button
                             onClick={handleSave}
                             disabled={!queryName.trim()}
-                            className="flex-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg disabled:opacity-40"
-                            style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}
+                            variant="primary"
+                            className="flex-1 px-3 py-1.5 text-xs font-semibold"
                         >
                             Save
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             onClick={() => { setOpen(false); setQueryName(''); setVisibleTo('self'); }}
-                            className="px-3 py-1.5 text-xs font-semibold text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50"
+                            variant="secondary"
+                            className="px-3 py-1.5 text-xs font-semibold"
                         >
                             Cancel
-                        </button>
+                        </Button>
                     </div>
                 </div>
             )}
@@ -475,6 +478,7 @@ const QueryWorkbench = () => {
         return `${noLimit} LIMIT ${limit}${hasSemicolon ? ';' : ''}`;
     };
 
+    
     const getFormData = (limit) => {
         const finalQuery = appendLimit(
             quotePostgresIdentifiers(applyDatetimeParams(activeQuery)),
@@ -539,7 +543,7 @@ const QueryWorkbench = () => {
         <>
         <div
             className="flex flex-col p-2 gap-2 overflow-hidden"
-            style={{ height: 'calc(100vh - 4rem)', background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
+            style={{ height: 'calc(100vh - 4rem)', background: '#ffffff' }}
         >
             {/* ── Header ── */}
             <div className="flex items-center gap-2 shrink-0">
@@ -775,24 +779,25 @@ const QueryWorkbench = () => {
                                             ↑ Select a DB Server to run this query
                                         </p>
                                     )}
-                                    <button
+                                    <Button
                                         onClick={clearWorkbench}
-                                        className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                                        variant="secondary"
+                                        className="px-5 py-2 text-sm font-semibold"
                                     >
                                         Clear
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button
                                         onClick={executeQuery}
                                         disabled={!canExecute || isLoading}
                                         title={!server ? 'Select a DB Server first' : !activeQuery.trim() ? 'Enter a query first' : ''}
-                                        className="flex items-center gap-2 px-6 py-2 text-sm font-semibold rounded text-white shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                                        style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}
+                                        variant="primary"
+                                        className="flex items-center gap-2 px-6 py-2 text-sm font-semibold"
                                     >
                                         {isLoading && (
                                             <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                                         )}
                                         {isLoading ? 'Running…' : 'Execute Query (Table View)'}
-                                    </button>
+                                    </Button>
                                 </div>
                             </>
                         ) : (
@@ -862,14 +867,7 @@ const QueryWorkbench = () => {
                                     No data found — query returned 0 rows
                                 </div>
                             ) : (
-                                <table className="min-w-full text-left text-sm">
-                                    <thead className="sticky top-0" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
-                                        <tr>
-                                            {columns.map(col => (
-                                                <th key={col} className="px-4 py-2 text-xs font-semibold text-blue-100 uppercase tracking-widest whitespace-nowrap">{col}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
+                                <Table headers={columns} className="min-w-full text-left text-sm">
                                     <tbody>
                                         {rows.map((row, idx) => (
                                             <tr
@@ -885,7 +883,7 @@ const QueryWorkbench = () => {
                                             </tr>
                                         ))}
                                     </tbody>
-                                </table>
+                                </Table>
                             )}
                         </>
                     )}
@@ -1073,24 +1071,25 @@ const VisualBuilder = ({
 
                 {/* pinned buttons */}
                 <div className="flex gap-3 pt-3 border-t border-slate-100 shrink-0">
-                    <button
+                    <Button
                         onClick={() => onGenerateQuery(buildQuery(), builderServer)}
                         disabled={!selectedTable}
-                        className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                        variant="secondary"
+                        className="px-5 py-2 text-sm font-semibold"
                     >
                         Generate Query
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={() => onGenerateAndRun(buildQuery(), builderServer)}
                         disabled={!selectedTable || isLoading}
-                        className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded text-white shadow-sm hover:opacity-90 transition-opacity disabled:opacity-40"
-                        style={{ background: '#EC7D09' }}
+                        variant="primary"
+                        className="flex items-center gap-2 px-5 py-2 text-sm font-semibold"
                     >
                         {isLoading && (
                             <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                         )}
                         {isLoading ? 'Running…' : 'Generate & Run'}
-                    </button>
+                    </Button>
                     <SaveQueryPopover
                         disabled={!selectedTable || !builderServer}
                         onSave={(name, visibleTo) => onSave(name, builderServer, buildQuery(), visibleTo)}
