@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import Loader from "./Loader";
 
 export default function LoaderWithRetry({ timeout = 5000, handleRetry }) {
   const [showRetry, setShowRetry] = useState(false);
@@ -21,5 +20,5 @@ export default function LoaderWithRetry({ timeout = 5000, handleRetry }) {
     );
   }
 
-  return <Loader />; 
+  return null;
 }

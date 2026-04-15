@@ -1,17 +1,22 @@
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
+import { useDispatch } from 'react-redux';
 import { UilReact, UilChannel, UilCheckCircle, UilChartLine, UilLayerGroup } from '@iconscout/react-unicons';
+import { LOADERS } from '../store/reducers/component-reducer';
 
-const PageLoader = () => (
-    <div className="flex items-center justify-center h-full min-h-[200px]">
-        <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-);
+function ChunkLoader() {
+    const dispatch = useDispatch();
+    useEffect(() => {
+        dispatch(LOADERS(true));
+        return () => dispatch(LOADERS(false));
+    }, []);
+    return null;
+}
 
 function lazy(importFn) {
     const LazyComp = React.lazy(importFn);
     return function LazyWrapper(props) {
-        return <Suspense fallback={<PageLoader />}><LazyComp {...props} /></Suspense>;
+        return <Suspense fallback={<ChunkLoader />}><LazyComp {...props} /></Suspense>;
     };
 }
 
@@ -33,6 +38,13 @@ const CellAnalyticsPro = lazy(() => import('../pages/DataPlusAnalytics/CellAnaly
 const ProRulesQuery = lazy(() => import('../pages/ProRules/ProRulesQuery'));
 const ProRulesQueryOutput = lazy(() => import('../pages/ProRules/ProRulesQueryOutput'));
 const CellProRulesQueryOutput = lazy(() => import('../pages/ProRules/CellProRulesQueryOutput'));
+const SiteAnalyticsProPage = lazy(() => import('../pages/DataPlusAnalytics/SiteAnalyticsProPage'));
+const CellAnalyticsProPage = lazy(() => import('../pages/DataPlusAnalytics/CellAnalyticsProPage'));
+const SiteProRulesOutputPage = lazy(() => import('../pages/DataPlusAnalytics/SiteProRulesOutputPage'));
+const CellProRulesPage = lazy(() => import('../pages/DataPlusAnalytics/CellProRulesPage'));
+const KPICheckRulesPage = lazy(() => import('../pages/DataPlusAnalytics/KPICheckRulesPage'));
+const ProRulesManagementPage = lazy(() => import('../pages/DataPlusAnalytics/ProRulesManagementPage'));
+
 const MapChart = lazy(() => import('../pages/MapBox/MapChart'));
 const Scripting = lazy(() => import('../pages/CX_IXSupport/Scripting'));
 const ParameterAudit = lazy(() => import('../pages/CX_IXSupport/ParameterAudit'));
@@ -53,7 +65,6 @@ const NSAtoSA5GPrePostDashboard = lazy(() => import('../pages/InsightsEngine/Ran
 const TelecomMapsPage = lazy(() => import('../pages/TelecomMapsPage'));
 const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsPage'));
 const TicketsPage = lazy(() => import('../pages/Tickets/index'));
-const DiscussionPage = lazy(() => import('../pages/DiscussionForum/DiscussionPage'));
 
 export const Sidebar_content = {
     temp: [],
@@ -157,7 +168,6 @@ export const Sidebar_content = {
         {
             name: "Analytics Pro",
             link: "/analytics-pro",
-            icon: <Unicons.UilReact />,
             subMenu: [{
                 name: "Site Analytics",
                 link: "/analytics-pro/site-analytics",
@@ -263,19 +273,16 @@ export const Sidebar_content = {
                 link: "/analytics-pro/kpi-check-rules",
                 subMenu: [],
                 component: <KPICheckRulesPage />,
-                icon: <Unicons.UilCheckCircle size="16" />
             },{
                 name: "Pro Rules Management",
                 link: "/analytics-pro/pro-rules-management",
                 subMenu: [],
                 component: <ProRulesManagementPage />,
-                icon: <Unicons.UilChannel size="16" />
             }],
         },
         {
             name: "Tickets",
             link: "/tickets",
-            icon: <Unicons.UilReact />,
             component: <TicketsPage />,
             subMenu: [],
         },
@@ -284,7 +291,6 @@ export const Sidebar_content = {
             link: "/multi-map-view",
             subMenu: [],
             component: <TelecomMultipleMapsPage />,
-            icon: <Unicons.UilReact />,
         },
         {
             name: "Insights Engine",
@@ -423,7 +429,6 @@ export const Sidebar_content = {
             link: "/gis-engine",
             subMenu: [],
             component: <TelecomMapsPage />,
-            icon: <Unicons.UilReact />,
         },
         {
             name: "Configuration Management",
@@ -513,7 +518,6 @@ export const Sidebar_content = {
         {
             name: "xAlerts",
             link: "/xalerts",
-            icon: <Unicons.UilReact />,
             subMenu: [{
                 name: "Configure Scheduler",
                 link: "/xalerts/configure-scheduler",

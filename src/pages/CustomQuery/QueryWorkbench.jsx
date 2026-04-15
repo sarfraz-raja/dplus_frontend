@@ -543,7 +543,7 @@ const QueryWorkbench = () => {
         <>
         <div
             className="flex flex-col p-2 gap-2 overflow-hidden"
-            style={{ height: 'calc(100vh - 4rem)', background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
+            style={{ height: 'calc(100vh - 4rem)', background: '#ffffff' }}
         >
             {/* ── Header ── */}
             <div className="flex items-center gap-2 shrink-0">

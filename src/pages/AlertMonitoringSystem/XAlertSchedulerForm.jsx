@@ -6,12 +6,10 @@ import AlertConfigurationActions from '../../store/actions/alertConfiguration-ac
 import Button from '../../components/Button';
 import moment from 'moment';
 
-const ORANGE = '#EC7D09';
-
-const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
+const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
 const errorCls = "text-xs text-red-500 mt-0.5";
-const textareaCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none h-20";
+const textareaCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none h-20";
 
 const FREQ_OPTIONS = [5,10,15,20,25,30,35,40,45,50,55,60];
 
@@ -56,14 +54,7 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {} }) => {
     };
 
     return (
-        <div className="p-5">
-            {/* Header */}
-            <div style={{ background: ORANGE }} className="flex items-center justify-between px-4 py-3 rounded-lg mb-5 shadow-sm">
-                <h2 className="text-white font-semibold text-lg">
-                    {resetting ? 'Add Alert Scheduler' : 'Edit Alert Scheduler'}
-                </h2>
-                <button type="button" onClick={() => setIsOpen(false)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
-            </div>
+        <>
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
 
@@ -179,7 +170,7 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {} }) => {
                     {resetting ? 'Add' : 'Save Changes'}
                 </Button>
             </div>
-        </div>
+        </>
     );
 };
 

@@ -107,7 +107,7 @@ const CellAnalyticsProPage = () => {
     return (
         <div
             className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
-            style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
+            style={{ background: '#ffffff' }}
         >
             {/* ── Header ── */}
             <div className="flex items-center justify-between shrink-0">

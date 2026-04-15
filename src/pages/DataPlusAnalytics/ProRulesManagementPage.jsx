@@ -5,7 +5,7 @@ import CommonActions from '../../store/actions/common-actions';
 import AdminManagementActions from '../../store/actions/adminManagement-actions';
 import { Urls } from '../../utils/url';
 import Button from '../../components/Button';
-import Modal from '../../components/Modal';
+import FormModal from '../../components/FormModal';
 import DataTable from '../../components/DataTable';
 import ProRulesForm from '../ProRules/ProRulesForm';
 
@@ -112,7 +112,7 @@ const ProRulesManagementPage = () => {
         <>
             <div
                 className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
-                style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
+                style={{ background: '#ffffff' }}
             >
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between shrink-0">
@@ -161,45 +161,33 @@ const ProRulesManagementPage = () => {
             </div>
 
             {/* Edit / Add modal */}
-            <Modal size="form" modalHead={modalHead} isOpen={modalOpen} setIsOpen={setModalOpen}>
+            <FormModal title={modalHead} isOpen={modalOpen} setIsOpen={setModalOpen}>
                 {modalBody}
-            </Modal>
+            </FormModal>
 
             {/* Delete confirmation */}
-            <Modal size="form" showHeader={false} isOpen={deleteModalOpen} setIsOpen={setDeleteModalOpen}>
-                <div className="p-5">
-                    <div className="flex items-center justify-between px-4 py-3 rounded-lg mb-5 shadow-sm" style={{ background: '#b91c1c' }}>
-                        <div className="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                            </svg>
-                            <h2 className="text-white font-semibold">Delete Pro Rule</h2>
-                        </div>
-                        <button onClick={() => setDeleteModalOpen(false)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
+            <FormModal title="Delete Pro Rule" headerColor="#b91c1c" isOpen={deleteModalOpen} setIsOpen={setDeleteModalOpen}>
+                <div className="flex flex-col items-center gap-3 py-4 text-center">
+                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                            <path d="M10 11v6M14 11v6"/>
+                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                        </svg>
                     </div>
-                    <div className="flex flex-col items-center gap-3 py-4 text-center">
-                        <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6"/>
-                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                                <path d="M10 11v6M14 11v6"/>
-                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                            </svg>
-                        </div>
-                        <p className="text-slate-700 text-sm font-medium">Delete <strong>{deleteTarget?.rule_name}</strong>?</p>
-                        <p className="text-xs text-red-400">This cannot be undone.</p>
-                    </div>
-                    <div className="flex justify-end gap-3 mt-2">
-                        <button onClick={() => setDeleteModalOpen(false)} className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
-                            Cancel
-                        </button>
-                        <button onClick={confirmDelete} disabled={deleting} className="px-6 py-2 text-sm font-semibold rounded text-white disabled:opacity-60 transition-opacity" style={{ background: '#b91c1c' }}>
-                            {deleting ? 'Deleting…' : 'Delete'}
-                        </button>
-                    </div>
+                    <p className="text-slate-700 text-sm font-medium">Delete <strong>{deleteTarget?.rule_name}</strong>?</p>
+                    <p className="text-xs text-red-400">This cannot be undone.</p>
                 </div>
-            </Modal>
+                <div className="flex justify-end gap-3 mt-2">
+                    <button onClick={() => setDeleteModalOpen(false)} className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
+                        Cancel
+                    </button>
+                    <button onClick={confirmDelete} disabled={deleting} className="px-6 py-2 text-sm font-semibold rounded text-white disabled:opacity-60 transition-opacity" style={{ background: '#b91c1c' }}>
+                        {deleting ? 'Deleting…' : 'Delete'}
+                    </button>
+                </div>
+            </FormModal>
         </>
     );
 };

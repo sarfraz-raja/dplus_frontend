@@ -122,158 +122,106 @@ const SiteProRulesPage = () => {
     };
 
     return (
-        <div className="w-full min-h-full bg-slate-50">
-            <div className="flex flex-col min-h-full" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}>
-
-                {/* ── Page header ── */}
-                <div className="px-6 py-6">
-                    <div className="flex flex-col gap-6">
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-md"
-                                    style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                                        <polyline points="9 22 9 12 15 12 15 22" />
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h1 className="text-2xl font-bold text-slate-900">Site Pro Rules</h1>
-                                    <p className="text-sm text-slate-500">Manage site rule status and health checks.</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* ── Form card ── */}
-                        <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
-                            <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(220px,1fr)_auto] gap-4 items-end">
-                                <div className="flex flex-col">
-                                    <label className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Site Name</label>
-                                    <AutoSuggestion
-                                        itm={siteIdSelector}
-                                        errors={errors}
-                                        handleSubmit={handleSubmit}
-                                        setValue={setValue}
-                                        getValues={getValues}
-                                        register={register}
-                                    />
-                                </div>
-
-                                <div className="flex flex-col">
-                                    <label className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Date</label>
-                                    <input
-                                        type="date"
-                                        value={date}
-                                        onChange={(e) => setDate(e.target.value)}
-                                        className="border border-slate-300 rounded-lg px-3 text-sm h-10 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                                    />
-                                </div>
-
-                                <div className="flex flex-col">
-                                    <label className="text-[10px] text-transparent uppercase tracking-wide mb-1">-</label>
-                                    <Button
-                                        onClick={handleSubmit(onSubmit)}
-                                        name="Submit"
-                                        variant="primary"
-                                        className="h-10"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* ── Filter pills ── */}
-                            <div className="mt-5 flex flex-wrap items-center gap-2">
-                                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Filter:</span>
-                                {FILTERS.map((f) => (
-                                    <button
-                                        key={f}
-                                        onClick={() => setFilter(f)}
-                                        className={`py-1 px-3 text-xs font-medium rounded-full border transition-colors whitespace-nowrap ${filter === f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
-                                    >
-                                        {f}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+        <div
+            className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
+            style={{ background: '#ffffff' }}
+        >
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                            <polyline points="9 22 9 12 15 12 15 22" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-bold text-slate-800 leading-tight">Site Pro Rules</h1>
+                        <p className="text-xs text-slate-400 font-medium tracking-wide">Manage site rule status and health checks</p>
                     </div>
                 </div>
 
-                {/* ── Health summary ── */}
-                {total > 0 && (
-                    <div className="px-6">
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4 max-w-5xl">
-                            {[
-                                { label: 'Rules OK',    value: ok,           color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
-                                { label: 'Issues',      value: issues,       color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
-                                { label: 'Warnings',    value: warnings,     color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-                                { label: 'Total Rules', value: total,        color: '#1e293b', bg: '#f8fafc', border: '#e2e8f0' },
-                                { label: 'Health',      value: `${health}%`, color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe' },
-                            ].map(({ label, value, color, bg, border }) => (
-                                <div
-                                    key={label}
-                                    className="rounded-3xl p-4 text-center flex flex-col items-center justify-center gap-1"
-                                    style={{ background: bg, border: `1.5px solid ${border}` }}
-                                >
-                                    <span style={{ color }} className="text-2xl font-bold leading-none">{value}</span>
-                                    <span className="text-[10px] uppercase leading-none font-semibold mt-0.5" style={{ color }}>{label}</span>
-                                </div>
-                            ))}
-                        </div>
+                {/* ── Form controls ── */}
+                <div className="flex items-end gap-3">
+                    <div className="flex flex-col">
+                        <label className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Site Name</label>
+                        <AutoSuggestion itm={siteIdSelector} errors={errors} handleSubmit={handleSubmit} setValue={setValue} getValues={getValues} register={register} />
                     </div>
-                )}
+                    <div className="flex flex-col">
+                        <label className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Date</label>
+                        <input
+                            type="date"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            className="border border-slate-300 rounded-lg px-3 text-sm h-9 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        />
+                    </div>
+                    <Button onClick={handleSubmit(onSubmit)} name="Submit" variant="primary" className="h-9" />
+                </div>
+            </div>
 
-                {/* ── Table ── */}
-                <div className="min-h-0 overflow-auto px-6 pb-6">
-                    <div className="mx-auto max-w-7xl rounded-xl border border-slate-200 shadow-lg overflow-hidden backdrop-blur-md bg-white/90 p-6">
-                        <Table headers={[
-                            'Tech',
-                            'Rule Name',
-                            'Category',
-                            'Details',
-                            'Status',
-                            'Issues / Remarks',
-                        ]} className="min-w-full text-left text-sm">
-                            <tbody>
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={6} className="text-center text-slate-400 py-16 text-sm">Loading...</td>
+            {/* ── Filter pills ── */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Filter:</span>
+                {FILTERS.map((f) => (
+                    <button
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        className={`py-1 px-3 text-xs font-medium rounded-full border transition-colors whitespace-nowrap ${filter === f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                    >
+                        {f}
+                    </button>
+                ))}
+            </div>
+
+            {/* ── Stats strip ── */}
+            {total > 0 && (
+                <div className="grid grid-cols-5 gap-3 shrink-0">
+                    {[
+                        { label: 'Rules OK',    value: ok,           color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+                        { label: 'Issues',      value: issues,       color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+                        { label: 'Warnings',    value: warnings,     color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+                        { label: 'Total Rules', value: total,        color: '#1e293b', bg: '#f8fafc', border: '#e2e8f0' },
+                        { label: 'Health',      value: `${health}%`, color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe' },
+                    ].map(({ label, value, color, bg, border }) => (
+                        <div
+                            key={label}
+                            className="rounded-xl p-3 text-center flex flex-col items-center justify-center gap-1"
+                            style={{ background: bg, border: `1.5px solid ${border}` }}
+                        >
+                            <span style={{ color }} className="text-2xl font-bold leading-none">{value}</span>
+                            <span className="text-[10px] uppercase leading-none font-semibold mt-0.5" style={{ color }}>{label}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* ── Table ── */}
+            <div className="flex-1 overflow-auto">
+                <div className="rounded-xl border border-slate-200 shadow-sm overflow-hidden bg-white">
+                    <Table headers={['Tech', 'Rule Name', 'Category', 'Details', 'Status', 'Issues / Remarks']} className="min-w-full text-left text-sm">
+                        <tbody>
+                            {loading ? (
+                                <tr><td colSpan={6} className="text-center text-slate-400 py-16 text-sm">Loading...</td></tr>
+                            ) : filteredData.length === 0 ? (
+                                <tr><td colSpan={6} className="text-center text-slate-400 py-16 text-sm">
+                                    {error || (total === 0 && siteData.length === 0 ? 'Enter a Site Name and click Submit to load data.' : 'No records match this filter.')}
+                                </td></tr>
+                            ) : (
+                                filteredData.map((item, idx) => (
+                                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                        <td className="px-4 py-3 border-b border-slate-100 font-medium text-slate-700">{item.tech || item.technology || '-'}</td>
+                                        <td className="px-4 py-3 border-b border-slate-100 text-slate-700">{item.rule_name || '-'}</td>
+                                        <td className="px-4 py-3 border-b border-slate-100 font-semibold" style={{ color: categoryColor(item.category) }}>{item.category || '-'}</td>
+                                        <td className="px-4 py-3 border-b border-slate-100 text-slate-600">{item.details || '-'}</td>
+                                        <td className="px-4 py-3 border-b border-slate-100 font-semibold" style={{ color: statusColor(item.status) }}>{item.status || '-'}</td>
+                                        <td className="px-4 py-3 border-b border-slate-100 text-slate-600">{item.issues || item.remarks || '-'}</td>
                                     </tr>
-                                ) : filteredData.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="text-center text-slate-400 py-16 text-sm">
-                                            {error || (total === 0 && siteData.length === 0
-                                                ? 'Enter a Site Name and click Submit to load data.'
-                                                : 'No records match this filter.')}
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredData.map((item, idx) => (
-                                        <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                            <td className="px-4 py-3 border-b border-slate-100 font-medium text-slate-700">
-                                                {item.tech || item.technology || '-'}
-                                            </td>
-                                            <td className="px-4 py-3 border-b border-slate-100 text-slate-700">
-                                                {item.rule_name || '-'}
-                                            </td>
-                                            <td className="px-4 py-3 border-b border-slate-100 font-semibold"
-                                                style={{ color: categoryColor(item.category) }}>
-                                                {item.category || '-'}
-                                            </td>
-                                            <td className="px-4 py-3 border-b border-slate-100 text-slate-600">
-                                                {item.details || '-'}
-                                            </td>
-                                            <td className="px-4 py-3 border-b border-slate-100 font-semibold"
-                                                style={{ color: statusColor(item.status) }}>
-                                                {item.status || '-'}
-                                            </td>
-                                            <td className="px-4 py-3 border-b border-slate-100 text-slate-600">
-                                                {item.issues || item.remarks || '-'}
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </Table>
-                    </div>
+                                ))
+                            )}
+                        </tbody>
+                    </Table>
                 </div>
             </div>
         </div>

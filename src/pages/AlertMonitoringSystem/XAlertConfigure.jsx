@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import Modal from '../../components/Modal';
+import FormModal from '../../components/FormModal';
 import Table from '../../components/Table';
 import Button from '../../components/Button';
 import AlertConfigurationActions from '../../store/actions/alertConfiguration-actions';
@@ -35,6 +35,7 @@ const XAlertConfigure = () => {
     const dispatch = useDispatch();
     const [modalOpen, setModalOpen] = useState(false);
     const [modalBody, setModalBody] = useState(null);
+    const [modalTitle, setModalTitle] = useState('');
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
@@ -57,11 +58,13 @@ const XAlertConfigure = () => {
 
     const openAdd = () => {
         setModalOpen(true);
+        setModalTitle('Add Alert Configuration');
         setModalBody(<XAlertConfigureForm setIsOpen={setModalOpen} resetting={true} formValue={{}} />);
     };
 
     const openEdit = (itm) => {
         setModalOpen(true);
+        setModalTitle('Edit Alert Configuration');
         setModalBody(<XAlertConfigureForm setIsOpen={setModalOpen} resetting={false} formValue={itm} />);
     };
 
@@ -282,46 +285,36 @@ const XAlertConfigure = () => {
                 </div>
             </div>
 
-            <Modal size={"form"} showHeader={false} children={modalBody} isOpen={modalOpen} setIsOpen={setModalOpen} />
+            <FormModal title={modalTitle} isOpen={modalOpen} setIsOpen={setModalOpen}>
+                {modalBody}
+            </FormModal>
 
             {/* Delete confirmation */}
-            <Modal size={"form"} showHeader={false} isOpen={deleteModalOpen} setIsOpen={setDeleteModalOpen}>
-                <div className="p-5">
-                    <div className="flex items-center justify-between px-4 py-3 rounded-lg mb-5 shadow-sm" style={{ background: '#b91c1c' }}>
-                        <div className="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                            </svg>
-                            <h2 className="text-white font-semibold text-lg">Delete Alert</h2>
-                        </div>
-                        <button type="button" onClick={() => setDeleteModalOpen(false)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
+            <FormModal title="Delete Alert" headerColor="#b91c1c" isOpen={deleteModalOpen} setIsOpen={setDeleteModalOpen}>
+                <div className="flex flex-col items-center gap-3 py-4 px-2 text-center">
+                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                            <path d="M10 11v6M14 11v6"/>
+                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                        </svg>
                     </div>
-                    <div className="flex flex-col items-center gap-3 py-4 px-2 text-center">
-                        <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6"/>
-                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                                <path d="M10 11v6M14 11v6"/>
-                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                            </svg>
-                        </div>
-                        <p className="text-slate-700 text-sm font-medium">Are you sure you want to delete this alert configuration?</p>
-                        <p className="text-xs text-red-400">This action cannot be undone.</p>
-                    </div>
-                    <div className="flex justify-end gap-3 mt-2">
-                        <button type="button" onClick={() => setDeleteModalOpen(false)}
-                            className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
-                            Cancel
-                        </button>
-                        <button type="button" onClick={confirmDelete} disabled={deleting}
-                            className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm disabled:opacity-60"
-                            style={{ background: '#b91c1c' }}>
-                            {deleting ? 'Deleting...' : 'Delete'}
-                        </button>
-                    </div>
+                    <p className="text-slate-700 text-sm font-medium">Are you sure you want to delete this alert configuration?</p>
+                    <p className="text-xs text-red-400">This action cannot be undone.</p>
                 </div>
-            </Modal>
+                <div className="flex justify-end gap-3 mt-2">
+                    <button type="button" onClick={() => setDeleteModalOpen(false)}
+                        className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="button" onClick={confirmDelete} disabled={deleting}
+                        className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm disabled:opacity-60"
+                        style={{ background: '#b91c1c' }}>
+                        {deleting ? 'Deleting...' : 'Delete'}
+                    </button>
+                </div>
+            </FormModal>
         </>
     );
 };

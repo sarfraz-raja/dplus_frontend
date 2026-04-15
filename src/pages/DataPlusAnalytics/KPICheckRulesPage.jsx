@@ -4,7 +4,7 @@ import nokiaPrePostActions from '../../store/actions/nokiaPrePost-actions';
 import AdminManagementActions from '../../store/actions/adminManagement-actions';
 import { Urls } from '../../utils/url';
 import Button from '../../components/Button';
-import Modal from '../../components/Modal';
+import FormModal from '../../components/FormModal';
 import FileUploader from '../../components/FIleUploader';
 import DataTable from '../../components/DataTable';
 
@@ -100,7 +100,7 @@ const KPICheckRulesPage = () => {
         <>
             <div
                 className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
-                style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
+                style={{ background: '#ffffff' }}
             >
                 {/* ── Page header ── */}
                 <div className="flex items-center justify-between shrink-0">
@@ -155,9 +155,9 @@ const KPICheckRulesPage = () => {
                 onTableViewSubmit={onFileSubmit}
                 setIsOpen={setFileOpen}
             />
-            <Modal size="form" modalHead={modalHead} isOpen={modalOpen} setIsOpen={setModalOpen}>
+            <FormModal title={modalHead} isOpen={modalOpen} setIsOpen={setModalOpen}>
                 {modalBody}
-            </Modal>
+            </FormModal>
         </>
     );
 };

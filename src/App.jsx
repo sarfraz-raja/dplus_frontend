@@ -104,7 +104,7 @@ function App() {
 
     return (
         <ErrorBoundary>
-            <main data-dy3-shell className='flex h-screen overflow-hidden bg-white dark:bg-[#060620]'>
+            <main data-dy3-shell className='flex h-screen overflow-hidden bg-white'>
                 <WebSocketClient />
 
                 <div className="flex flex-1 flex-col min-w-0">

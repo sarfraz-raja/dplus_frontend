@@ -14,6 +14,8 @@ import DataTable from '../../components/DataTable';
 import ProRulesForm from '../ProRules/ProRulesForm';
 import { GET_PRO_RULES_OUTPUT } from '../../store/reducers/nokiaPrePost-reducer';
 
+const FILTERS = ['All', '5G', '4G', '3G', '2G'];
+
 const COLUMNS = [
     { label: 'Technology', key: 'technology' },
     { label: 'Rule Name',  key: 'rule_name'  },
@@ -33,6 +35,7 @@ const SiteProRulesOutputPage = () => {
     const [modalBody,   setModalBody]   = useState(null);
     const [modalHead,   setModalHead]   = useState('');
     const [socketSent,  setSocketSent]  = useState(false);
+    const [filter,      setFilter]      = useState('All');
 
     const { register, handleSubmit, setValue, getValues, formState: { errors } } = useForm();
 
@@ -168,7 +171,7 @@ const SiteProRulesOutputPage = () => {
         <>
             <div
                 className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
-                style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}
+                style={{ background: '#ffffff' }}
             >
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between shrink-0">
@@ -200,10 +203,24 @@ const SiteProRulesOutputPage = () => {
                     </div>
                 </div>
 
+                {/* ── Filter pills ── */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Filter:</span>
+                    {FILTERS.map((f) => (
+                        <button
+                            key={f}
+                            onClick={() => setFilter(f)}
+                            className={`py-1 px-3 text-xs font-medium rounded-full border transition-colors whitespace-nowrap ${filter === f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                        >
+                            {f}
+                        </button>
+                    ))}
+                </div>
+
                 {/* ── DataTable ── */}
                 <DataTable
                     columns={COLUMNS}
-                    data={rawRules}
+                    data={filter === 'All' ? rawRules : rawRules.filter(r => r.technology?.startsWith(filter))}
                     renderCell={renderCell}
                     emptyMessage="Enter a Physical ID and date, then click Run."
                     searchPlaceholder="Search rules…"
