@@ -1218,16 +1218,7 @@ console.log("res.data.data length:", res.data.data?.length);
 
             const techMeta = techRes?.data?.data || [];
 
-            /* ---------------- PARSE LAT LONG ---------------- */
-            const KENYA_DEFAULT = {
-                longitude: 37.9062,
-                latitude: 0.0236,
-                zoom: 6,
-                pitch: 0,
-                bearing: 0
-            };
-
-            // let viewState = KENYA_DEFAULT;
+            // let viewState = { longitude: 37.9062, latitude: 0.0236, zoom: 6, pitch: 0, bearing: 0 };
             // if (data.saveLatLong) {
             //     const parsed = JSON.parse(data.saveLatLong);
             //     const lat = Number(parsed.lat);
@@ -1239,14 +1230,10 @@ console.log("res.data.data length:", res.data.data?.length);
             //     }
             // }
 
-            // ← ignore saveLatLong entirely, always start at Kenya
-            const viewState = {
-                longitude: 37.9062,
-                latitude: 0.0236,
-                zoom: 6,
-                pitch: 0,
-                bearing: 0
-            };
+            // viewState intentionally not dispatched here — fitToData() in TelecomMap
+            // auto-fits to the loaded rawCells on mount, so dispatching a fixed
+            // Kenya viewport here would race against fitToData and reset the map
+            // to zoom 6 (hiding individual cells/sectors that need zoom ≥ 10/12).
 
             /* ---------------- PARSE FILTERS ---------------- */
             const filters = data.saveMapFilters ? JSON.parse(data.saveMapFilters) : {};
@@ -1275,7 +1262,6 @@ console.log("res.data.data length:", res.data.data?.length);
             };
 
             /* ---------------- DISPATCH BASE CONFIG ---------------- */
-            if (viewState) dispatch(SET_VIEW_STATE(viewState));
             dispatch(SET_FILTERS(filters));
             dispatch(SET_MAP_CONFIG(config));
             

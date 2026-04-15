@@ -19,7 +19,6 @@ import WebsocketActions from '../../store/actions/websocket-actions';
 import TableJson from '../../components/TableJson';
 import moment from 'moment';
 import { GET_CELL_PRO_RULES_OUTPUT } from '../../store/reducers/nokiaPrePost-reducer';
-import {Loader, NoData, LoaderWithRetry} from '../../components/Records/Index'
 
 export const CellProRulesQueryOutput = () => {
 

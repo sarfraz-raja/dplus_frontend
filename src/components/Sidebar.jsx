@@ -44,6 +44,28 @@ import {
 import { Sidebar_content } from '../utils/sidebar_values';
 import { meMenuToSidebarItems } from '../utils/meMenuToSidebar';
 
+/** Build a flat name→link lookup from all sidebar_values items (all_routes + Admin + GlobalUrl). */
+const buildNameToLinkMap = (items, map = {}) => {
+  for (const item of (items || [])) {
+    if (item.name && item.link) map[item.name] = item.link;
+    if (Array.isArray(item.subMenu)) buildNameToLinkMap(item.subMenu, map);
+  }
+  return map;
+};
+const SIDEBAR_VALUES_LINK_MAP = buildNameToLinkMap([
+  ...(Sidebar_content.all_routes || []),
+  ...(Sidebar_content.Admin || []),
+  ...(Sidebar_content.GlobalUrl || []),
+]);
+
+/** Override API-provided routes with sidebar_values routes (matched by title) so Navigation.jsx routes always match. */
+const overrideRoutes = (items) =>
+  items.map((item) => ({
+    ...item,
+    route: SIDEBAR_VALUES_LINK_MAP[item.title] || item.route,
+    children: Array.isArray(item.children) ? overrideRoutes(item.children) : item.children,
+  }));
+
 const TOP_LEVEL_ICON_MAP = {
   Dashboard: LayoutDashboard,
   'Insights Engine': Activity,
@@ -331,13 +353,18 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
 
   const menu = useMemo(() => {
     if (Array.isArray(apiMenuRaw) && apiMenuRaw.length > 0) {
-      return meMenuToSidebarItems(apiMenuRaw, {
+      const apiItems = overrideRoutes(meMenuToSidebarItems(apiMenuRaw, {
         resolveTopIcon: (iconKey, rawTitle) =>
           TOP_LEVEL_ICON_MAP[iconKey] || TOP_LEVEL_ICON_MAP[rawTitle] || LayoutDashboard,
-      });
+      }));
+      if (rolename?.toLowerCase() === 'admin') {
+        const adminItems = transformMenuItems(Sidebar_content.Admin || []);
+        return [...apiItems, ...adminItems];
+      }
+      return apiItems;
     }
     const allRoutes = Sidebar_content.all_routes || [];
-    const roleRoutes = rolename === 'Admin' ? Sidebar_content[rolename] || [] : [];
+    const roleRoutes = rolename?.toLowerCase() === 'admin' ? Sidebar_content['Admin'] || [] : [];
     return transformMenuItems(buildOrderedMenu([...allRoutes, ...roleRoutes]));
   }, [rolename, apiMenuRaw]);
 
