@@ -306,11 +306,11 @@
 //      * This replaces old markerList usage for deck.gl maps
 //      */
 
-//     getMultiVendorCells: (filters = {}) => async (dispatch) => {
+//     getGisCells: (filters = {}) => async (dispatch) => {
 
 //         try {
 //             const res = await Api.post({
-//                 url: Urls.multiVendor,
+//                 url: Urls.gisCells,
 //                 data:  {
 //                     dataValue: filters
 //                 }
@@ -338,7 +338,7 @@
 //             dispatch(SET_RAW_CELLS(adapted));
 
 //         } catch (err) {
-//             console.log("multiVendor error", err);
+//             console.log("gisCells error", err);
 //             // dispatch(SET_RAW_CELLS([]));
 //         }
 //     },
@@ -876,6 +876,7 @@ import {
 
     // NEW TELECOM REDUCER IMPORTS
     SET_RAW_CELLS,
+    SET_RAW_CELLS_PER_MAP,
     SET_VIEW_STATE,
     SET_FILTERS,
     SET_SYNC_ENABLED,
@@ -1038,10 +1039,10 @@ const MapActions = {
     ============================================================ */
 
     // Cell Layer
-    getMultiVendorCells: (filters = {}) => async (dispatch) => {
+    getGisCells: (filters = {}) => async (dispatch) => {
         try {
             const res = await Api.post({
-                url: Urls.multiVendor,
+                url: Urls.gisCells,
                 data: { dataValue: filters }
             });
             const apiData = res?.data?.data || [];
@@ -1062,7 +1063,36 @@ const MapActions = {
             }));
             dispatch(SET_RAW_CELLS(adapted));
         } catch (err) {
-            console.log("multiVendor error", err);
+            console.log("gisCells error", err);
+        }
+    },
+
+    // Fetch cells for a specific multi-map slot (sends map_id to backend)
+    getGisCellsForMap: (mapKey, filters = {}) => async (dispatch) => {
+        try {
+            const res = await Api.post({
+                url: Urls.gisCells,
+                data: { dataValue: filters, map_id: mapKey }
+            });
+            const apiData = res?.data?.data || [];
+            const adapted = apiData.map(item => ({
+                cell_id: item.cell_name,
+                site_name: item.site_name,
+                technology: item.technology,
+                operator: item.vendor,
+                region: item.region,
+                band: item.band,
+                latitude: item.latitude,
+                longitude: item.longitude,
+                azimuth: item.azimuth,
+                beam_width: item.beamwidth,
+                radius_m: item.length,
+                status: "active",
+                color: item.color
+            }));
+            dispatch(SET_RAW_CELLS_PER_MAP({ mapKey, cells: adapted }));
+        } catch (err) {
+            console.log("getGisCellsForMap error", mapKey, err);
         }
     },
 

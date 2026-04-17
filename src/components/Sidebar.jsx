@@ -70,6 +70,7 @@ const TOP_LEVEL_ICON_MAP = {
   Dashboard: LayoutDashboard,
   'Insights Engine': Activity,
   'GIS Engine': MapIcon,
+  'Geo Drill-Down': MapPinned,
   'Analytics Pro': BarChart2,
   Discussions: MessageSquare,
   'Configuration Management': Settings,
@@ -78,6 +79,10 @@ const TOP_LEVEL_ICON_MAP = {
   iSON: Cpu,
   'CX/IX Support': Wrench,
   'Network Inventory': HardDrive,
+  'KPI Processing Engine': Gauge,
+  Tickets: ListChecks,
+  'Multi-Map View': Layers,
+  'Map Chart': MapPinned,
   'Topology Layer': Network,
   'Layer View': Layers,
   'Nokia Tool Management Query': Terminal,
@@ -93,6 +98,16 @@ const TOP_LEVEL_ICON_MAP = {
   Admin: Settings2,
 };
 
+/**
+ * Case-insensitive + punctuation-normalised lookup map built from TOP_LEVEL_ICON_MAP.
+ * Used as a fallback when the API returns a title with different casing/punctuation
+ * than the canonical key (e.g. "Gis Engine" → "GIS Engine", "Xalerts" → "xAlerts").
+ */
+const normTitle = (s) => String(s || '').toLowerCase().replace(/[-/]/g, ' ').trim();
+const TOP_LEVEL_ICON_MAP_CI = Object.fromEntries(
+  Object.entries(TOP_LEVEL_ICON_MAP).map(([k, v]) => [normTitle(k), v])
+);
+
 const REFERENCE_MENU = [
   {
     name: 'Insights Engine',
@@ -104,10 +119,17 @@ const REFERENCE_MENU = [
     ],
   },
   { name: 'GIS Engine' },
+  { name: 'Geo Drill-Down' },
   {
     name: 'Analytics Pro',
     children: ['Site Analytics', 'Site Pro Rules', 'Cell Analytics', 'Cell Pro Rules', 'KPI Check Rules', 'Pro Rules Management'],
   },
+  {
+    name: 'KPI Processing Engine',
+    children: ['Counters', 'KPI Process', 'Measurements'],
+  },
+  { name: 'Tickets' },
+  { name: 'Multi-Map View' },
   { name: 'Discussions' },
   {
     name: 'Configuration Management',
@@ -199,12 +221,26 @@ const SIDEBAR_CHILD_ICON_MAP = {
   'Map Testing': Activity,
   'Customized Report': ChartColumn,
   Repository: FolderOpen,
+  Counters: BarChart2,
+  'KPI Process': Cpu,
+  Measurements: ChartLine,
   'User Management': Settings,
   'Role Management': ShieldCheck,
   'Resource Utilization': Gauge,
   'Auto TT Dispatch': Play,
   'Plan Work Order': ClipboardCheck,
+  // API may return a shortened title — add explicit aliases here when the name differs
+  Workbench: FileCode,
 };
+
+/**
+ * Case-insensitive fallback map for child icon resolution.
+ * Handles API titles with different casing (e.g. "Db Config" → "DB Config").
+ * Uses the same normTitle() helper defined above for top-level icons.
+ */
+const SIDEBAR_CHILD_ICON_MAP_CI = Object.fromEntries(
+  Object.entries(SIDEBAR_CHILD_ICON_MAP).map(([k, v]) => [normTitle(k), v])
+);
 
 const normalizePath = (value = '') => value.replace(/\/+$/, '') || '/';
 
@@ -316,7 +352,8 @@ const persistOpenCategories = (categories) => {
   localStorage.setItem(OPEN_CATEGORY_STORAGE_KEY, JSON.stringify(categories));
 };
 
-const getSidebarChildIcon = (title) => SIDEBAR_CHILD_ICON_MAP[title] || null;
+const getSidebarChildIcon = (title) =>
+  SIDEBAR_CHILD_ICON_MAP[title] || SIDEBAR_CHILD_ICON_MAP_CI[normTitle(title)] || null;
 
 const normalizeStoredUser = (raw) => {
   if (raw == null) return null;
@@ -352,19 +389,34 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
   }, [authUser]);
 
   const menu = useMemo(() => {
+    // Primary path: GET /me returned a menu (works for any role — admin or user).
+    // Backend is the source of truth for what items each role can see.
     if (Array.isArray(apiMenuRaw) && apiMenuRaw.length > 0) {
       const apiItems = overrideRoutes(meMenuToSidebarItems(apiMenuRaw, {
+        // Resolve icon: exact match first, then case-insensitive/punctuation-normalised fallback.
+        // This handles API titles like "Gis Engine", "Xalerts", "Ison", "Multi Map View" etc.
         resolveTopIcon: (iconKey, rawTitle) =>
-          TOP_LEVEL_ICON_MAP[iconKey] || TOP_LEVEL_ICON_MAP[rawTitle] || LayoutDashboard,
+          TOP_LEVEL_ICON_MAP[iconKey] ||
+          TOP_LEVEL_ICON_MAP[rawTitle] ||
+          TOP_LEVEL_ICON_MAP_CI[normTitle(iconKey)] ||
+          TOP_LEVEL_ICON_MAP_CI[normTitle(rawTitle)] ||
+          LayoutDashboard,
       }));
+      // Admin always gets the Admin panel appended — but only if the API didn't already include it.
       if (rolename?.toLowerCase() === 'admin') {
-        const adminItems = transformMenuItems(Sidebar_content.Admin || []);
-        return [...apiItems, ...adminItems];
+        const apiTitles = new Set(apiItems.map((i) => i.title.toLowerCase()));
+        const adminItems = transformMenuItems(Sidebar_content.Admin || []).filter(
+          (i) => !apiTitles.has(i.title.toLowerCase())
+        );
+        return adminItems.length > 0 ? [...apiItems, ...adminItems] : apiItems;
       }
       return apiItems;
     }
+
+    // Fallback: GET /me returned no menu (network error, backend not yet updated, or dev mode).
+    // Renders the full static sidebar from sidebar_values.jsx.
     const allRoutes = Sidebar_content.all_routes || [];
-    const roleRoutes = rolename?.toLowerCase() === 'admin' ? Sidebar_content['Admin'] || [] : [];
+    const roleRoutes = rolename?.toLowerCase() === 'admin' ? Sidebar_content.Admin || [] : [];
     return transformMenuItems(buildOrderedMenu([...allRoutes, ...roleRoutes]));
   }, [rolename, apiMenuRaw]);
 

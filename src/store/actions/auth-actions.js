@@ -154,7 +154,6 @@ const AuthActions = {
             dispatch(SET_COMMON_CONFIG(dataFiw))
 
             dispatch(CommonActions.setLastName(true, ""))
-            await dispatch(fetchMe())
             cb()
             return { ok: true }
         } catch (error) {

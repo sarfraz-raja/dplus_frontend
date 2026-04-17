@@ -72,7 +72,7 @@ export const Urls={
     map_savelatlong:"/setupConf",
 
     telecom_getCells: "/telecom/cells",
-    multiVendor: "/map/multiVendor",
+    gisCells: "/map/gisCells",
     towers: "/map/towers",
     
     boundary_groups: "/map/boundary-groups",
@@ -85,6 +85,10 @@ export const Urls={
     gis_ta: "/kpi/multi-vendor/gis-ta",
     cell_pro_rules: "/kpi/multi-vendor/cell-pro-rules",
     site_pro_rules: "/kpi/multi-vendor/site-pro-rules",
+
+    kpi_counters:      "/kpi-engine/counters",
+    kpi_process:       "/kpi-engine/kpi-process",
+    kpi_measurements:  "/kpi-engine/measurements",
 
     cxix_scripting:"/cxix_scripting",
     cxix_audit:"/cxix_audit",

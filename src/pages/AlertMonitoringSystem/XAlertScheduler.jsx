@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import FormModal from '../../components/FormModal';
 import Table from '../../components/Table';
@@ -38,6 +38,8 @@ const XAlertScheduler = () => {
     const [modalOpen, setModalOpen] = useState(false);
     const [modalBody, setModalBody] = useState(null);
     const [modalTitle, setModalTitle] = useState('');
+    const [modalResetting, setModalResetting] = useState(true);
+    const formSubmitRef = useRef(null);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
@@ -59,15 +61,19 @@ const XAlertScheduler = () => {
     const visibleCols = COLUMNS.filter(col => !hiddenCols.includes(col.key));
 
     const openAdd = () => {
-        setModalOpen(true);
+        formSubmitRef.current = null;
+        setModalResetting(true);
         setModalTitle('Add Alert Scheduler');
-        setModalBody(<XAlertSchedulerForm setIsOpen={setModalOpen} resetting={true} formValue={{}} />);
+        setModalBody(<XAlertSchedulerForm setIsOpen={setModalOpen} resetting={true} formValue={{}} submitRef={formSubmitRef} />);
+        setModalOpen(true);
     };
 
     const openEdit = (itm) => {
-        setModalOpen(true);
+        formSubmitRef.current = null;
+        setModalResetting(false);
         setModalTitle('Edit Alert Scheduler');
-        setModalBody(<XAlertSchedulerForm setIsOpen={setModalOpen} resetting={false} formValue={itm} />);
+        setModalBody(<XAlertSchedulerForm setIsOpen={setModalOpen} resetting={false} formValue={itm} submitRef={formSubmitRef} />);
+        setModalOpen(true);
     };
 
     const openDelete = (itm) => {
@@ -307,7 +313,19 @@ const XAlertScheduler = () => {
                 </div>
             </div>
 
-            <FormModal title={modalTitle} isOpen={modalOpen} setIsOpen={setModalOpen}>
+            <FormModal
+                title={modalTitle}
+                isOpen={modalOpen}
+                setIsOpen={setModalOpen}
+                footer={
+                    <div className="flex justify-end gap-3">
+                        <Button variant="secondary" size="md" onClick={() => setModalOpen(false)}>Cancel</Button>
+                        <Button variant="primary" size="md" onClick={() => formSubmitRef.current?.()}>
+                            {modalResetting ? 'Add' : 'Save Changes'}
+                        </Button>
+                    </div>
+                }
+            >
                 {modalBody}
             </FormModal>
 

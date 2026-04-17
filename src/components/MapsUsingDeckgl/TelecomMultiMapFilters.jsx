@@ -21,6 +21,16 @@ export const ALL_OPERATORS = [
   "Nokia",
 ];
 
+/** Maps each operator to its backend table name for multi-map GIS data. */
+export const OPERATOR_TO_MAP_KEY = {
+  Telkom:    "cell_gis_map_1",
+  Airtel:    "cell_gis_map_2",
+  Safaricom: "cell_gis_map_3",
+  Huawei:    "cell_gis_map_4",
+  Ericsson:  "cell_gis_map_5",
+  Nokia:     "cell_gis_map_6",
+};
+
 const PRESETS = [2, 4, 6];
 
 /** Returns responsive Tailwind grid-cols classes — 1 col on mobile, N cols on sm+. */

@@ -7,17 +7,31 @@ const ORANGE = '#EC7D09';
  *   isOpen       {boolean}
  *   setIsOpen    {function}
  *   title        {string}
- *   headerColor  {string}    — CSS color, defaults to brand orange
- *   size         {string}    — 'form' (default) | 'lg'
- *   children     {ReactNode} — scrollable body content
- *   footer       {ReactNode} — optional sticky footer (e.g. action buttons)
+ *   subtitle     {string}        — optional line under the title
+ *   icon         {ReactNode}     — optional icon shown left of the title
+ *   headerColor  {string}        — CSS color, defaults to brand orange
+ *   size         {string}        — 'form' (default) | 'lg' | 'xl' | 'full'
+ *   children     {ReactNode}     — scrollable body content
+ *   footer       {ReactNode}     — optional sticky footer (e.g. action buttons)
  */
-const FormModal = ({ isOpen, setIsOpen, title, headerColor = ORANGE, size = 'form', children, footer }) => {
+const FormModal = ({
+    isOpen,
+    setIsOpen,
+    title,
+    subtitle,
+    icon,
+    headerColor = ORANGE,
+    size = 'form',
+    children,
+    footer,
+}) => {
     if (!isOpen) return null;
 
-    const sizeClass = size === 'lg'
-        ? 'w-[94vw] md:w-[860px] max-h-[90vh]'
-        : 'w-[94vw] md:w-[640px] max-h-[90vh]';
+    const sizeClass =
+        size === 'full' ? 'w-[98vw] h-[96vh]' :
+        size === 'xl'   ? 'w-[94vw] md:w-[1000px] max-h-[90vh]' :
+        size === 'lg'   ? 'w-[94vw] md:w-[860px]  max-h-[90vh]' :
+                          'w-[94vw] md:w-[640px]   max-h-[90vh]';
 
     return (
         <div
@@ -27,31 +41,50 @@ const FormModal = ({ isOpen, setIsOpen, title, headerColor = ORANGE, size = 'for
         >
             <div
                 onClick={(e) => e.stopPropagation()}
-                className={`bg-white rounded-2xl shadow-2xl flex flex-col ${sizeClass}`}
+                className={`flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden border border-white/10 ${sizeClass}`}
             >
                 {/* ── Sticky header ── */}
                 <div
-                    className="flex items-center justify-between px-5 py-3 rounded-t-2xl shrink-0"
+                    className="flex items-center gap-3 px-5 py-4 shrink-0"
                     style={{ background: headerColor }}
                 >
-                    <h2 className="text-white font-semibold text-lg">{title}</h2>
+                    {/* Optional icon */}
+                    {icon && (
+                        <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
+                            {icon}
+                        </div>
+                    )}
+
+                    {/* Title + subtitle */}
+                    <div className="flex-1 min-w-0">
+                        <h2 className="text-white font-semibold text-base leading-tight truncate">{title}</h2>
+                        {subtitle && (
+                            <p className="text-white/70 text-xs mt-0.5 truncate">{subtitle}</p>
+                        )}
+                    </div>
+
+                    {/* Close button */}
                     <button
                         type="button"
                         onClick={() => setIsOpen(false)}
-                        className="text-white/80 hover:text-white text-xl leading-none"
+                        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/25 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
+                        aria-label="Close"
                     >
-                        ✕
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
                     </button>
                 </div>
 
                 {/* ── Scrollable content ── */}
-                <div className="flex-1 overflow-y-auto p-5">
+                <div className="flex-1 overflow-y-auto p-5 min-h-0">
                     {children}
                 </div>
 
                 {/* ── Sticky footer (optional) ── */}
                 {footer && (
-                    <div className="shrink-0 border-t border-slate-100 px-5 py-3 bg-white rounded-b-2xl">
+                    <div className="shrink-0 border-t border-slate-100 px-5 py-3 bg-slate-50/60 rounded-b-2xl">
                         {footer}
                     </div>
                 )}

@@ -181,15 +181,14 @@ const UserManagementForm = ({ isOpen, setIsOpen, resetting, formValue = {} }) =>
             reset({})
 
             console.log(Object.keys(formValue), "Object.keys(formValue)")
+            const formFieldNames = Form.map(f => f.name)
             Object.keys(formValue).forEach((key) => {
+                if (!formFieldNames.includes(key) && key !== 'id' && key !== 'uniqueId') return
                 if (["endAt", "startAt"].indexOf(key) != -1) {
                     console.log("date formValuekey", key, formValue[key])
                     const momentObj = moment(formValue[key]);
                     setValue(key, momentObj.toDate());
-
-
                 } else {
-                    // console.log("formValuekey",key,key)
                     setValue(key, formValue[key]);
                 }
             })

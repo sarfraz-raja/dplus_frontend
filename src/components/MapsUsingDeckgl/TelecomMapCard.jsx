@@ -1,9 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useDispatch } from "react-redux";
 import TelecomMap from "./TelecomMap";
+import MapActions from "../../store/actions/map-actions";
 
-const TelecomMapCard = ({ operator }) => {
-
+const TelecomMapCard = ({ operator, mapKey }) => {
+  const dispatch = useDispatch();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Fetch the data for this specific map slot when the card mounts or mapKey changes
+  useEffect(() => {
+    if (!mapKey) return;
+    dispatch(MapActions.getGisCellsForMap(mapKey));
+  }, [dispatch, mapKey]);
 
   return (
     <div
@@ -48,7 +56,7 @@ const TelecomMapCard = ({ operator }) => {
 
       {/* Body */}
       <div style={{ flex: 1, position: "relative" }}>
-        <TelecomMap operator={operator} />
+        <TelecomMap operator={operator} mapKey={mapKey} />
 
         {/* SLIDE FILTER PANEL */}
         {/* <div

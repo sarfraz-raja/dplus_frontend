@@ -150,7 +150,7 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
       payload.site_name = [siteSearch.trim()];
     }
 
-    dispatch(MapActions.getMultiVendorCells(payload));
+    dispatch(MapActions.getGisCells(payload));
 
     dispatch(
       AuthActions.setupConf(true, {
@@ -168,7 +168,7 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
   const clearGlobalFilters = useCallback(() => {
     setSelected({});
     setSiteSearch("");
-    dispatch(MapActions.getMultiVendorCells({}));
+    dispatch(MapActions.getGisCells({}));
   }, [dispatch]);
 
   const toggleAllInSection = useCallback((group) => {

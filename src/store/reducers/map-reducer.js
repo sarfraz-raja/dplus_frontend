@@ -23,6 +23,7 @@ const initialState = {
     // 🔹 NEW TELECOM MAP STATE(FOR NEW ARCHITECTURE-> mapbox + deckgl)
     // 🔹 Raw telecom dataset from backend
     rawCells: [],
+    rawCellsPerMap: {},   // keyed by map table name, e.g. "cell_gis_map_1"
     rawSites: [],
     selectedTaCells: [], // array of {cellId, cellName, taData: [...]}
 
@@ -372,6 +373,11 @@ const mapQuery = createSlice({
             };
         },
 
+        SET_RAW_CELLS_PER_MAP: (state, { payload }) => {
+            // payload: { mapKey: "cell_gis_map_1", cells: [...] }
+            state.rawCellsPerMap[payload.mapKey] = payload.cells;
+        },
+
         SET_RAW_SITES: (state, { payload }) => {
             state.rawSites = payload;
         },
@@ -471,6 +477,7 @@ export const {
     RESET_LAYER_OPACITY,
     SET_LAYER_VISIBILITY,
     RESET_LAYER_VISIBILITY,
+    SET_RAW_CELLS_PER_MAP,
     SET_RAW_SITES,
     SET_ACTIVE_SITE_THEMATIC,
     SET_RULER_MODE,

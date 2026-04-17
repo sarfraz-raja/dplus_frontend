@@ -11,7 +11,7 @@ const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
 const errorCls = "text-xs text-red-500 mt-0.5";
 const textareaCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none h-20";
 
-const XAlertConfigureForm = ({ setIsOpen, resetting, formValue = {} }) => {
+const XAlertConfigureForm = ({ setIsOpen, resetting, formValue = {}, submitRef }) => {
     const dispatch = useDispatch();
     const userList = useSelector((state) => state?.customQuery?.usersList ?? []);
     const databaseList = useSelector((state) => state?.customQuery?.databaseList ?? []);
@@ -52,6 +52,11 @@ const XAlertConfigureForm = ({ setIsOpen, resetting, formValue = {} }) => {
             }));
         }
     };
+
+    // Wire submit handler to ref so parent can trigger it from footer buttons
+    useEffect(() => {
+        if (submitRef) submitRef.current = handleSubmit(onSubmit);
+    });
 
     return (
         <>
@@ -162,15 +167,17 @@ const XAlertConfigureForm = ({ setIsOpen, resetting, formValue = {} }) => {
 
             </div>
 
-            {/* Buttons */}
-            <div className="flex justify-end gap-3 mt-6">
-                <Button type="button" onClick={() => setIsOpen(false)} variant="secondary" className="px-5 py-2 text-sm font-semibold">
-                    Cancel
-                </Button>
-                <Button type="button" onClick={handleSubmit(onSubmit)} variant="primary" className="px-6 py-2 text-sm font-semibold">
-                    {resetting ? 'Add' : 'Save Changes'}
-                </Button>
-            </div>
+            {/* Buttons — only shown when footer is not managed by the parent via submitRef */}
+            {!submitRef && (
+                <div className="flex justify-end gap-3 mt-6">
+                    <Button type="button" onClick={() => setIsOpen(false)} variant="secondary" className="px-5 py-2 text-sm font-semibold">
+                        Cancel
+                    </Button>
+                    <Button type="button" onClick={handleSubmit(onSubmit)} variant="primary" className="px-6 py-2 text-sm font-semibold">
+                        {resetting ? 'Add' : 'Save Changes'}
+                    </Button>
+                </div>
+            )}
         </>
     );
 };

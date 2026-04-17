@@ -216,8 +216,8 @@ const MAP_STYLES = {
     attribution: '© OpenStreetMap Contributors'
   },
   satellite: {
-    tiles: [`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`],
-    attribution: '© Mapbox'
+    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+    attribution: '© Esri, Maxar, Earthstar Geographics'
   },
 
 };
@@ -283,7 +283,7 @@ const DECK_WIDGETS_NONE = [];
 /* Legacy top-right compass (restorable): `import { CompassWidget } from "@deck.gl/widgets";`
    then `widgets={[new CompassWidget({ placement: "top-right" })]}` instead of `DECK_WIDGETS_NONE`. */
 
-const TelecomMap = ({ operator, geojsonLayer = null, fullscreenRootRef = null }) => {
+const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRootRef = null }) => {
 
   const dispatch = useDispatch();
   const deckRef = useRef(null);
@@ -298,7 +298,10 @@ const TelecomMap = ({ operator, geojsonLayer = null, fullscreenRootRef = null })
      🔹 REDUX STATE
   ============================================================ */
 
-  const rawCells = useSelector(state => state.map.rawCells);
+  const rawCellsGlobal = useSelector(state => state.map.rawCells);
+  const rawCellsPerMap = useSelector(state => state.map.rawCellsPerMap);
+  // In multi-map mode a mapKey is provided — use the per-map dataset; fall back to shared rawCells for single-map page
+  const rawCells = mapKey ? (rawCellsPerMap?.[mapKey] ?? []) : rawCellsGlobal;
   const filters = useSelector(state => state.map.filters);
   const viewState = useSelector(state => state.map.viewState);
   const syncEnabled = useSelector(state => state.map.syncEnabled);
@@ -964,9 +967,13 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
 
     if (!operatorFiltered) return [];
     const order = { "2G":1,"3G":2,"4G":3,"5G":4 };
-    return [...operatorFiltered].sort(
-      (a,b) => (order[a.technology]||0)-(order[b.technology]||0)
-    );
+    return [...operatorFiltered]
+      .filter(d =>
+        Number.isFinite(Number(d.longitude)) &&
+        Number.isFinite(Number(d.latitude)) &&
+        Number(d.radius_m) > 0
+      )
+      .sort((a,b) => (order[a.technology]||0)-(order[b.technology]||0));
   }, [operatorFiltered]);
   
   // derived here so handleMapContextMenu and ruler layers can both use it
@@ -1266,37 +1273,6 @@ const siteLayer = useMemo(() => {
     });
   }, [operatorFiltered, highlightedCell, selectedCell]);
 
-  // Highlights the selected cell by filling its sector polygon — used when searching by cell
-  const cellHighlightLayer = useMemo(() => {
-
-    if (!selectedCell) return null;
-
-    return new PolygonLayer({
-      id: "cell-highlight-sector",
-
-      data: [selectedCell],
-
-      pickable: false,
-      stroked: true,
-      filled: true,
-
-      getPolygon: d => generateCoordinates(
-        d.longitude,
-        d.latitude,
-        d.azimuth,
-        d.radius_m,
-        d.radius_m,
-        config.mapScale * 20,
-      ),
-
-      getFillColor: [255, 215, 0, 140],
-      getLineColor: [255, 215, 0, 255],
-      getLineWidth: 3,
-      lineWidthUnits: "pixels",
-      lineJointRounded: true,
-      lineCapRounded: true,
-    });
-  }, [selectedCell, config.mapScale]);
 
   /* ============================================================
      🔹 TA SECTOR LAYER (deck.gl) — annular sectors per distance band
@@ -2055,7 +2031,6 @@ const siteLayer = useMemo(() => {
       if (currentZoom >= 12 && sectorLayer) baseLayers.push(sectorLayer); // cell sectors
 
       if (siteHighlightLayer) baseLayers.push(siteHighlightLayer);
-      if (cellHighlightLayer) baseLayers.push(cellHighlightLayer);
       if (taSectorLayer) baseLayers.push(...taSectorLayer);
     }
 
@@ -2078,7 +2053,6 @@ const siteLayer = useMemo(() => {
     markerLayer,
     sectorLayer,
     siteHighlightLayer,
-    cellHighlightLayer,
     taSectorLayer,
     customGeoJsonLayer,
     rfPredictionLayer,

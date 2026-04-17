@@ -97,16 +97,33 @@ const SaveQueryPopover = ({ onSave, disabled }) => {
 };
 
 // ─── Export Dropdown ───────────────────────────────────────────────────────────
-const ExportDropdown = ({ onExportCSV, onExportExcel, disabled }) => {
+const ExportDropdown = ({ onExportCSV, onExportExcel, disabled, highlight }) => {
     const [open, setOpen] = useState(false);
     return (
         <div className="relative inline-block text-left">
+            {highlight && (
+                <style>{`
+                    @keyframes exportPop {
+                        0%   { transform: scale(1); }
+                        30%  { transform: scale(1.18); }
+                        60%  { transform: scale(0.95); }
+                        100% { transform: scale(1); }
+                    }
+                    .export-pop {
+                        animation: exportPop 0.9s ease-in-out 3;
+                    }
+                `}</style>
+            )}
             <button
                 onClick={() => setOpen(!open)}
                 disabled={disabled}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 rounded-lg shadow-sm border border-slate-300 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className={`export-pop flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg shadow-sm border transition-colors disabled:opacity-50 ${
+                    highlight
+                        ? 'border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                        : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+                }`}
             >
-                Export As ▾
+                ⬇ Export As ▾
             </button>
             {open && (
                 <div className="absolute left-0 top-11 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1 min-w-[130px]">
@@ -275,6 +292,7 @@ const QueryWorkbench = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isDragOver, setIsDragOver] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [showExportHint, setShowExportHint] = useState(false);
     const [errorModalOpen, setErrorModalOpen] = useState(false);
 
     // ── DateTime params (@starttime / @endtime) ──
@@ -407,6 +425,21 @@ const QueryWorkbench = () => {
         dispatch(CustomQueryActions.getSavedQuery(true));
     }, []);
 
+    // ── Auto-select DB server ──
+    // Once the list loads, pick: (1) last-used from localStorage, (2) first in list
+    // Only runs when server is still empty (don't override a server set by a saved-query click)
+    useEffect(() => {
+        if (databaseList.length === 0 || server) return;
+        const saved = localStorage.getItem('qw_last_server');
+        const valid = saved && databaseList.some(db => String(db.value) === saved);
+        setServer(valid ? saved : String(databaseList[0].value));
+    }, [databaseList]);
+
+    // Persist the chosen server so it survives page reloads
+    useEffect(() => {
+        if (server) localStorage.setItem('qw_last_server', server);
+    }, [server]);
+
     // action only calls cb() for "File" responses, not "Data" — so watch runQuery to reset loading
     // only reset loading when actual data/error arrives, not on the empty {} reset dispatch
     useEffect(() => {
@@ -491,7 +524,9 @@ const QueryWorkbench = () => {
     const executeQuery = () => {
         if (!activeQuery.trim() || !server) return;
         setIsLoading(true);
-        dispatch(CustomQueryActions.postRunQuery(true, getFormData(1000), () => {}, Urls.querybuilder_runQuery));
+        setShowExportHint(false);
+        // Request 1001 rows so we can detect when there are more than 1000 (show the clipping warning)
+        dispatch(CustomQueryActions.postRunQuery(true, getFormData(1001), () => { setIsLoading(false); setShowExportHint(true); }, Urls.querybuilder_runQuery));
     };
 
     const exportCSV = () => {
@@ -652,27 +687,20 @@ const QueryWorkbench = () => {
                                     <label className="text-xs font-semibold text-slate-700 shrink-0">
                                         DB Server <span className="text-red-500">*</span>
                                     </label>
-                                    <div className="flex flex-col gap-0.5">
-                                        <select
-                                            value={server}
-                                            onChange={(e) => setServer(String(e.target.value))}
-                                            className={`w-full sm:w-56 px-3 py-1.5 text-xs rounded outline-none transition-colors ${
-                                                !server
-                                                    ? 'border-2 border-red-400 bg-red-50'
-                                                    : 'border border-slate-200 bg-white focus:border-blue-400'
-                                            }`}
-                                        >
-                                            <option value="">— Select a DB Server —</option>
-                                            {databaseList.map((db) => (
-                                                <option key={db.value} value={String(db.value)}>{db.label}</option>
-                                            ))}
-                                        </select>
-                                        {!server && (
-                                            <p className="text-[10px] text-red-500 font-medium">Required before running a query</p>
+                                    <select
+                                        value={server}
+                                        onChange={(e) => setServer(String(e.target.value))}
+                                        className="w-full sm:w-56 px-3 py-1.5 text-xs rounded outline-none border border-slate-200 bg-white focus:border-blue-400 transition-colors"
+                                    >
+                                        {databaseList.length === 0 && (
+                                            <option value="">— No DB configured —</option>
                                         )}
-                                    </div>
+                                        {databaseList.map((db) => (
+                                            <option key={db.value} value={String(db.value)}>{db.label}</option>
+                                        ))}
+                                    </select>
                                     <SaveQueryPopover onSave={(name, visibleTo) => saveQuery(name, undefined, undefined, visibleTo)} disabled={!canExecute} />
-                                    <ExportDropdown onExportCSV={exportCSV} onExportExcel={exportExcel} disabled={!canExecute} />
+                                    <ExportDropdown onExportCSV={exportCSV} onExportExcel={exportExcel} disabled={!canExecute} highlight={rowsClipped} />
                                 </div>
 
                                 {/* DateTime params row — only shown when query has content */}
@@ -763,7 +791,7 @@ const QueryWorkbench = () => {
                                         value={activeQuery}
                                         onChange={(e) => setActiveQuery(e.target.value)}
                                         placeholder="Drag a saved query here or start writing..."
-                                        className="w-full h-full px-3 py-2 font-mono text-xs border-0 focus:ring-0 focus:outline-none placeholder:text-slate-300 placeholder:italic resize-none"
+                                        className="w-full h-full px-3 py-2 font-mono text-xs border-0 focus:ring-0 focus:outline-none placeholder:text-slate-300 placeholder:italic resize-none bg-white text-slate-800"
                                     />
                                     {!activeQuery && (
                                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:bg-slate-50/50 transition-colors">
@@ -774,11 +802,6 @@ const QueryWorkbench = () => {
 
                                 {/* Bottom action buttons */}
                                 <div className="flex justify-end items-center gap-3 mt-2 pt-1 border-t border-slate-100 shrink-0">
-                                    {activeQuery.trim() && !server && (
-                                        <p className="text-xs text-red-500 font-semibold mr-auto">
-                                            ↑ Select a DB Server to run this query
-                                        </p>
-                                    )}
                                     <Button
                                         onClick={clearWorkbench}
                                         variant="secondary"
@@ -789,7 +812,7 @@ const QueryWorkbench = () => {
                                     <Button
                                         onClick={executeQuery}
                                         disabled={!canExecute || isLoading}
-                                        title={!server ? 'Select a DB Server first' : !activeQuery.trim() ? 'Enter a query first' : ''}
+                                        title={!activeQuery.trim() ? 'Enter a query first' : ''}
                                         variant="primary"
                                         className="flex items-center gap-2 px-6 py-2 text-sm font-semibold"
                                     >
@@ -844,8 +867,8 @@ const QueryWorkbench = () => {
                         <div className="w-16 h-1 rounded-full bg-slate-300 group-hover:bg-blue-400 transition-colors" />
                         <div className="flex-1 flex justify-end">
                             {hasResults && (rowsClipped
-                                ? <span className="text-[11px] text-amber-700 font-medium">Showing 1,000 of {allRows.length.toLocaleString()} rows</span>
-                                : <span className="text-[11px] text-slate-500">{allRows.length.toLocaleString()} row{allRows.length !== 1 ? 's' : ''} returned</span>
+                                ? <span className="text-[11px] text-amber-700 font-medium">Showing first 1,000 rows — use ⬇ Export As for full data</span>
+                                : <span className="text-[11px] text-slate-500">{rows.length.toLocaleString()} row{rows.length !== 1 ? 's' : ''} returned</span>
                             )}
                         </div>
                     </div>
@@ -855,9 +878,20 @@ const QueryWorkbench = () => {
                         className="flex-1 overflow-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0"
                         style={{ background: 'rgba(255,255,255,0.6)' }}
                     >
-                    {!hasResults && (
+                    {!hasResults && !showExportHint && (
                         <div className="flex items-center justify-center h-full text-slate-400 text-sm select-none">
                             Run a query to see results
+                        </div>
+                    )}
+                    {!hasResults && showExportHint && (
+                        <div className="flex items-center justify-center h-full">
+                            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 max-w-md shadow-sm">
+                                <svg className="shrink-0 mt-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                <div>
+                                    <p className="text-sm font-semibold text-amber-800 mb-1">Too many rows for table view</p>
+                                    <p className="text-xs text-amber-700 leading-relaxed">Your query returned more than 1,000 rows, so the results were downloaded automatically. Use the <span className="font-semibold">Export</span> button to download large result sets.</p>
+                                </div>
+                            </div>
                         </div>
                     )}
                     {hasResults && (

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useDispatch } from "react-redux";
 import MapActions from "../store/actions/map-actions";
 import TelecomMapCard from "../components/MapsUsingDeckgl/TelecomMapCard";
-import TelecomMultiMapFilters from "../components/MapsUsingDeckgl/TelecomMultiMapFilters";
+import TelecomMultiMapFilters, { OPERATOR_TO_MAP_KEY } from "../components/MapsUsingDeckgl/TelecomMultiMapFilters";
 
 const TelecomMultipleMapsPage = () => {
   const dispatch = useDispatch();
@@ -16,7 +16,7 @@ const TelecomMultipleMapsPage = () => {
     setLayout(newLayout);
   }, []);
 
-  // Same init as TelecomMapsPage — loads all shared map data into Redux
+  // Shared setup (boundaries, RF filters, user config, sites) — cell data is loaded per-card
   useEffect(() => {
     const init = async () => {
       try {
@@ -24,7 +24,6 @@ const TelecomMultipleMapsPage = () => {
           dispatch(MapActions.getBoundaryGroups()),
           dispatch(MapActions.getRfPredictionFilters()),
           dispatch(MapActions.getUserMapSetup()),
-          dispatch(MapActions.getMultiVendorCells({})),
           dispatch(MapActions.getSites()),
         ]);
       } catch (e) {
@@ -44,7 +43,7 @@ const TelecomMultipleMapsPage = () => {
         style={{ background: "#f3f4f6" }}
       >
         {selectedOperators.map((op) => (
-          <TelecomMapCard key={op} operator={op} />
+          <TelecomMapCard key={op} operator={op} mapKey={OPERATOR_TO_MAP_KEY[op]} />
         ))}
       </div>
 
