@@ -23,10 +23,12 @@ const THEMATIC_TYPES = [
 ];
 
 const kpiThematicOptions = [
-    "RSSI",
-    "RSRP",
+    // "RSSI",
+    "CSSR",
+    "CDR",
+    // "RSRP",
     "DL Thrp",
-    "Frequency",
+    // "Frequency",
 ];
 
 // const CellThematicsPanel = ({ openDropdown, toggleDropdown }) => {

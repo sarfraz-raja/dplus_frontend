@@ -147,11 +147,11 @@ const UserManagement = () => {
                 value: "username",
                 style: "min-w-[250px] max-w-[250px]"
             },
-            {
-                name: "Password",
-                value: "password",
-                style: "min-w-[250px] max-w-[250px]"
-            },
+            // {
+            //     name: "Password",
+            //     value: "password",
+            //     style: "min-w-[250px] max-w-[250px]"
+            // },
             {
                 name: "Role",
                 value: "rolename",
