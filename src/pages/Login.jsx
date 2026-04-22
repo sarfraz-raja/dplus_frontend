@@ -312,12 +312,15 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LockKeyhole, UserCircle2 } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserCircle2 } from 'lucide-react';
 import AuthActions from '../store/actions/auth-actions';
+import { useTheme } from '../context/ThemeContext.jsx';
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -363,39 +366,73 @@ const Login = () => {
 
   return (
     <main
-      className="login-shell relative flex min-h-screen items-start justify-center overflow-hidden bg-[#02030a] px-4 py-5 text-white sm:items-center sm:py-8"
+      className={`login-shell relative flex min-h-screen items-start justify-center overflow-hidden px-4 py-5 sm:items-center sm:py-8 ${isDark ? 'bg-[#02030a] text-white' : 'bg-gray-50 text-gray-900'}`}
       style={{ fontFamily: '"Aptos", "Aptos Display", "Segoe UI", Arial, sans-serif' }}
     >
       <style
         dangerouslySetInnerHTML={{
-          __html: `
-            .login-shell input { color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; caret-color: #ffffff; font-family: inherit; }
-            .login-shell input::placeholder { color: #64748b !important; -webkit-text-fill-color: #64748b !important; opacity: 1; }
-            .login-shell input:-webkit-autofill, .login-shell input:-webkit-autofill:hover, .login-shell input:-webkit-autofill:focus, .login-shell input:-webkit-autofill:active { -webkit-text-fill-color: #ffffff !important; caret-color: #ffffff; border: 1px solid rgba(255,255,255,0.05) !important; -webkit-box-shadow: 0 0 0 1000px rgba(3,6,18,0.98) inset !important; box-shadow: 0 0 0 1000px rgba(3,6,18,0.98) inset !important; transition: background-color 999999s ease-in-out 0s; background-clip: content-box !important; }
-          `,
+          __html: isDark
+            ? `
+              .login-shell input { color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; caret-color: #ffffff; font-family: inherit; }
+              .login-shell input::placeholder { color: #64748b !important; -webkit-text-fill-color: #64748b !important; opacity: 1; }
+              .login-shell input:-webkit-autofill, .login-shell input:-webkit-autofill:hover, .login-shell input:-webkit-autofill:focus, .login-shell input:-webkit-autofill:active { -webkit-text-fill-color: #ffffff !important; caret-color: #ffffff; border: 1px solid rgba(255,255,255,0.05) !important; -webkit-box-shadow: 0 0 0 1000px rgba(3,6,18,0.98) inset !important; box-shadow: 0 0 0 1000px rgba(3,6,18,0.98) inset !important; transition: background-color 999999s ease-in-out 0s; background-clip: content-box !important; }
+            `
+            : `
+              .login-shell input { color: #111827 !important; -webkit-text-fill-color: #111827 !important; caret-color: #111827; font-family: inherit; }
+              .login-shell input::placeholder { color: #9ca3af !important; -webkit-text-fill-color: #9ca3af !important; opacity: 1; }
+              .login-shell input:-webkit-autofill, .login-shell input:-webkit-autofill:hover, .login-shell input:-webkit-autofill:focus, .login-shell input:-webkit-autofill:active { -webkit-text-fill-color: #111827 !important; caret-color: #111827; border: 1px solid rgba(0,0,0,0.1) !important; -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important; box-shadow: 0 0 0 1000px #ffffff inset !important; transition: background-color 999999s ease-in-out 0s; background-clip: content-box !important; }
+            `,
         }}
       />
 
-      {/* Static background with nebula/glass effect - no animations */}
+      {/* Background */}
       <div className="pointer-events-none absolute inset-0">
-        {/* Main nebula gradient */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_78%,rgba(168,85,247,0.18),transparent_19%),radial-gradient(circle_at_82%_24%,rgba(59,130,246,0.22),transparent_23%),radial-gradient(circle_at_50%_14%,rgba(255,255,255,0.04),transparent_18%),radial-gradient(circle_at_34%_68%,rgba(242,101,34,0.08),transparent_16%),radial-gradient(ellipse_at_center,rgba(18,24,66,0.88)0%,rgba(14,17,42,0.9)26%,rgba(4,7,18,0.99)76%,#02030a100%)]" />
-        
-        {/* Additional glass/glow effects */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.05),transparent_16%),radial-gradient(circle_at_14%_84%,rgba(242,101,34,0.09),transparent_18%),radial-gradient(circle_at_88%_38%,rgba(59,130,246,0.14),transparent_24%)]" />
-        
-        {/* Soft glow orbs - static */}
-        <div className="absolute left-[-16%] top-[58%] h-[30rem] w-[30rem] rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.16)_0%,rgba(168,85,247,0.08)_34%,transparent_72%)]" />
-        <div className="absolute right-[-18%] top-[12%] h-[34rem] w-[34rem] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18)_0%,rgba(59,130,246,0.08)_36%,transparent_74%)]" />
-        <div className="absolute bottom-[-18%] left-[30%] h-[26rem] w-[26rem] rounded-full bg-[radial-gradient(circle,rgba(242,101,34,0.12)_0%,rgba(242,101,34,0.05)_32%,transparent_76%)]" />
+        {isDark ? (
+          <>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_78%,rgba(168,85,247,0.18),transparent_19%),radial-gradient(circle_at_82%_24%,rgba(59,130,246,0.22),transparent_23%),radial-gradient(circle_at_50%_14%,rgba(255,255,255,0.04),transparent_18%),radial-gradient(circle_at_34%_68%,rgba(242,101,34,0.08),transparent_16%),radial-gradient(ellipse_at_center,rgba(18,24,66,0.88)0%,rgba(14,17,42,0.9)26%,rgba(4,7,18,0.99)76%,#02030a100%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.05),transparent_16%),radial-gradient(circle_at_14%_84%,rgba(242,101,34,0.09),transparent_18%),radial-gradient(circle_at_88%_38%,rgba(59,130,246,0.14),transparent_24%)]" />
+            <div className="absolute left-[-16%] top-[58%] h-[30rem] w-[30rem] rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.16)_0%,rgba(168,85,247,0.08)_34%,transparent_72%)]" />
+            <div className="absolute right-[-18%] top-[12%] h-[34rem] w-[34rem] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18)_0%,rgba(59,130,246,0.08)_36%,transparent_74%)]" />
+            <div className="absolute bottom-[-18%] left-[30%] h-[26rem] w-[26rem] rounded-full bg-[radial-gradient(circle,rgba(242,101,34,0.12)_0%,rgba(242,101,34,0.05)_32%,transparent_76%)]" />
+          </>
+        ) : (
+          <>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_78%,rgba(168,85,247,0.06),transparent_22%),radial-gradient(circle_at_82%_24%,rgba(59,130,246,0.08),transparent_26%),radial-gradient(circle_at_34%_68%,rgba(242,101,34,0.05),transparent_18%)]" />
+            <div className="absolute left-[-16%] top-[58%] h-[30rem] w-[30rem] rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.07)_0%,transparent_72%)]" />
+            <div className="absolute right-[-18%] top-[12%] h-[34rem] w-[34rem] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.07)_0%,transparent_74%)]" />
+            <div className="absolute bottom-[-18%] left-[30%] h-[26rem] w-[26rem] rounded-full bg-[radial-gradient(circle,rgba(242,101,34,0.06)_0%,transparent_76%)]" />
+          </>
+        )}
       </div>
 
-      {/* Glass card container */}
+      {/* Theme toggle */}
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className={`absolute right-4 top-4 z-20 inline-flex h-10 w-10 items-center justify-center rounded-[10px] border transition-colors duration-200 focus:outline-none sm:right-6 sm:top-6 ${
+          isDark
+            ? 'border-white/10 bg-white/5 text-gray-300 hover:border-[#F26522]/40 hover:bg-[#F26522]/10 hover:text-[#F26522]'
+            : 'border-slate-200 bg-white text-slate-600 hover:border-[#F26522]/40 hover:bg-orange-50 hover:text-[#F26522]'
+        }`}
+        aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={isDark ? 'Light mode' : 'Dark mode'}
+      >
+        {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+      </button>
+
+      {/* Card */}
       <div className="relative z-10 mx-auto flex w-full max-w-[1180px] items-center justify-center">
-        <div className="relative my-auto w-full max-w-[540px] overflow-hidden rounded-[34px] border border-white/6 bg-[#0a1021] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.58)] backdrop-blur-sm sm:p-8">
-          {/* Inner glass overlay */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.015),rgba(255,255,255,0.004)_34%,rgba(5,10,26,0.015)_100%)]" />
-          <div aria-hidden className="pointer-events-none absolute inset-x-8 top-0 h-px bg-white/8" />
+        <div className={`relative my-auto w-full max-w-[540px] overflow-hidden rounded-[34px] border p-5 backdrop-blur-sm sm:p-8 ${
+          isDark
+            ? 'border-white/6 bg-[#0a1021] shadow-[0_24px_72px_rgba(0,0,0,0.58)]'
+            : 'border-gray-200 bg-white shadow-[0_8px_40px_rgba(0,0,0,0.10)]'
+        }`}>
+          {isDark && (
+            <>
+              <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.015),rgba(255,255,255,0.004)_34%,rgba(5,10,26,0.015)_100%)]" />
+              <div aria-hidden className="pointer-events-none absolute inset-x-8 top-0 h-px bg-white/8" />
+            </>
+          )}
 
           <div className="relative z-10">
             <div className="mb-6 flex flex-col items-center text-center sm:mb-8">
@@ -419,35 +456,39 @@ const Login = () => {
               </div>
 
               <h1 className="mt-1 text-[1.50rem] font-black tracking-[0.28em] sm:text-[3.5rem]">
-                <span className="text-[#ffffff]">DATA</span>
+                <span className={isDark ? 'text-white' : 'text-gray-900'}>DATA</span>
                 <span className="text-[#F26522] drop-shadow-[0_0_15px_rgba(242,101,34,0.28)]">PLUS</span>
               </h1>
 
               <div className="mt-4 flex items-center gap-3">
-                <div className="h-px w-8 bg-white/20"></div>
-                <h2 className="text-[11px] font-bold uppercase tracking-[0.25em] text-white/60 sm:text-xs">
+                <div className={`h-px w-8 ${isDark ? 'bg-white/20' : 'bg-gray-300'}`} />
+                <h2 className={`text-[11px] font-bold uppercase tracking-[0.25em] sm:text-xs ${isDark ? 'text-white/60' : 'text-gray-400'}`}>
                   Portal Access
                 </h2>
-                <div className="h-px w-8 bg-white/20"></div>
+                <div className={`h-px w-8 ${isDark ? 'bg-white/20' : 'bg-gray-300'}`} />
               </div>
             </div>
 
             <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit(onSubmit)}>
               <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-[15px] uppercase tracking-[0.2em] text-white/45">
+                <span className={`mb-2 flex items-center gap-2 text-[15px] uppercase tracking-[0.2em] ${isDark ? 'text-white/45' : 'text-gray-500'}`}>
                   <UserCircle2 className="h-4 w-4 text-[#F26522]" /> Username
                 </span>
                 <input
                   {...register('username', { required: 'Username is required.' })}
                   placeholder="Enter username"
                   autoComplete="username"
-                  className="w-full rounded-2xl border border-white/5 bg-[rgba(3,6,18,0.98)] px-4 py-3.5 text-md outline-none transition-all duration-200 focus:border-[#F26522]/45 focus:bg-[rgba(3,6,18,0.95)]"
+                  className={`w-full rounded-2xl border px-4 py-3.5 text-md outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
+                    isDark
+                      ? 'border-white/5 bg-[rgba(3,6,18,0.98)] focus:bg-[rgba(3,6,18,0.95)]'
+                      : 'border-gray-200 bg-gray-50 focus:bg-white'
+                  }`}
                 />
-                {errors?.username?.message ? <p className="mt-2 text-xs text-red-300">{errors.username.message}</p> : null}
+                {errors?.username?.message ? <p className="mt-2 text-xs text-red-400">{errors.username.message}</p> : null}
               </label>
 
               <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-[15px] uppercase tracking-[0.2em] text-white/45">
+                <span className={`mb-2 flex items-center gap-2 text-[15px] uppercase tracking-[0.2em] ${isDark ? 'text-white/45' : 'text-gray-500'}`}>
                   <LockKeyhole className="h-4 w-4 text-[#F26522]" /> Password
                 </span>
                 <div className="relative">
@@ -456,22 +497,26 @@ const Login = () => {
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Enter password"
                     autoComplete="current-password"
-                    className="w-full rounded-2xl border border-white/5 bg-[rgba(3,6,18,0.98)] px-4 py-3.5 pr-12 text-sm outline-none transition-all duration-200 focus:border-[#F26522]/45 focus:bg-[rgba(3,6,18,0.95)]"
+                    className={`w-full rounded-2xl border px-4 py-3.5 pr-12 text-sm outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
+                      isDark
+                        ? 'border-white/5 bg-[rgba(3,6,18,0.98)] focus:bg-[rgba(3,6,18,0.95)]'
+                        : 'border-gray-200 bg-gray-50 focus:bg-white'
+                    }`}
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword((value) => !value)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/35 transition hover:text-[#F26522]"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className={`absolute right-4 top-1/2 -translate-y-1/2 transition hover:text-[#F26522] ${isDark ? 'text-white/35' : 'text-gray-400'}`}
                     aria-label="Toggle password visibility"
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
-                {errors?.password?.message ? <p className="mt-2 text-xs text-red-300">{errors.password.message}</p> : null}
+                {errors?.password?.message ? <p className="mt-2 text-xs text-red-400">{errors.password.message}</p> : null}
               </label>
 
               {error ? (
-                <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-300 backdrop-blur-sm">
+                <div className={`rounded-2xl border px-4 py-3 text-sm backdrop-blur-sm ${isDark ? 'border-red-500/25 bg-red-500/10 text-red-300' : 'border-red-200 bg-red-50 text-red-600'}`}>
                   {error}
                 </div>
               ) : null}

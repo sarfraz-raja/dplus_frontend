@@ -436,16 +436,17 @@ const handleRangeBlur = (index) => {
         </button>
       </div>
 
-      <div className="grid grid-cols-[80px_80px_40px_30px] gap-2 mb-1 text-xs font-semibold text-gray-500">
+      <div className="grid grid-cols-[60px_60px_28px_20px] gap-1.5 mb-1 text-xs font-semibold text-gray-500">
         <span>Min (&gt;)</span>
         <span>Max (&le;)</span>
         <span>Color</span>
         <span></span>
       </div>
 
+      <div className="max-h-[180px] overflow-y-auto pr-1">
       {ranges.map((range, index) => (
 
-        <div key={index} className="flex items-center gap-2 mb-2">
+        <div key={index} className="grid grid-cols-[60px_60px_28px_20px] gap-1.5 items-center mb-1.5">
 
           <input
             type="number"
@@ -455,7 +456,7 @@ const handleRangeBlur = (index) => {
               updateRange(index, "min", e.target.value)
             }
             onBlur={() => handleRangeBlur(index)}
-            className="border rounded px-2 py-1 w-20 text-sm text-black"
+            className="border rounded px-1 py-0.5 w-[60px] text-xs text-black"
           />
 
           <input
@@ -466,7 +467,7 @@ const handleRangeBlur = (index) => {
               updateRange(index, "max", e.target.value)
             }
             onBlur={() => handleRangeBlur(index)}
-            className="border rounded px-2 py-1 w-20 text-sm text-black"
+            className="border rounded px-1 py-0.5 w-[60px] text-xs text-black"
           />
 
           <ColorPicker
@@ -488,6 +489,7 @@ const handleRangeBlur = (index) => {
         </div>
 
       ))}
+      </div>
 
     </div>
   );

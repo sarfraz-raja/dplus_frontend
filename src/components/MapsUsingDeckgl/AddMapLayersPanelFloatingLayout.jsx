@@ -12,7 +12,7 @@ const dy3LayerCb =
 
 /** Dark-theme overrides for legacy light panels inside the floating shell */
 const floatingInner =
-  "sidebar-scroll px-2 py-1.5 [&_input[type=checkbox]]:border-white/30 [&_input[type=range]]:accent-[#F26522] [&_select]:rounded [&_select]:border [&_select]:border-white/25 [&_select]:bg-[#0a1428] [&_select]:px-2 [&_select]:py-1 [&_select]:text-xs [&_select]:text-white [&_input[type=datetime-local]]:rounded [&_input[type=datetime-local]]:border [&_input[type=datetime-local]]:border-white/25 [&_input[type=datetime-local]]:bg-[#0a1428] [&_input[type=datetime-local]]:text-xs [&_input[type=datetime-local]]:text-white [&_.text-gray-500]:text-white/45 [&_.text-gray-600]:text-white/70 [&_.text-gray-400]:text-white/50 [&_.text-gray-300]:text-white/60 [&_label]:text-white/80 [&_.border-gray-300]:border-white/20 [&_.bg-white]:bg-white/[0.06] [&_.border.rounded.p-2]:border-white/15 [&_.border.rounded.p-3]:border-white/15 [&_.bg-blue-600]:bg-[#F26522] [&_.border-blue-600]:border-[#F26522] [&_.text-white]:text-white";
+  "sidebar-scroll flex-1 overflow-y-auto px-2 py-1.5 [&_input[type=checkbox]]:border-white/30 [&_input[type=range]]:accent-[#F26522] [&_select]:rounded [&_select]:border [&_select]:border-white/25 [&_select]:bg-[#0a1428] [&_select]:px-2 [&_select]:py-1 [&_select]:text-xs [&_select]:text-white [&_input[type=datetime-local]]:rounded [&_input[type=datetime-local]]:border [&_input[type=datetime-local]]:border-white/25 [&_input[type=datetime-local]]:bg-[#0a1428] [&_input[type=datetime-local]]:text-xs [&_input[type=datetime-local]]:text-white [&_.text-gray-500]:text-white/45 [&_.text-gray-600]:text-white/70 [&_.text-gray-400]:text-white/50 [&_.text-gray-300]:text-white/60 [&_label]:text-white/80 [&_.border-gray-300]:border-white/20 [&_.bg-white]:bg-white/[0.06] [&_.border.rounded.p-2]:border-white/15 [&_.border.rounded.p-3]:border-white/15 [&_.bg-blue-600]:bg-[#F26522] [&_.border-blue-600]:border-[#F26522] [&_.text-white]:text-white";
 
 const SECTION_TITLE = {
   SITE: "Sites",
@@ -140,7 +140,7 @@ const AddMapLayersPanelFloatingLayout = ({
                       activeLayerSection === "SITE" ? "text-[#F26522]" : "text-white"
                     }`}
                   >
-                    Sites (Towers)
+                    Sites 
                   </span>
                 </button>
               </div>
@@ -404,7 +404,7 @@ const AddMapLayersPanelFloatingLayout = ({
         {/* ── RIGHT DETAIL PANEL ── */}
         {activeLayerSection ? (
           <div className="w-[min(56vw,220px)] shrink-0">
-            <div className="flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[#27365C] bg-[linear-gradient(180deg,#0C1931_0%,#0B1730_100%)] shadow-[0_16px_32px_rgba(3,8,24,0.4)]">
+            <div className="flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[#27365C] bg-[linear-gradient(180deg,#0C1931_0%,#0B1730_100%)] shadow-[0_16px_32px_rgba(3,8,24,0.4)] max-h-[80vh]">
               {/* Panel header — title + close only */}
               <div className="flex h-7 shrink-0 items-center justify-between gap-2 border-b border-[#27365C]/90 px-2">
                 <div className="min-w-0 truncate text-[9px] font-bold uppercase leading-[1.1] tracking-[0.14em] text-[#F26522]">
@@ -469,7 +469,7 @@ const AddMapLayersPanelFloatingLayout = ({
                         />
                         <span className="flex-1 text-sm font-medium">{group.shapegroup}</span>
                         <ColorPicker
-                          value={boundaryColors[group.shapegroup] || "#3b82f6"}
+                          value={boundaryColors[group.shapegroup] || "#000000"}
                           onChange={(color) => {
                             setBoundaryColors((prev) => ({ ...prev, [group.shapegroup]: color }));
                             markDirty();

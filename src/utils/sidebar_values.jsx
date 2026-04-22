@@ -68,6 +68,7 @@ const TelecomMapsPage = lazy(() => import('../pages/TelecomMapsPage'));
 const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsPage'));
 const TicketsPage = lazy(() => import('../pages/Tickets/index'));
 const GeoDrillDownPage = lazy(() => import('../pages/GeoDrillDown/GeoDrillDownPage'));
+const NetworkComplaintsDashboard = lazy(() => import('../pages/NetworkComplaintsDashboard'));
 
 export const Sidebar_content = {
     temp: [],
@@ -185,6 +186,12 @@ export const Sidebar_content = {
             link: "/tickets",
             subMenu: [],
             component: <TicketsPage />,
+        },
+        {
+            name: "Network Complaints Dashboard",
+            link: "/network-complaints-dashboard",
+            subMenu: [],
+            component: <NetworkComplaintsDashboard />,
         },
         {
             name: "Multi-Map View",

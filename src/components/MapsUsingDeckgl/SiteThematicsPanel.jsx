@@ -13,6 +13,7 @@ import {
   deepCopyRanges,
 } from "./Utils/colorEngine";
 import RangeFilter from "./RangeFilter";
+import OpacitySlider from "./OpacitySlider";
 
 const THEMATIC_TYPES = [
     "Alarms",
@@ -23,8 +24,10 @@ const THEMATIC_TYPES = [
 ];
 
 const kpiThematicOptions = [
-    "RSSI",
-    "RSRP",
+    // "RSSI",
+    // "RSRP",
+    "CSSR",
+    "CDR",
     "DL Thrp",
     "Frequency",
 ];
@@ -497,80 +500,48 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
   return (
     <div className="relative">
 
-        {/* KPI Themactics  */}
+        <div className="space-y-4 mt-3">
 
-        
             {/* Legend Visibility */}
-            <div className="flex items-center justify-between mb-3 border-b pb-3 mt-3">
+            <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-gray-500">
                     Show Legend
                 </span>
-
                 <input
                     type="checkbox"
                     checked={tempLegend}
                     onChange={(e) => setTempLegend(e.target.checked)}
+                    className="w-4 h-4 cursor-pointer"
                 />
             </div>
-            
+
             {/* OPACITY */}
-            <div className="mb-3 border-b pb-3">
-
-                <div className="flex justify-between items-center mb-1">
-
-                    <span className="text-xs font-semibold text-gray-500">
-                    Opacity
-                    </span>
-
-                    <span className="text-xs text-gray-600">
-                    {Math.round(opacity * 100)}%
-                    </span>
-
-                </div>
-
-                <input
-                    type="range"
-                    min="0.1"
-                    max="1"
-                    step="0.05"
-                    value={opacity}
-                    onChange={(e) => setOpacity(Number(e.target.value))}
-                    className="w-full"
-                />
-
+            <div>
+                <OpacitySlider value={opacity} onChange={setOpacity} />
             </div>
 
             {/* Site Scale */}
-            <div className="mb-3 border-b pb-3 mt-3">
-
-            <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-semibold text-gray-500">
-                Site Scale
-                </span>
-
-                <span className="text-xs text-gray-600">
-                {siteScale}x
-                </span>
+            <div>
+                <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-semibold text-gray-500">
+                    Site Scale
+                    </span>
+                    <span className="text-xs text-gray-600">
+                    {siteScale}x
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    value={siteScale}
+                    onChange={(e) => setSiteScale(parseFloat(e.target.value))}
+                    className="w-full"
+                />
             </div>
 
-            <input
-                type="range"
-                min={0.1}
-                max={10}
-                step={0.1}
-                value={siteScale}
-                // onChange={(e) =>
-                //     dispatch(
-                //         MapActions.setMapConfig({
-                //         mapScale: parseFloat(e.target.value)
-                //         })
-                //     )
-                // }
-                onChange={(e) => setSiteScale(parseFloat(e.target.value))}
-                className="w-full"
-            />
-
-            </div>
+        </div>
 
             {/* <div className="text-xs font-semibold text-gray-500 mb-1">
                Apply Thematic by
@@ -619,7 +590,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
                     </div>
                 ))}
             </div> */}
-            <div className="space-y-1 mb-4">  
+            <div className="border-t border-[#27365C] mt-4 pt-4">
             {/* reduce from space-y-2 to space-y-1 */}
             {/* {THEMATIC_TYPES.map(thematic => (
                 <div
@@ -653,7 +624,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
                 </div>
             ))} */}
 
-            <div className="mb-3">
+            <div>
                 <span className="text-xs font-semibold text-gray-500 block mb-1">
                     Apply Thematic by
                 </span>
@@ -701,7 +672,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
 
             {/* KPI */}
             {tempType === "KPIs" && (
-                <div className="border-t pt-3 space-y-4">
+                <div className="pt-3 space-y-4">
 
                     {/* Date/Time */}
                     <div className="grid grid-cols-2 gap-3">
@@ -878,7 +849,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
 
             {/* TECHNOLOGY Thematics*/}
             {/* {tempType  === "Technology" && (
-            <div className="border-t pt-3">
+            <div className="pt-3">
                 {Object.keys(techGrouped).map(tech => (
                 <div
                     key={tech}
@@ -899,7 +870,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
             {tempType === "Technology" && (
                 <div>
                     {/* DEFAULT COLOR PALETTES */}
-                    <div className="border-t pt-2 mb-3">
+                    <div className="pt-2 mb-3">
                         <div className="text-xs font-semibold text-gray-500 mb-2">Default Color Palettes</div>
                         {Object.keys(TECHNOLOGY_SCHEMES).map((scheme) => (
                             <label key={scheme} className="flex items-center justify-between mb-2 cursor-pointer">
@@ -987,7 +958,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
             {tempType === "Band" && (
                 <div>
                     {/* DEFAULT COLOR PALETTES */}
-                    <div className="border-t pt-2 mb-3">
+                    <div className="pt-2 mb-3">
                         <div className="text-xs font-semibold text-gray-500 mb-2">Default Color Palettes</div>
                         {Object.keys(COLOR_SCHEMES).map((palette) => (
                             <label key={palette} className="flex items-center justify-between mb-2 cursor-pointer">
@@ -1077,7 +1048,7 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
             {tempType === "Region" && (
                 <div>
                     {/* DEFAULT COLOR PALETTES */}
-                    <div className="border-t pt-2 mb-3">
+                    <div className="pt-2 mb-3">
                         <div className="text-xs font-semibold text-gray-500 mb-2">Default Color Palettes</div>
                         {Object.keys(COLOR_SCHEMES).map((palette) => (
                             <label key={palette} className="flex items-center justify-between mb-2 cursor-pointer">

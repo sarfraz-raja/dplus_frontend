@@ -90,6 +90,7 @@ const TOP_LEVEL_ICON_MAP = {
   'Reporting Suite': ChartColumn,
   NiFi: Terminal,
   'Network Complaints': MessageSquare,
+  'Network Complaints Dashboard': TriangleAlert,
   'Fault Management': BellRing,
   'Capacity Management': Gauge,
   'Revenue Assurance': ShieldCheck,

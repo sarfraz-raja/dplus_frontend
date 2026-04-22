@@ -129,22 +129,21 @@ export const KPI_RANGE_DEFAULTS = {
         { min: -105, max: -90,  color: "#f97316", label: "Weak" },
         { min: -140, max: -105, color: "#ef4444", label: "Very Weak" }
     ],
-    CSSR: [
-    { min: 98, max: 100, color: "#22c55e", label: "Strong" },
-    { min: 95, max: 98,  color: "#eab308", label: "Good" },
-    { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
-],
-
-CDR: [
-    { min: 98, max: 100, color: "#22c55e", label: "Strong" },
-    { min: 95, max: 98,  color: "#eab308", label: "Good" },
-    { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
-],
     RSRP: [
         { min: -80,  max: 0,    color: "#22c55e", label: "Strong" },
         { min: -95,  max: -80,  color: "#eab308", label: "Good" },
         { min: -110, max: -95,  color: "#f97316", label: "Weak" },
         { min: -140, max: -110, color: "#ef4444", label: "Very Weak" }
+    ],
+    CSSR: [
+      { min: 98, max: 100, color: "#22c55e", label: "Strong" },
+      { min: 95, max: 98,  color: "#eab308", label: "Good" },
+      { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
+    ],
+    CDR: [
+        { min: 0, max: 1, color: "#22c55e", label: "Strong" },
+        { min: 1, max: 2,  color: "#eab308", label: "Good" },
+        { min: 2,  max: 100,  color: "#ef4444", label: "Weak" }
     ],
     "DL Thrp": [
         { min: 50,  max: 1000, color: "#22c55e", label: "Excellent" },
