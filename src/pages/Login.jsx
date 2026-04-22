@@ -445,18 +445,25 @@ const Login = () => {
                   decoding="async"
                   className="h-11 w-auto drop-shadow-[0_0_12px_rgba(242,101,34,0.3)] sm:h-14"
                 />
-                <img
-                  src="/dy-white-orange.png"
-                  alt="DataPlus"
-                  width="80"
-                  height="20"
-                  decoding="async"
-                  className="-ml-1 h-[15px] w-auto sm:-ml-1.5 sm:h-5"
-                />
+                {isDark ? (
+                  <img
+                    src="/dy-white-orange.png"
+                    alt="DataPlus"
+                    width="80"
+                    height="20"
+                    decoding="async"
+                    className="-ml-1 h-[15px] w-auto sm:-ml-1.5 sm:h-5"
+                  />
+                ) : (
+                  <span className="-ml-1 flex items-baseline text-[15px] font-black tracking-[0.18em] sm:text-[18px]">
+                    <span className="text-[#0A1240]">DATA</span>
+                    <span className="text-[#F26522]">YOG</span>
+                  </span>
+                )}
               </div>
 
               <h1 className="mt-1 text-[1.50rem] font-black tracking-[0.28em] sm:text-[3.5rem]">
-                <span className={isDark ? 'text-white' : 'text-gray-900'}>DATA</span>
+                <span className={isDark ? 'text-white' : 'text-[#0A1240]'}>DATA</span>
                 <span className="text-[#F26522] drop-shadow-[0_0_15px_rgba(242,101,34,0.28)]">PLUS</span>
               </h1>
 
