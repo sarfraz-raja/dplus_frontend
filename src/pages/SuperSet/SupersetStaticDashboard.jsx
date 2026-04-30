@@ -11,7 +11,7 @@
 
 //     embedDashboard({
 //       id: dashboardUuid,
-//       supersetDomain: "http://192.168.0.100:8088",
+//       supersetDomain: VITE_SUPERSET_UI_ORIGIN,
 //       mountPoint,
 
 //       fetchGuestToken: async () => {

@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Edit3, Eye, EyeOff, KeyRound, Mail, Phone, Save, ShieldCheck, User, UserCircle2 } from 'lucide-react';
+import { Edit3, Eye, EyeOff, KeyRound, Mail, Phone, Save, ShieldCheck, Trash2, User, UserCircle2 } from 'lucide-react';
 import { SET_USER } from '../store/reducers/auth-reducer';
 import AuthActions from '../store/actions/auth-actions';
 import { isReadOnlyFrontendMode } from '../utils/url';
+import { baseassetUrl } from '../utils/url';
 
 const EMPTY_PROFILE = {
   fullName: '',
@@ -36,26 +37,48 @@ const Profile = () => {
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const applyUserToForm = (user) => {
     if (!user || typeof user !== 'object') return;
+    
+    // Map backend field names to form
+    const fullName = user?.fullName || user?.name || `${user?.firstName || user?.firstname || ''} ${user?.lastName || user?.lastname || ''}`.trim() || 'User';
+    const displayFullName = (fullName && fullName !== 'undefined') ? fullName : 'User';
+    
     setProfile({
-      fullName: user?.fullName || user?.name || '',
-      username: user?.username || '',
+      fullName: displayFullName,
+      firstName: user?.firstName || user?.firstname || '',
+      lastName: user?.lastName || user?.lastname || '',
+      username: user?.username || 'user',
       email: user?.email || '',
       phone: user?.phone || '',
-      title: user?.title || user?.rolename || 'Admin',
-      avatar: user?.avatar || '',
+      title: user?.title || user?.role || user?.rolename || 'Admin',
+      avatar: (user?.avatar && user?.avatar !== 'undefined' && user?.avatar !== 'null') ? user?.avatar : '',
     });
   };
 
+  // Fetch profile from backend on mount
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setRefreshing(true);
-      await dispatch(AuthActions.fetchMe());
-      if (cancelled) return;
-      applyUserToForm(readUser());
+      try {
+        // Try to fetch profile from backend API
+        const result = await dispatch(AuthActions.fetchProfile());
+        if (cancelled) return;
+        
+        if (result?.ok) {
+          // Data was fetched and set in Redux/localStorage
+          applyUserToForm(result.profile);
+        } else {
+          // Fallback: Try to read from localStorage
+          applyUserToForm(readUser());
+        }
+      } catch (error) {
+        console.warn("[Profile] Error fetching profile:", error);
+        applyUserToForm(readUser());
+      }
       setRefreshing(false);
     })();
     return () => {
@@ -77,14 +100,68 @@ const Profile = () => {
     setProfile((current) => ({ ...current, [field]: value }));
   };
 
-  const handleAvatarUpload = (event) => {
+  // Handle avatar upload directly to backend
+  const handleAvatarUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProfile((current) => ({ ...current, avatar: String(reader.result || '') }));
-    };
-    reader.readAsDataURL(file);
+
+    if (isReadOnlyFrontendMode) {
+      setStatus('Read-only mode — avatar upload is disabled.');
+      window.setTimeout(() => setStatus(''), 2800);
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setStatus('Uploading avatar...');
+
+    // Upload to backend (don't show preview - wait for URL from backend)
+    const { ok, avatar } = await dispatch(AuthActions.uploadAvatar(file));
+    
+    if (ok && avatar) {
+      setStatus('Avatar uploaded successfully!');
+      // Update profile with actual URL from backend // 1. Update local component state
+      setProfile((current) => ({ ...current, avatar }));
+
+      // 2. Update LocalStorage so TopBar sees it immediately and after re-login
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const updatedUser = { ...currentUser, avatar: avatar };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+
+      // 3. Optional: Trigger event for TopBar
+      window.dispatchEvent(new Event('dy3-profile-updated'));
+    } else {
+      setStatus('Failed to upload avatar. Please try again.');
+    }
+        
+    setUploadingAvatar(false);
+    window.setTimeout(() => setStatus(''), 3500);
+  };
+
+
+  // Handle avatar removal
+  const handleRemoveAvatar = async () => {
+    if (isReadOnlyFrontendMode) {
+      setStatus('Read-only mode — avatar removal is disabled.');
+      window.setTimeout(() => setStatus(''), 2800);
+      return;
+    }
+
+    setSaving(true);
+    setStatus('Removing avatar...');
+    
+    // Update backend with empty avatar
+    const updated = { ...profile, avatar: '' };
+    const { ok, serverSynced } = await dispatch(AuthActions.updateProfile(updated));
+
+    if (ok && serverSynced) {
+      setProfile((current) => ({ ...current, avatar: '' }));
+      setStatus('Avatar removed successfully!');
+    } else {
+      setStatus('Failed to remove avatar. Please try again.');
+    }
+
+    setSaving(false);
+    window.setTimeout(() => setStatus(''), 3500);
   };
 
   const handleSave = async () => {
@@ -101,34 +178,39 @@ const Profile = () => {
     }
 
     setSaving(true);
+    setStatus('Saving changes...');
+    
     const existing = readUser();
+    
+    // Parse full name into first and last name
+    const fullNameTrimmed = profile.fullName.trim() || 'User';
+    const nameParts = fullNameTrimmed.split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+    
     const next = {
       ...existing,
-      name: profile.fullName.trim() || existing?.name || 'DataPlus User',
-      fullName: profile.fullName.trim() || existing?.fullName || 'DataPlus User',
+      firstName: firstName,
+      lastName: lastName,
+      lastname: lastName,
+      fullName: fullNameTrimmed,
+      name: fullNameTrimmed,
       username: profile.username.trim() || existing?.username || 'admin',
       email: profile.email.trim(),
       phone: profile.phone.trim(),
-      title: profile.title || existing?.title || existing?.rolename || 'Admin',
+      title: profile.title || existing?.title || existing?.role || existing?.rolename || 'Admin',
       avatar: profile.avatar || existing?.avatar || '',
+      ...(currentPassword && newPassword ? { currentPassword, newPassword } : {}),
     };
 
-    localStorage.setItem('user', JSON.stringify(next));
-    dispatch(SET_USER(next));
-    window.dispatchEvent(new Event('dy3-profile-updated'));
+    const { ok, serverSynced, status: errStatus, message: errMessage } = await dispatch(AuthActions.updateProfile(next));
 
-    const { serverSynced } = await dispatch(AuthActions.saveProfile(next));
-
-    if (currentPassword || newPassword) {
-      setStatus(
-        serverSynced
-          ? 'Profile saved. Password change still needs a server endpoint — not sent yet.'
-          : 'Saved on this device. Password change needs backend support — not sent yet.'
-      );
-    } else if (serverSynced) {
-      setStatus('Profile saved and synced with the server.');
+    if (ok && serverSynced) {
+      setStatus(currentPassword ? 'Profile and password updated successfully.' : 'Profile saved successfully.');
+    } else if (errStatus === 401) {
+      setStatus('Current password is incorrect.');
     } else {
-      setStatus('Saved on this device. Server did not accept PATCH /me (or API offline).');
+      setStatus(errMessage || 'Failed to save profile. Please try again.');
     }
 
     setCurrentPassword('');
@@ -137,7 +219,7 @@ const Profile = () => {
     window.setTimeout(() => setStatus(''), 4200);
   };
 
-  const saveDisabled = saving || refreshing || isReadOnlyFrontendMode;
+  const saveDisabled = saving || refreshing || uploadingAvatar || isReadOnlyFrontendMode;
 
   const sectionClass =
     'relative w-full overflow-hidden rounded-[24px] border border-slate-200 bg-white p-4 shadow-lg sm:rounded-[28px] sm:p-6 lg:p-8 dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(9,0,26,0.94)_0%,rgba(10,18,64,0.94)_50%,rgba(7,18,36,0.96)_100%)] dark:shadow-[0_24px_80px_rgba(3,8,24,0.45)]';
@@ -158,15 +240,20 @@ const Profile = () => {
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#F26522]">Profile</p>
               <div className="mt-3 flex min-w-0 flex-row items-start gap-3 sm:items-center sm:gap-4">
-                <div className="relative h-16 w-16 shrink-0 overflow-visible rounded-[16px] border border-[#F26522]/30 bg-slate-100 shadow-md sm:h-20 sm:w-20 sm:rounded-[18px] lg:h-28 lg:w-28 lg:rounded-[22px] dark:bg-[#080F22] dark:shadow-[0_20px_45px_rgba(0,0,0,0.35)]">
-                  <img
-                    src={profile?.avatar || '/icon1.png'}
-                    alt={profile?.fullName || 'DataPlus User'}
-                    className="h-full w-full rounded-[16px] object-cover sm:rounded-[18px] lg:rounded-[22px]"
-                    onError={(e) => {
-                      e.currentTarget.src = '/icon1.png';
-                    }}
-                  />
+                <div className="relative h-16 w-16 shrink-0 overflow-visible rounded-[16px] border border-[#F26522]/30 bg-gradient-to-br from-slate-100 to-slate-50 shadow-md sm:h-20 sm:w-20 sm:rounded-[18px] lg:h-28 lg:w-28 lg:rounded-[22px] dark:from-[#080F22] dark:to-[#0a1220] dark:shadow-[0_20px_45px_rgba(0,0,0,0.35)]">
+                  {profile?.avatar ? (
+                    <img
+                      src={profile.avatar.startsWith('/uploads') ? `${baseassetUrl}${profile.avatar}` : profile.avatar}
+                      alt={profile?.fullName || 'DataPlus User'}
+                      className="h-full w-full rounded-[16px] object-cover sm:rounded-[18px] lg:rounded-[22px]"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center rounded-[16px] sm:rounded-[18px] lg:rounded-[22px]">
+                      <UserCircle2 className="h-8 w-8 text-[#F26522]/70 sm:h-10 sm:w-10 lg:h-14 lg:w-14" />
+                    </div>
+                  )}
+
+                  {/* Edit Button */}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -176,6 +263,18 @@ const Profile = () => {
                   >
                     <Edit3 className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
                   </button>
+
+                  {/* Remove Button */}
+                  {profile?.avatar && !isReadOnlyFrontendMode && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAvatar}
+                      className="absolute -top-2 -right-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-red-100 text-red-600 shadow-sm transition-all hover:bg-red-200 hover:text-red-700 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
+                      title="Remove profile image"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -198,7 +297,7 @@ const Profile = () => {
                 className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-[#F26522]/35 bg-[#F26522]/15 px-4 py-2.5 text-sm font-semibold text-[#F26522] transition-all hover:bg-[#F26522]/20 disabled:pointer-events-none disabled:opacity-45 sm:min-h-0 sm:w-auto sm:min-w-[160px] lg:min-w-[180px]"
               >
                 <Save className="h-4 w-4 shrink-0" />
-                {refreshing ? 'Loading…' : saving ? 'Saving...' : 'Save Changes'}
+                {refreshing ? 'Loading…' : uploadingAvatar ? 'Uploading...' : saving ? 'Saving...' : 'Save Changes'}
               </button>
               {status ? (
                 <p className="text-center text-xs leading-snug text-slate-500 sm:text-sm lg:max-w-xs lg:text-right dark:text-white/55">{status}</p>
@@ -215,7 +314,7 @@ const Profile = () => {
           </div>
 
           <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
-            <label className="block min-w-0">
+           <label className="block min-w-0">
               <span className={labelClass}><UserCircle2 className="h-4 w-4 text-[#F26522]" />Full Name</span>
               <input type="text" value={profile?.fullName || ''} onChange={(e) => handleChange('fullName', e.target.value)} className={inputClass} placeholder="Enter full name" />
             </label>

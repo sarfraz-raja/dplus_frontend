@@ -10,6 +10,7 @@ import nokiaPrePost from "./reducers/nokiaPrePost-reducer"
 import websocket from "./reducers/websocket-reducer"
 import map from "./reducers/map-reducer"
 import cxix from "./reducers/cxix-reducer"
+import insightsEngine from "./reducers/insightsEngine-reducer"
 
 const store = configureStore({
     reducer: {
@@ -24,6 +25,7 @@ const store = configureStore({
         websocket,
         map,
         cxix,
+        insightsEngine,
     },
     devTools: true
 })

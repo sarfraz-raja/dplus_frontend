@@ -9,7 +9,7 @@ import { baseUrl } from "../../utils/url";
 /* ═══════════════════════════════════════════════════════════════
    CONFIG
 ════════════════════════════════════════════════════════════════ */
-const GEO_BASE = baseUrl; // http://192.168.0.102:8060
+const GEO_BASE = baseUrl; // from VITE_API_BASE_URL
 
 /** All geo API calls need Bearer token from localStorage */
 function geoFetch(url) {

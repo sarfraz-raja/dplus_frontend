@@ -250,6 +250,17 @@ const Api = {
             },
         }));
     },
+    /** Upload FormData (multipart/form-data) — for file uploads like avatars */
+    upload: ({ data, url, inst = 1 }) => {
+        return guardedRequest("post", { url }, () => which[inst]({
+            method: "POST",
+            data,
+            url,
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        }));
+    },
 };
 
 export default Api;

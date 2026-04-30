@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { supersetUiOrigin } from "../../utils/url";
 
-const SUPERSET_BASE = "http://192.168.0.100:8088";
+const SUPERSET_BASE = supersetUiOrigin;
 
 const UrlDashboard = ({
   dashboardId,

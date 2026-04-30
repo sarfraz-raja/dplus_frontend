@@ -55,15 +55,8 @@ const DBUpdate = lazy(() => import('../pages/CX_IXSupport/DBUpdate'));
 const ScriptingPatternList = lazy(() => import('../pages/CX_IXSupport/ScriptingPatternList'));
 const AuditPatternList = lazy(() => import('../pages/CX_IXSupport/AuditPatternList'));
 const AuditPattern = lazy(() => import('../pages/CX_IXSupport/AuditPattern'));
-const NetworkDashboard = lazy(() => import('../pages/InsightsEngine/NetworkDashboard'));
-const ParameterAuditDashboard = lazy(() => import('../pages/InsightsEngine/ParameterAuditDashboard'));
-const MssDashboard = lazy(() => import('../pages/InsightsEngine/CoreDashboards/MssDashboard'));
-const UgwDashboard = lazy(() => import('../pages/InsightsEngine/CoreDashboards/UgwDashboard'));
-const MgwDashboard = lazy(() => import('../pages/InsightsEngine/CoreDashboards/MgwDashboard'));
-const WorstCellsDashboard = lazy(() => import('../pages/InsightsEngine/RanDashboards/WorstCellsDashboard'));
-const Huawei4GDashboard = lazy(() => import('../pages/InsightsEngine/RanDashboards/Huawei4GDashboard'));
-const Huawei5GDashboard = lazy(() => import('../pages/InsightsEngine/RanDashboards/Huawei5GDashboard'));
-const NSAtoSA5GPrePostDashboard = lazy(() => import('../pages/InsightsEngine/RanDashboards/NSAtoSA5GPrePostDashboard'));
+const InsightsEngineDashboardManager = lazy(() => import('../pages/InsightsEngineDashboardManager'));
+const InsightsDashboard = lazy(() => import('../pages/InsightsEngine/InsightsDashboard'));
 const TelecomMapsPage = lazy(() => import('../pages/TelecomMapsPage'));
 const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsPage'));
 const TicketsPage = lazy(() => import('../pages/Tickets/index'));
@@ -211,19 +204,19 @@ export const Sidebar_content = {
                             name: "MSS Dashboard",
                             link: "/insights-engine/core-dashboard/mss",
                             subMenu: [],
-                            component: <MssDashboard />,
+                            component: <InsightsDashboard />,
                         },
                         {
                             name: "UGW Dashboard",
                             link: "/insights-engine/core-dashboard/ugw",
                             subMenu: [],
-                            component: <UgwDashboard />,
+                            component: <InsightsDashboard />,
                         },
                         {
                             name: "MGW Dashboard",
                             link: "/insights-engine/core-dashboard/mgw",
                             subMenu: [],
-                            component: <MgwDashboard />,
+                            component: <InsightsDashboard />,
                         },
                     ],
                 },
@@ -235,25 +228,25 @@ export const Sidebar_content = {
                             name: "Worst Cells Dashboard",
                             link: "/insights-engine/ran-dashboard/worstcells",
                             subMenu: [],
-                            component: <WorstCellsDashboard />,
+                            component: <InsightsDashboard />,
                         },
                         {
                             name: "4G Dashboard",
                             link: "/insights-engine/ran-dashboard/huawei4g",
                             subMenu: [],
-                            component: <Huawei4GDashboard />,
+                            component: <InsightsDashboard />,
                         },
                         {
                             name: "5G NSA to SA Pre-Post Dashboard",
                             link: "/insights-engine/ran-dashboard/5GNSAtoSAPrePostDashboard",
                             subMenu: [],
-                            component: <NSAtoSA5GPrePostDashboard />,
+                            component: <InsightsDashboard />,
                         },
                         {
                             name: "5G Dashboard",
                             link: "/insights-engine/ran-dashboard/huawei5g",
                             subMenu: [],
-                            component: <Huawei5GDashboard />,
+                            component: <InsightsDashboard />,
                         },
                     ],
                 },
@@ -261,13 +254,13 @@ export const Sidebar_content = {
                     name: "Network Dashboard",
                     link: "/insights-engine/network-dashboard",
                     subMenu: [],
-                    component: <NetworkDashboard />,
+                    component: <InsightsDashboard />,
                 },
                 {
                     name: "Parameter Audit Dashboard",
                     link: "/insights-engine/parameter-audit-dashboard",
                     subMenu: [],
-                    component: <ParameterAuditDashboard />,
+                    component: <InsightsDashboard />,
                 },
             ],
         },
@@ -384,6 +377,11 @@ export const Sidebar_content = {
                 link: "/admin/role-management",
                 subMenu: [],
                 component: <RoleManagement />,
+            }, {
+                name: "Insights Dashboard Manager",
+                link: "/admin/insights-dashboard-manager",
+                subMenu: [],
+                component: <InsightsEngineDashboardManager />,
             }],
         },
     ]

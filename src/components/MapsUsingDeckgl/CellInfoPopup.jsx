@@ -200,7 +200,7 @@ const CellInfoPopup = ({
             )}
 
             {onCellProRules && (
-              <CustomTooltip text="Cell Pro Rules">
+              <CustomTooltip text="AI Cell Pro Rules">
                 <div
                   className="cursor-pointer p-1"
                   onMouseDown={(e) => e.stopPropagation()}

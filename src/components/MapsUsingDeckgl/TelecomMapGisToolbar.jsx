@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   Building2,
   MapPinned,
+  Crosshair,
   Filter,
   Layers3,
   Search,
@@ -17,6 +18,19 @@ import { GIS_TOOLBAR_OUTER_CLASS, GIS_TOOLBAR_STRIP_ROW_CLASS } from "./Utils/te
 
 /** Suggestions list only after this many typed characters (no default full list). */
 const MIN_SEARCH_CHARS = 5;
+
+const SEARCH_MODES = ["site", "cell", "coords"];
+
+/** Parse "lat, long" or "lat long" — returns { lat, lng } or null */
+const parseCoords = (str) => {
+  const parts = str.trim().split(/[\s,]+/);
+  if (parts.length !== 2) return null;
+  const lat = parseFloat(parts[0]);
+  const lng = parseFloat(parts[1]);
+  if (isNaN(lat) || isNaN(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+};
 
 /**
  * Top GIS strip (Datayog-style layout).
@@ -36,12 +50,14 @@ const TelecomMapGisToolbar = () => {
   const [selectedSite, setSelectedSite] = useState(null);
   const [selectedCell, setSelectedCell] = useState(null);
 
+  const parsedCoords = searchMode === "coords" ? parseCoords(siteSearch) : null;
+
   const hasAppliedFilters = Boolean(
     saveMapFilters && saveMapFilters !== "{}" && saveMapFilters !== "null",
   );
   const filterActive = filterOpen || hasAppliedFilters;
   const layerActive = layerOpen;
-  const hasValue = Boolean(siteSearch.trim() || selectedSite || selectedCell);
+  const hasValue = Boolean(siteSearch.trim() || selectedSite || selectedCell || parsedCoords);
   /** Chevron panel toggle + reset (X) only after user typed or picked a result */
   const showSearchExtras = hasValue;
   const searchButtonActive = hasValue;
@@ -92,11 +108,12 @@ const TelecomMapGisToolbar = () => {
   }, [rawCells, selectedSite, siteSearch]);
 
   const showResults =
-    queryOk && (searchMode === "site" ? filteredSites.length > 0 : filteredCells.length > 0);
+    searchMode !== "coords" &&
+    queryOk &&
+    (searchMode === "site" ? filteredSites.length > 0 : filteredCells.length > 0);
 
   const hasSelection = Boolean(selectedSite || selectedCell);
-  /** Panel only when there is a result list or an applied site/cell — never for no-match / empty-only */
-  const showSearchDropdown = showResults || hasSelection;
+  const showSearchDropdown = showResults || hasSelection || (searchMode === "coords" && Boolean(parsedCoords));
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -110,10 +127,11 @@ const TelecomMapGisToolbar = () => {
   }, []);
 
   useEffect(() => {
-    const qOk = siteSearch.trim().length >= MIN_SEARCH_CHARS;
     const hasList =
-      qOk &&
-      (searchMode === "site" ? filteredSites.length > 0 : filteredCells.length > 0);
+      (searchMode === "coords" && Boolean(parsedCoords)) ||
+      (searchMode !== "coords" &&
+        siteSearch.trim().length >= MIN_SEARCH_CHARS &&
+        (searchMode === "site" ? filteredSites.length > 0 : filteredCells.length > 0));
     const hasSel = Boolean(selectedSite || selectedCell);
     if (searchOpen && !hasList && !hasSel) {
       setSearchOpen(false);
@@ -122,19 +140,52 @@ const TelecomMapGisToolbar = () => {
     searchOpen,
     siteSearch,
     searchMode,
+    parsedCoords,
     filteredSites.length,
     filteredCells.length,
     selectedSite,
     selectedCell,
   ]);
 
-  const SearchModeIcon = searchMode === "site" ? Building2 : MapPinned;
+  const SearchModeIcon =
+    searchMode === "site" ? Building2 : searchMode === "cell" ? MapPinned : Crosshair;
 
   const inputPlaceholder =
-    selectedSite || selectedCell ? "Filter further…" : `Search ${searchMode}…`;
+    searchMode === "coords"
+      ? "lat, long  (e.g. 24.86, 67.01)"
+      : selectedSite || selectedCell
+        ? "Filter further…"
+        : `Search ${searchMode}…`;
 
-  /** Mirrors upstream RightFilters Apply & Zoom */
   const applySearchZoom = () => {
+    if (searchMode === "coords" && parsedCoords) {
+      const validCells = rawCells.filter(
+        (c) => Number.isFinite(Number(c.latitude)) && Number.isFinite(Number(c.longitude)),
+      );
+      if (validCells.length > 0) {
+        const nearest = validCells.reduce((best, c) => {
+          const dlat = Number(c.latitude) - parsedCoords.lat;
+          const dlng = Number(c.longitude) - parsedCoords.lng;
+          const d = dlat * dlat + dlng * dlng;
+          const bLat = Number(best.latitude) - parsedCoords.lat;
+          const bLng = Number(best.longitude) - parsedCoords.lng;
+          return d < bLat * bLat + bLng * bLng ? c : best;
+        });
+        dispatch(MapActions.setSelectedCell(null));
+        dispatch(MapActions.setHighlightedCell(nearest));
+      }
+      dispatch(
+        MapActions.setViewState({
+          longitude: parsedCoords.lng,
+          latitude: parsedCoords.lat,
+          zoom: 16,
+          transitionDuration: 1200,
+        }),
+      );
+      setSearchOpen(false);
+      return;
+    }
+
     let target = null;
     if (searchMode === "site" && selectedSite) {
       target = rawCells.find((c) => c.site_name === selectedSite);
@@ -143,10 +194,8 @@ const TelecomMapGisToolbar = () => {
       target = selectedCell;
     }
     if (target) {
+      dispatch(MapActions.setSelectedCell(null));
       dispatch(MapActions.setHighlightedCell(target.cell_id));
-      if (searchMode === "cell") {
-        dispatch(MapActions.setSelectedCell(selectedCell));
-      }
       dispatch(
         MapActions.setViewState({
           longitude: Number(target.longitude),
@@ -167,23 +216,6 @@ const TelecomMapGisToolbar = () => {
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className={GIS_TOOLBAR_STRIP_ROW_CLASS}>
-        {/* Mode: upstream does not clear selection when switching site/cell */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSearchMode((prev) => (prev === "site" ? "cell" : "site"));
-            setSearchOpen(true);
-            setFilterOpen(false);
-            setLayerOpen(false);
-          }}
-          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-[linear-gradient(180deg,#0C1931_0%,#0B1730_100%)] px-1.5 text-[10px] font-semibold tracking-[0.04em] text-white transition-colors hover:text-[#F26522]"
-        >
-          <SearchModeIcon className="h-2.5 w-2.5 text-[#F26522]" aria-hidden />
-          <span className="capitalize">{searchMode}</span>
-          <ChevronDown className="h-2.5 w-2.5 opacity-80" aria-hidden />
-        </button>
-
         <button
           type="button"
           title="Filters"
@@ -218,6 +250,27 @@ const TelecomMapGisToolbar = () => {
           }`}
         >
           <Layers3 className="h-3.5 w-3.5" aria-hidden />
+        </button>
+
+        {/* Mode toggle — part of the search cluster */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSearchMode((prev) => {
+              const next = SEARCH_MODES[(SEARCH_MODES.indexOf(prev) + 1) % SEARCH_MODES.length];
+              return next;
+            });
+            setSiteSearch("");
+            setSearchOpen(true);
+            setFilterOpen(false);
+            setLayerOpen(false);
+          }}
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-[linear-gradient(180deg,#0C1931_0%,#0B1730_100%)] px-1.5 text-[10px] font-semibold tracking-[0.04em] text-white transition-colors hover:text-[#F26522]"
+        >
+          <SearchModeIcon className="h-2.5 w-2.5 text-[#F26522]" aria-hidden />
+          <span className="capitalize">{searchMode}</span>
+          <ChevronDown className="h-2.5 w-2.5 opacity-80" aria-hidden />
         </button>
 
         <div className="flex min-h-7 min-w-0 flex-1 basis-0 items-center">
@@ -382,6 +435,20 @@ const TelecomMapGisToolbar = () => {
               </div>
             </div>
           )}
+
+          {searchMode === "coords" && parsedCoords ? (
+            <div className="rounded-lg border border-[#F26522] bg-[linear-gradient(180deg,#070d18_0%,#0B1730_100%)] p-2 text-[#ffffff] shadow-[0_12px_28px_rgba(3,8,24,0.5)]">
+              <div className="mb-1.5 flex items-center justify-between border-b border-[#F26522]/35 pb-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#ffffff]">Coordinates</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-md border border-[#F26522]/50 bg-[rgba(61,35,24,0.45)] px-2 py-1">
+                <Crosshair className="h-3 w-3 shrink-0 text-[#F26522]" aria-hidden />
+                <span className="font-mono text-[10px] font-semibold leading-tight text-[#ffffff]">
+                  {parsedCoords.lat.toFixed(5)}, {parsedCoords.lng.toFixed(5)}
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           {showResults ? (
             <div className="w-full rounded-xl border border-[#F26522] bg-[linear-gradient(180deg,#0C1931_0%,#0B1730_100%)] p-1.5 text-[#ffffff] shadow-[0_12px_28px_rgba(3,8,24,0.38)]">

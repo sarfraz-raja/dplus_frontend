@@ -2,9 +2,11 @@
 import { useSelector } from 'react-redux';
 import { Sidebar_content } from './utils/sidebar_values';
 import { meMenuToSidebarItems } from './utils/meMenuToSidebar';
+import { buildInsightsRootTree, INSIGHTS_ROOT_ROUTE } from './utils/insightsMenu';
 import { Route, Routes } from 'react-router-dom';
 import Layout from './pages/Layout';
 import Profile from './pages/Profile';
+import InsightsDashboard from './pages/InsightsEngine/InsightsDashboard';
 
 // ─── Maps built once at module load from sidebar_values ──────────────────────
 
@@ -63,6 +65,17 @@ const flattenRoutes = (items) => {
     return routes;
 };
 
+const flattenDashboardRoutes = (items) => {
+    const routes = [];
+    for (const item of (items || [])) {
+        if (item.route && item.route !== INSIGHTS_ROOT_ROUTE) routes.push(item.route);
+        if (Array.isArray(item.children) && item.children.length > 0) {
+            routes.push(...flattenDashboardRoutes(item.children));
+        }
+    }
+    return routes;
+};
+
 const safeParse = (raw) => {
     if (!raw) return null;
     try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
@@ -72,6 +85,7 @@ const safeParse = (raw) => {
 
 const Navigation = ({ sidebarOpen, sidebarPos, setSidebarPos }) => {
     const apiMenuRaw = useSelector((state) => state.auth.sidebarMenu);
+    const insightsMenuRaw = useSelector((state) => state.insightsEngine.dashboardList);
     const authUser   = useSelector((state) => state.auth.user);
 
     const rolename = (safeParse(authUser) ?? safeParse(localStorage.getItem('user')))?.rolename;
@@ -79,6 +93,9 @@ const Navigation = ({ sidebarOpen, sidebarPos, setSidebarPos }) => {
 
     // Routes to register in React Router
     let contentRoutes;   // [{link, component, subMenu:[]}]
+    const dynamicInsightsRoot = buildInsightsRootTree(insightsMenuRaw, { rolename });
+    const dynamicInsightsRoutes = [...new Set(flattenDashboardRoutes(dynamicInsightsRoot ? [dynamicInsightsRoot] : []))]
+        .map((route) => ({ link: route, component: <InsightsDashboard />, subMenu: [] }));
 
     if (Array.isArray(apiMenuRaw) && apiMenuRaw.length > 0) {
         // ── API-driven mode ──────────────────────────────────────────────────
@@ -105,11 +122,18 @@ const Navigation = ({ sidebarOpen, sidebarPos, setSidebarPos }) => {
             }
             contentRoutes = [...contentRoutes, ...adminFlatRoutes];
         }
+
+        for (const dynamicRoute of dynamicInsightsRoutes) {
+            if (!contentRoutes.find((route) => route.link === dynamicRoute.link)) {
+                contentRoutes.push(dynamicRoute);
+            }
+        }
     } else {
         // ── Fallback (no API menu) ───────────────────────────────────────────
         contentRoutes = [
             ...(Sidebar_content.all_routes || []),
             ...(isAdmin ? Sidebar_content.Admin || [] : []),
+            ...dynamicInsightsRoutes,
         ];
     }
 

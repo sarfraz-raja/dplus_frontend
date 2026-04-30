@@ -3,9 +3,16 @@ import { useSelector } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  AlertCircle,
+  Antenna,
+  AreaChart,
   BarChart2,
+  BarChart,
   Bell,
   BellRing,
+  Box,
+  Building,
+  Building2,
   CalendarCheck,
   CalendarCog,
   ChartColumn,
@@ -18,31 +25,47 @@ import {
   FolderOpen,
   Gauge,
   GitBranch,
+  Globe,
+  Grid,
   HardDrive,
   Layers,
+  Layout,
   LayoutDashboard,
   ListChecks,
   Map as MapIcon,
   MapPin,
   MapPinned,
   MessageSquare,
+  Monitor,
   Network,
+  PhoneCall,
+  PieChart,
   Play,
   Radio,
+  Radar,
+  Rss,
+  Satellite,
   SearchCheck,
   Server,
   Settings,
   Settings2,
   ShieldCheck,
   SignalHigh,
+  Signal,
+  Sliders,
+  ScatterChart,
   Terminal,
   TriangleAlert,
+  TrendingDown,
+  TrendingUp,
+  Wifi,
   WifiHigh,
   Wrench,
   ChevronDown,
 } from 'lucide-react';
 import { Sidebar_content } from '../utils/sidebar_values';
 import { meMenuToSidebarItems } from '../utils/meMenuToSidebar';
+import { buildInsightsRootTree, isInsightsRoute } from '../utils/insightsMenu';
 
 /** Build a flat name→link lookup from all sidebar_values items (all_routes + Admin + GlobalUrl). */
 const buildNameToLinkMap = (items, map = {}) => {
@@ -186,6 +209,7 @@ const SIDEBAR_CHILD_ICON_MAP = {
   '5G NSA to SA Pre-Post Dashboard': WifiHigh,
   'Network Dashboard': Activity,
   'Parameter Audit Dashboard': ClipboardCheck,
+  'Dashboard Manager': LayoutDashboard,
   'Site Analytics': MapPinned,
   'Site Pro Rules': ShieldCheck,
   'Cell Analytics': ChartColumn,
@@ -227,6 +251,7 @@ const SIDEBAR_CHILD_ICON_MAP = {
   Measurements: ChartLine,
   'User Management': Settings,
   'Role Management': ShieldCheck,
+  'Insights Dashboard Manager': LayoutDashboard,
   'Resource Utilization': Gauge,
   'Auto TT Dispatch': Play,
   'Plan Work Order': ClipboardCheck,
@@ -242,6 +267,48 @@ const SIDEBAR_CHILD_ICON_MAP = {
 const SIDEBAR_CHILD_ICON_MAP_CI = Object.fromEntries(
   Object.entries(SIDEBAR_CHILD_ICON_MAP).map(([k, v]) => [normTitle(k), v])
 );
+
+const DASHBOARD_ICON_MAP = {
+  BarChart2,
+  LineChart: ChartLine,
+  PieChart,
+  Activity,
+  TrendingUp,
+  TrendingDown,
+  AreaChart,
+  BarChart,
+  ScatterChart,
+  Gauge,
+  Globe,
+  Map: MapIcon,
+  Layers,
+  Network,
+  Database,
+  Server,
+  Cpu,
+  Wifi,
+  Signal,
+  Radio,
+  Rss,
+  Satellite,
+  Antenna,
+  Monitor,
+  Layout,
+  Box,
+  Sliders,
+  Grid,
+  Radar,
+  Building2,
+  Building,
+  PhoneCall,
+  AlertCircle,
+  Bell,
+  ChartLine,
+  SignalHigh,
+  WifiHigh,
+  TriangleAlert,
+  ClipboardCheck,
+};
 
 const normalizePath = (value = '') => value.replace(/\/+$/, '') || '/';
 
@@ -356,6 +423,37 @@ const persistOpenCategories = (categories) => {
 const getSidebarChildIcon = (title) =>
   SIDEBAR_CHILD_ICON_MAP[title] || SIDEBAR_CHILD_ICON_MAP_CI[normTitle(title)] || null;
 
+const getDashboardIcon = (item) =>
+  DASHBOARD_ICON_MAP[item?.icon] || getSidebarChildIcon(item?.title) || null;
+
+const dashboardNodeToSidebarItem = (node, isTopLevel = false) => {
+  const children = (node.children || []).map((child) => dashboardNodeToSidebarItem(child, false));
+  return {
+    title: node.title,
+    route: node.route,
+    type: children.length ? 'dropdown' : 'link',
+    icon: isTopLevel ? TOP_LEVEL_ICON_MAP['Insights Engine'] : getDashboardIcon(node),
+    children,
+  };
+};
+
+const applyDynamicInsightsMenu = (items, dynamicRoot) => {
+  if (!dynamicRoot) return items;
+
+  const dynamicItem = dashboardNodeToSidebarItem(dynamicRoot, true);
+  const filtered = (items || []).filter((item) => {
+    if (item.title === 'Insights Engine') return false;
+    if (item.route && isInsightsRoute(item.route)) return false;
+    return true;
+  });
+
+  const originalIndex = (items || []).findIndex((item) => item.title === 'Insights Engine');
+  if (originalIndex < 0) return [...filtered, dynamicItem];
+  const next = [...filtered];
+  next.splice(Math.min(originalIndex, next.length), 0, dynamicItem);
+  return next;
+};
+
 const normalizeStoredUser = (raw) => {
   if (raw == null) return null;
   if (typeof raw === 'object') return raw;
@@ -371,6 +469,7 @@ const normalizeStoredUser = (raw) => {
 
 export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, onMobileClose, onOpen }) {
   const apiMenuRaw = useSelector((state) => state.auth.sidebarMenu);
+  const insightsMenuRaw = useSelector((state) => state.insightsEngine.dashboardList);
   const authUser = useSelector((state) => state.auth.user);
   const navigate = useNavigate();
   const location = useLocation();
@@ -390,10 +489,12 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
   }, [authUser]);
 
   const menu = useMemo(() => {
+    const dynamicInsightsRoot = buildInsightsRootTree(insightsMenuRaw, { rolename });
+
     // Primary path: GET /me returned a menu (works for any role — admin or user).
     // Backend is the source of truth for what items each role can see.
     if (Array.isArray(apiMenuRaw) && apiMenuRaw.length > 0) {
-      const apiItems = overrideRoutes(meMenuToSidebarItems(apiMenuRaw, {
+      let apiItems = overrideRoutes(meMenuToSidebarItems(apiMenuRaw, {
         // Resolve icon: exact match first, then case-insensitive/punctuation-normalised fallback.
         // This handles API titles like "Gis Engine", "Xalerts", "Ison", "Multi Map View" etc.
         resolveTopIcon: (iconKey, rawTitle) =>
@@ -403,6 +504,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
           TOP_LEVEL_ICON_MAP_CI[normTitle(rawTitle)] ||
           LayoutDashboard,
       }));
+      apiItems = applyDynamicInsightsMenu(apiItems, dynamicInsightsRoot);
       // Admin always gets the Admin panel appended — but only if the API didn't already include it.
       if (rolename?.toLowerCase() === 'admin') {
         const apiTitles = new Set(apiItems.map((i) => i.title.toLowerCase()));
@@ -418,8 +520,8 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
     // Renders the full static sidebar from sidebar_values.jsx.
     const allRoutes = Sidebar_content.all_routes || [];
     const roleRoutes = rolename?.toLowerCase() === 'admin' ? Sidebar_content.Admin || [] : [];
-    return transformMenuItems(buildOrderedMenu([...allRoutes, ...roleRoutes]));
-  }, [rolename, apiMenuRaw]);
+    return applyDynamicInsightsMenu(transformMenuItems(buildOrderedMenu([...allRoutes, ...roleRoutes])), dynamicInsightsRoot);
+  }, [rolename, apiMenuRaw, insightsMenuRaw]);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -694,7 +796,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                               const isNestedGroup = Array.isArray(child.children) && child.children.length > 0;
                               const isNestedSelected = child.title === activeItem || hasActiveItemInChildren(child.children, activeItem);
                               const isNestedOpen = !!openInsightsGroups[child.title];
-                              const ChildIcon = getSidebarChildIcon(child.title);
+                              const ChildIcon = child.icon || getSidebarChildIcon(child.title);
 
                               if (isNestedGroup) {
                                 return (
@@ -737,7 +839,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                                     {isNestedOpen ? (
                                       <div className="space-y-1 border-l border-slate-200 pl-4 dark:border-white/10">
                                         {child.children.map((grandchild) => {
-                                          const GrandchildIcon = getSidebarChildIcon(grandchild.title);
+                                          const GrandchildIcon = grandchild.icon || getSidebarChildIcon(grandchild.title);
                                           return (
                                             <button
                                               key={grandchild.title}
@@ -812,7 +914,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                         <div className="ml-4 mt-2 border-l border-slate-200 pl-3 dark:border-white/10">
                           <div className="space-y-1">
                             {item.children.map((child) => {
-                              const ChildIcon = getSidebarChildIcon(child.title);
+                              const ChildIcon = child.icon || getSidebarChildIcon(child.title);
                               return (
                                 <button
                                   key={child.title}

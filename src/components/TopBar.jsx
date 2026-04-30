@@ -16,10 +16,12 @@ import {
   Sparkles,
   Sun,
   User,
+  UserCircle2,
   X,
 } from 'lucide-react';
 import CommonActions from '../store/actions/common-actions';
 import { useTheme } from '../context/ThemeContext.jsx';
+import { baseassetUrl } from '../utils/url.js'; 
 
 /** Neutral session hint — not live infra telemetry (avoids misleading demo alerts). */
 const HEADER_SESSION_LIGHT = {
@@ -144,9 +146,42 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
   const storedUser = useSelector((state) => state?.auth?.user);
   const [profileVersion, setProfileVersion] = useState(0);
   const user = useMemo(() => normalizeUser(storedUser) || readLocalUser(), [storedUser, profileVersion]);
-  const displayName = user?.name || user?.fullName || user?.username || 'DataPlus User';
-  const displayRole = String(user?.rolename || user?.title || 'Admin User').toUpperCase();
-  const profileImage = user?.avatar || '/icon1.png';
+  
+  // Defensive display values — handle "undefined" strings and various field names
+  const displayName = (() => {
+    const candidates = [
+      user?.name,
+      user?.fullName,
+      user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : null,
+      user?.firstName,
+      user?.firstname,
+      user?.username,
+    ].filter(Boolean)
+    
+    const name = candidates[0] || 'DataPlus User'
+    return (name && name !== 'undefined' && name !== 'null') ? name : 'DataPlus User'
+  })();
+  
+  const displayRole = (() => {
+    const role = user?.role || user?.rolename || user?.title || 'Admin User'
+    return String(role && role !== 'undefined' && role !== 'null' ? role : 'Admin User').toUpperCase()
+  })();
+  
+  const profileImage = useMemo(() => {
+    const avatar = user?.avatar;
+
+    // If no avatar, return default
+    if (!avatar || avatar === 'undefined' || avatar === 'null') return null;
+
+    // If the path starts with /uploads, it's a backend asset
+    if (avatar.startsWith('/uploads')) {
+      return `${baseassetUrl}${avatar}`;
+    }
+
+    // Otherwise, return as is (in case it's a full URL or blob)
+    return avatar
+  }, [user?.avatar, baseassetUrl]);
+
   const timezoneOptions = useRef(getTimezoneOptions());
   const [currentTime, setCurrentTime] = useState(null);
   const [selectedTz, setSelectedTz] = useState(() => {
@@ -435,7 +470,24 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
                   : 'border-slate-200 bg-slate-50 hover:border-[#F26522]/50 hover:bg-orange-50/90 dark:border-white/10 dark:bg-white/5 dark:hover:border-[#F26522]/50 dark:hover:bg-[#F26522]/10'
               }`}
             >
-              <img src={profileImage} alt="User" className="h-9 w-9 rounded-[7px] border border-slate-200 bg-white object-cover p-0.5 dark:border-white/10" onError={(e) => { e.currentTarget.src = '/icon1.png'; }} />
+              {/* <img src={profileImage} 
+                alt="User" 
+                className="h-9 w-9 rounded-[7px] border border-slate-200 bg-white object-cover p-0.5 dark:border-white/10" 
+                onError={(e) => { e.currentTarget.src = '/icon1.png'; }} /> */}
+
+                {profileImage ? (
+                  <img 
+                    src={profileImage} 
+                    alt="User" 
+                    className="h-9 w-9 rounded-[7px] border border-slate-200 bg-white object-cover p-0.5 dark:border-white/10" 
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+                  />
+                ) : (
+                  <div className="flex h-9 w-9 items-center justify-center rounded-[7px] border border-slate-200 bg-slate-100 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
+                    <UserCircle2 className="h-5 w-5 text-[#F26522]/70 stroke-[1.5]" />
+                  </div>
+                )}
+
               <div className="hidden min-w-0 sm:block">
                 <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{displayName}</p>
                 <p className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500 dark:text-white/45">{displayRole}</p>

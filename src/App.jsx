@@ -10,6 +10,7 @@ import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
 import WebSocketClient from './components/WebSocketClient'
 import AuthActions from './store/actions/auth-actions'
+import InsightsEngineActions from './store/actions/insightsEngine-actions'
 
 class ErrorBoundary extends Component {
     constructor(props) {
@@ -24,11 +25,15 @@ class ErrorBoundary extends Component {
     }
     render() {
         if (this.state.hasError) {
+            const isDark = (localStorage.getItem('dy3-theme') || 'light') === 'dark';
+            const styles = isDark
+                ? { wrap: { background: '#09001A', color: '#fff' }, sub: { color: '#aaa' }, btn: { background: '#F26522', color: '#fff', border: 'none' } }
+                : { wrap: { background: '#f8fafc', color: '#1e293b' }, sub: { color: '#64748b' }, btn: { background: '#F26522', color: '#fff', border: 'none' } };
             return (
-                <div style={{ padding: '2rem', color: '#fff', background: '#09001A', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                    <h2 style={{ color: '#F26522' }}>Something went wrong</h2>
-                    <p style={{ color: '#aaa', fontSize: '0.85rem' }}>{String(this.state.error)}</p>
-                    <button onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/home'; }} style={{ marginTop: '1rem', padding: '0.5rem 1.5rem', background: '#F26522', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer' }}>Reload</button>
+                <div style={{ padding: '2rem', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', ...styles.wrap }}>
+                    <h2 style={{ color: '#F26522', margin: 0 }}>Something went wrong</h2>
+                    <p style={{ fontSize: '0.85rem', margin: 0, ...styles.sub }}>{String(this.state.error)}</p>
+                    <button onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/home'; }} style={{ marginTop: '1rem', padding: '0.5rem 1.5rem', borderRadius: '8px', cursor: 'pointer', ...styles.btn }}>Reload</button>
                 </div>
             )
         }
@@ -76,6 +81,7 @@ function App() {
         if (isLoginRoute) return
         if (localStorage.getItem('auth') !== 'true') return
         dispatch(AuthActions.fetchMe())
+        dispatch(InsightsEngineActions.getDashboardList())
     }, [isLoginRoute, dispatch])
 
     const handleSidebarToggle = () => {

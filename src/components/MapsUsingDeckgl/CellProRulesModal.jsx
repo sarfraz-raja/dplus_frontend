@@ -79,7 +79,7 @@ const CellProRulesModal = ({ isOpen, setIsOpen, cellId, cellName }) => {
           flexShrink: 0,
         }}
       >
-        <span>Cell Pro Rules</span>
+        <span>AI Cell Pro Rules</span>
         <span
           onClick={() => setIsOpen(false)}
           style={{

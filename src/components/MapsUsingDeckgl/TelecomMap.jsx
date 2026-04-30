@@ -911,8 +911,9 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
         getFillColor: [
           activeThematic?.type,
           activeThematic?.colors,
-          activeThematic?.opacity, 
-          layerOpacity.CELLS,  
+          activeThematic?.opacity,
+          layerOpacity.CELLS,
+          selectedCell,
         ]
       },
       visible: layerVisibility.CELLS && currentZoom < 12, // markers visible below zoom 12
@@ -1257,7 +1258,7 @@ const siteLayer = useMemo(() => {
       id: "site-highlight",
 
       data: operatorFiltered.filter(
-        d => d.cell_id === highlightedCell &&
+        d => d.cell_id === highlightedCell?.cell_id &&
           !isNaN(Number(d.longitude)) &&
           !isNaN(Number(d.latitude))
       ),
@@ -2131,6 +2132,17 @@ const siteLayer = useMemo(() => {
   /* ============================================================
      🔹 Draggable pop functions 
   ============================================================ */
+  const fallbackCopyText = (text) => {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  };
+
   const copyToClipboarding = (data) => {
     const finalData = Object.entries(data)
         .map((itm) => `${itm[0]}: ${itm[1]}`)
@@ -2502,13 +2514,16 @@ const siteLayer = useMemo(() => {
                   </div>
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       const text = `${coordinatePopup.latitude.toFixed(6)}, ${coordinatePopup.longitude.toFixed(6)}`;
-                      try {
-                        await navigator.clipboard.writeText(text);
+                      if (navigator.clipboard) {
+                        navigator.clipboard.writeText(text).then(() => setCopiedCoordinate(true)).catch(() => {
+                          fallbackCopyText(text);
+                          setCopiedCoordinate(true);
+                        });
+                      } else {
+                        fallbackCopyText(text);
                         setCopiedCoordinate(true);
-                      } catch {
-                        /* ignore */
                       }
                     }}
                     className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#27365C] bg-[rgba(13,24,49,0.96)] text-white/70 transition hover:border-[#F26522]/35 hover:bg-[rgba(23,33,60,0.96)] hover:text-[#F26522]"
