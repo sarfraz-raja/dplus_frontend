@@ -366,7 +366,7 @@ const Login = () => {
 
   return (
     <main
-      className={`login-shell relative flex min-h-screen items-start justify-center overflow-hidden px-4 py-5 sm:items-center sm:py-8 ${isDark ? 'bg-[#02030a] text-white' : 'bg-gray-50 text-gray-900'}`}
+      className={`login-shell relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-5 ${isDark ? 'bg-[#02030a] text-white' : 'bg-gray-50 text-gray-900'}`}
       style={{ fontFamily: '"Aptos", "Aptos Display", "Segoe UI", Arial, sans-serif' }}
     >
       <style
@@ -479,11 +479,11 @@ const Login = () => {
             <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit(onSubmit)}>
               <label className="block">
                 <span className={`mb-2 flex items-center gap-2 text-[15px] uppercase tracking-[0.2em] ${isDark ? 'text-white/45' : 'text-gray-500'}`}>
-                  <UserCircle2 className="h-4 w-4 text-[#F26522]" /> Username
+                  <UserCircle2 className="h-4 w-4 text-[#F26522]" /> Username/Email
                 </span>
                 <input
                   {...register('username', { required: 'Username is required.' })}
-                  placeholder="Enter username"
+                  placeholder="Enter username/email"
                   autoComplete="username"
                   className={`w-full rounded-2xl border px-4 py-3.5 text-md outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
                     isDark

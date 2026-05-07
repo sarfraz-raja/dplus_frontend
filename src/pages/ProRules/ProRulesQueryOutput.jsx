@@ -287,7 +287,7 @@ const ProRulesQueryOutput = () => {
 
     return (
         <div className="w-full min-h-full bg-slate-50">
-            <div className="flex flex-col min-h-full" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}>
+            <div className="flex flex-col min-h-full" style={{ background: '#ffffff' }}>
                 <div className="px-6 py-6">
                     <div className="mx-auto max-w-7xl space-y-6">
                         <div className="flex flex-col gap-6">

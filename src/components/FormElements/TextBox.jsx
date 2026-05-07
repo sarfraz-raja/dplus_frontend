@@ -1,21 +1,20 @@
+const inputCls = 'w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-slate-50 disabled:text-slate-400';
 
-import React from 'react';
-
-
-const TextBox = ({ itm,errors, handleSubmit, setValue, getValues, register}) => {
-
-    return <>
-        <input type={itm.type}
-            disabled={itm.disabled ? true : false}
+const TextBox = ({ itm, errors, register }) => (
+    <>
+        <input
+            type={itm.type}
+            disabled={!!itm.disabled}
+            placeholder={itm.placeholder ?? ''}
+            className={inputCls}
             {...register(itm.name, {
-                required: itm.required ? "This " + " Field is required" : false,
-                ...itm.props
+                required: itm.required ? 'This field is required' : false,
             })}
-            placeholder={itm.placeholder ? itm.placeholder : ""}
-            className=" bg-white border-black border block h-8 w-full rounded-md py-1.5 p-2 text-white-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6" {...itm.props} />
-        {console.log(errors, [itm.name], itm.required, "errors?.itm?")}
-        <p className='text-xs text-red-700'>{errors[itm.name]?.message}</p>
+        />
+        {errors[itm.name] && (
+            <p className="text-xs text-red-500 mt-0.5">{errors[itm.name].message}</p>
+        )}
     </>
-};
+);
 
 export default TextBox;

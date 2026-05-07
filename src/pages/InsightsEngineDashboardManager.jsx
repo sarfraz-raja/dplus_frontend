@@ -9,6 +9,11 @@ import {
     Building2, Building, Antenna, PhoneCall, AlertCircle, Bell,
     ChevronDown, ChevronRight, Plus, Pencil, X,
     ClipboardCheck, WifiHigh, SignalHigh, TriangleAlert, ChartLine,
+    ChartColumn, ListChecks, ShieldCheck, MapPin, MapPinned,
+    LayoutDashboard, Settings, Settings2, BellRing, CalendarCheck,
+    GitBranch, HardDrive, Terminal, FileCode, SearchCheck,
+    Waves, Zap, Target, Eye, RefreshCw, Download, Upload,
+    ShieldAlert, Timer,
 } from 'lucide-react';
 import Button from '../components/Button';
 import { buildInsightsRootTree, sortBySequence } from '../utils/insightsMenu';
@@ -48,11 +53,42 @@ const ICON_OPTIONS = [
     { name: 'PhoneCall',    Icon: PhoneCall    },
     { name: 'AlertCircle',  Icon: AlertCircle  },
     { name: 'Bell',         Icon: Bell         },
-    { name: 'ChartLine',    Icon: ChartLine    },
-    { name: 'SignalHigh',   Icon: SignalHigh   },
-    { name: 'WifiHigh',     Icon: WifiHigh     },
-    { name: 'TriangleAlert',Icon: TriangleAlert},
-    { name: 'ClipboardCheck',Icon: ClipboardCheck},
+    { name: 'ChartLine',      Icon: ChartLine      },
+    { name: 'SignalHigh',     Icon: SignalHigh     },
+    { name: 'WifiHigh',       Icon: WifiHigh       },
+    { name: 'TriangleAlert',  Icon: TriangleAlert  },
+    { name: 'ClipboardCheck', Icon: ClipboardCheck },
+    /* Analytics / KPI */
+    { name: 'ChartColumn',    Icon: ChartColumn    },
+    { name: 'ListChecks',     Icon: ListChecks     },
+    { name: 'Target',         Icon: Target         },
+    { name: 'Timer',          Icon: Timer          },
+    /* Site / Location */
+    { name: 'MapPin',         Icon: MapPin         },
+    { name: 'MapPinned',      Icon: MapPinned      },
+    /* Telecom / RF */
+    { name: 'Waves',          Icon: Waves          },
+    { name: 'Zap',            Icon: Zap            },
+    { name: 'Download',       Icon: Download       },
+    { name: 'Upload',         Icon: Upload         },
+    /* Compliance / Security */
+    { name: 'ShieldCheck',    Icon: ShieldCheck    },
+    { name: 'ShieldAlert',    Icon: ShieldAlert    },
+    /* Dashboard / Navigation */
+    { name: 'LayoutDashboard',Icon: LayoutDashboard},
+    { name: 'Settings',       Icon: Settings       },
+    { name: 'Settings2',      Icon: Settings2      },
+    /* Operations / Monitoring */
+    { name: 'Eye',            Icon: Eye            },
+    { name: 'RefreshCw',      Icon: RefreshCw      },
+    { name: 'HardDrive',      Icon: HardDrive      },
+    { name: 'Terminal',       Icon: Terminal       },
+    { name: 'FileCode',       Icon: FileCode       },
+    { name: 'SearchCheck',    Icon: SearchCheck    },
+    { name: 'GitBranch',      Icon: GitBranch      },
+    /* Alerts / Scheduling */
+    { name: 'BellRing',       Icon: BellRing       },
+    { name: 'CalendarCheck',  Icon: CalendarCheck  },
 ];
 
 /* Title → icon fallback (mirrors Sidebar.jsx SIDEBAR_CHILD_ICON_MAP) */
@@ -156,6 +192,7 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
         const e = {};
         if (!form.title.trim()) e.title = 'Required';
         if (!form.route.trim()) e.route = 'Required';
+        if (form.sequence === '' || form.sequence == null) e.sequence = 'Required';
         return e;
     };
 
@@ -174,7 +211,7 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
     };
 
     const inputCls = key =>
-        `w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 ${
+        `w-full border rounded-lg px-2 py-1.5 text-xs sm:px-3 sm:py-2 sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 ${
             errors[key] ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'
         }`;
 
@@ -183,9 +220,10 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
 
     if (!mode) {
         return (
-            <div className="flex flex-col items-center justify-center h-full text-center text-slate-400 gap-2">
-                <Pencil size={32} className="opacity-20" />
-                <p className="text-sm font-medium text-slate-500">Select an item to edit</p>
+            <div className="flex flex-col items-center justify-center h-full text-center text-slate-400 gap-2 p-4">
+                <Pencil size={24} className="opacity-20 sm:hidden" />
+                <Pencil size={32} className="opacity-20 hidden sm:block" />
+                <p className="text-xs sm:text-sm font-medium text-slate-500">Select an item to edit</p>
                 <p className="text-xs">or click <span className="font-mono bg-slate-100 px-1 rounded">+</span> on a group to add a child</p>
             </div>
         );
@@ -194,20 +232,20 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
     return (
         <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
-                <span className="text-sm font-semibold text-slate-700 truncate">
+            <div className="flex items-center justify-between px-3 py-2 sm:px-5 sm:py-3 border-b border-slate-100 shrink-0">
+                <span className="text-xs sm:text-sm font-semibold text-slate-700 truncate">
                     {isAdd
                         ? `Add under "${parentItem?.title || 'Insights Engine'}"`
                         : `Editing: ${item?.title}`
                     }
                 </span>
                 <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0 ml-2">
-                    <X size={16} />
+                    <X size={14} />
                 </button>
             </div>
 
             {/* Scrollable form body */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+            <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4 flex flex-col gap-3 sm:gap-4">
                 {isInactive && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
                         <p className="text-xs font-semibold text-amber-700">Inactive item</p>
@@ -302,18 +340,19 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
                             <span className="ml-2 normal-case font-medium text-orange-500">— {selectedIcon.name}</span>
                         )}
                     </label>
-                    <div className="grid grid-cols-9 gap-1 p-2 border border-slate-200 rounded-xl bg-slate-50 max-h-36 overflow-y-auto">
+                    <div className="grid grid-cols-6 sm:grid-cols-9 md:grid-cols-11 lg:grid-cols-10 xl:grid-cols-12 gap-1 p-2 border border-slate-200 rounded-xl bg-slate-50">
                         {ICON_OPTIONS.map(({ name, Icon }) => (
                             <button
                                 key={name} type="button" title={name}
                                 onClick={() => set('icon', form.icon === name ? null : name)}
-                                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all border ${
+                                className={`flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg transition-all border ${
                                     form.icon === name
                                         ? 'bg-orange-100 border-orange-400 text-orange-600 shadow-sm'
                                         : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-100'
                                 }`}
                             >
-                                <Icon size={15} />
+                                <Icon size={11} className="sm:hidden" />
+                                <Icon size={15} className="hidden sm:block" />
                             </button>
                         ))}
                     </div>
@@ -321,19 +360,17 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
 
                 {/* Sequence */}
                 <div>
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                            Sequence
-                            <span className="text-slate-400 normal-case font-normal ml-1">(optional)</span>
-                        </label>
-                        <input
-                            type="number" min="0" step="1"
-                            value={form.sequence ?? ''}
-                            onChange={e => set('sequence', e.target.value === '' ? '' : String(Math.trunc(Number(e.target.value))))}
-                            placeholder="e.g. 1"
-                            className={inputCls('sequence')}
-                        />
-                    </div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                        Sequence <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                        type="number" min="0" step="1"
+                        value={form.sequence ?? ''}
+                        onChange={e => set('sequence', e.target.value === '' ? '' : String(Math.trunc(Number(e.target.value))))}
+                        placeholder="e.g. 1"
+                        className={inputCls('sequence')}
+                    />
+                    {errors.sequence && <p className="text-xs text-red-500 mt-0.5">{errors.sequence}</p>}
                 </div>
 
                 {/* Allow Role */}
@@ -348,7 +385,7 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
             </div>
 
             {/* Footer */}
-            <div className="shrink-0 border-t border-slate-100 px-5 py-3 flex flex-col gap-2">
+            <div className="shrink-0 border-t border-slate-100 px-3 py-2 sm:px-5 sm:py-3 flex flex-col gap-2">
                 <div className="flex gap-2">
                     <Button variant="primary" onClick={handleSave} className="flex-1">Save</Button>
                     <Button variant="secondary" onClick={onCancel}>Cancel</Button>
@@ -420,40 +457,40 @@ const SidebarTreeNode = ({ item, depth, selectedId, onSelect, onAdd }) => {
         <div>
             <div
                 onClick={() => onSelect(item)}
-                className={`group flex items-center gap-2 py-2 pr-2 rounded-lg mx-1 cursor-pointer transition-all ${
+                className={`group flex items-center gap-1.5 sm:gap-2 py-1.5 sm:py-2 pr-2 rounded-lg mx-1 cursor-pointer transition-all ${
                     isSelected
                         ? 'bg-orange-50 border border-orange-200 shadow-sm'
                         : 'border border-transparent hover:bg-slate-50'
                 } ${!item.is_active ? 'opacity-40' : ''}`}
-                style={{ paddingLeft: `${8 + depth * 16}px` }}
+                style={{ paddingLeft: `${6 + depth * 12}px` }}
             >
                 {/* expand / collapse — groups with children only */}
                 {isGroup && hasChildren ? (
                     <button
                         type="button"
                         onClick={e => { e.stopPropagation(); setExpanded(p => !p); }}
-                        className="w-4 h-4 flex items-center justify-center shrink-0 text-slate-400 hover:text-slate-600"
+                        className="w-3 h-3 sm:w-4 sm:h-4 flex items-center justify-center shrink-0 text-slate-400 hover:text-slate-600"
                     >
-                        {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
                     </button>
                 ) : (
-                    <span className="w-4 shrink-0" />
+                    <span className="w-3 sm:w-4 shrink-0" />
                 )}
 
                 {/* icon from DB only — nothing if null */}
                 {ItemIcon
-                    ? <ItemIcon size={13} className={`shrink-0 ${isSelected ? 'text-orange-500' : 'text-slate-400'}`} />
-                    : <span className="w-[13px] shrink-0" />
+                    ? <ItemIcon size={11} className={`shrink-0 ${isSelected ? 'text-orange-500' : 'text-slate-400'}`} />
+                    : <span className="w-[11px] shrink-0" />
                 }
 
-                <span className={`flex-1 min-w-0 text-sm truncate ${
+                <span className={`flex-1 min-w-0 text-xs sm:text-sm truncate ${
                     isSelected ? 'font-semibold text-slate-800' : 'font-medium text-slate-600'
                 }`}>
                     {item.title}
                 </span>
 
                 {!item.is_active && (
-                    <span className="text-[10px] text-slate-400 shrink-0">off</span>
+                    <span className="text-[9px] sm:text-[10px] text-slate-400 shrink-0">off</span>
                 )}
 
                 {isGroup && (
@@ -461,9 +498,9 @@ const SidebarTreeNode = ({ item, depth, selectedId, onSelect, onAdd }) => {
                         type="button"
                         onClick={e => { e.stopPropagation(); onAdd(item); }}
                         title={`Add child under ${item.title}`}
-                        className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-orange-500 hover:bg-orange-50 transition-all shrink-0"
+                        className="opacity-0 group-hover:opacity-100 w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center rounded text-slate-400 hover:text-orange-500 hover:bg-orange-50 transition-all shrink-0"
                     >
-                        <Plus size={11} />
+                        <Plus size={9} />
                     </button>
                 )}
             </div>
@@ -487,9 +524,10 @@ const InsightsEngineDashboardManager = () => {
     const dispatch  = useDispatch();
     const menuList  = useSelector(state => state.insightsEngine.dashboardList);
 
-    const [selectedId,   setSelectedId]   = useState(null);
-    const [mode,         setMode]         = useState(null); // 'edit' | 'add'
-    const [addingUnder,  setAddingUnder]  = useState(null);
+    const [selectedId,    setSelectedId]    = useState(null);
+    const [mode,          setMode]          = useState(null); // 'edit' | 'add'
+    const [addingUnder,   setAddingUnder]   = useState(null);
+    const [previewOpen,   setPreviewOpen]   = useState(false);
 
     useEffect(() => {
         dispatch(InsightsEngineActions.getDashboardList({ includeInactive: true }));
@@ -515,12 +553,14 @@ const InsightsEngineDashboardManager = () => {
         setSelectedId(item.id);
         setMode('edit');
         setAddingUnder(null);
+        setPreviewOpen(false);
     };
 
     const handleAdd = (parentItem) => {
         setSelectedId(null);
         setMode('add');
         setAddingUnder(parentItem);
+        setPreviewOpen(false);
     };
 
     const handleSave = (payload, id) => {
@@ -565,40 +605,52 @@ const InsightsEngineDashboardManager = () => {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4" style={{ background: '#ffffff' }}>
+        <div className="flex flex-col p-4 gap-4 lg:p-5 lg:h-[calc(100vh-4rem)] lg:overflow-hidden" style={{ background: '#ffffff' }}>
 
             {/* Header */}
-            <div className="flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
                     <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                        style={{ background: 'linear-gradient(135deg, #EC7D09 0%, #f59e0b 100%)' }}
+                        className="w-8 h-8 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
+                        style={{ background: '#0b1830' }}
                     >
-                        <BarChart2 size={20} color="white" strokeWidth={1.8} />
+                        <BarChart2 size={16} color="white" strokeWidth={1.8} className="sm:hidden" />
+                        <BarChart2 size={20} color="white" strokeWidth={1.8} className="hidden sm:block" />
                     </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800 leading-tight">
+                    <div className="min-w-0">
+                        <h1 className="text-sm sm:text-base lg:text-xl font-bold text-slate-800 leading-tight truncate">
                             Insights Engine Dashboard Manager
                         </h1>
-                        <p className="text-xs text-slate-400 font-medium tracking-wide">
+                        <p className="text-xs text-slate-400 font-medium tracking-wide hidden sm:block">
                             Configure the Insights Engine sidebar navigation
                         </p>
                     </div>
                 </div>
-                <Button onClick={() => handleAdd(null)} variant="primary">+ Add Item</Button>
+                <Button onClick={() => handleAdd(null)} variant="primary" className="shrink-0 text-xs sm:text-sm px-2 sm:px-4">
+                    <span className="hidden sm:inline">+ Add Item</span>
+                    <span className="sm:hidden">+ Add</span>
+                </Button>
             </div>
 
             {/* Two-panel layout */}
-            <div className="flex flex-1 min-h-0 gap-4">
+            <div className="flex flex-col lg:flex-row lg:flex-1 lg:min-h-0 gap-4">
 
                 {/* Left: sidebar preview */}
-                <div className="w-72 shrink-0 flex flex-col border border-slate-200 rounded-xl bg-white overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-slate-100 shrink-0">
-                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                <div className="w-full lg:w-72 lg:shrink-0 flex flex-col border border-slate-200 rounded-xl bg-white overflow-hidden lg:max-h-none">
+                    <button
+                        type="button"
+                        onClick={() => setPreviewOpen(p => !p)}
+                        className="px-3 py-2 sm:px-4 sm:py-2.5 border-b border-slate-100 shrink-0 flex items-center justify-between w-full lg:cursor-default"
+                    >
+                        <span className="text-[10px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wide">
                             Sidebar Preview
                         </span>
-                    </div>
-                    <div className="flex-1 overflow-y-auto py-2">
+                        <ChevronDown
+                            size={12}
+                            className={`text-slate-400 transition-transform duration-200 lg:hidden ${previewOpen ? 'rotate-180' : ''}`}
+                        />
+                    </button>
+                    <div className={`flex-1 overflow-y-auto py-2 ${previewOpen ? 'block' : 'hidden'} lg:block`}>
                         {!insightsRoot ? (
                             <div className="flex items-center justify-center h-20 text-xs text-slate-400">
                                 Loading…
@@ -616,7 +668,7 @@ const InsightsEngineDashboardManager = () => {
                 </div>
 
                 {/* Right: edit / add panel */}
-                <div className="flex-1 border border-slate-200 rounded-xl bg-white overflow-hidden">
+                <div className="lg:flex-1 border border-slate-200 rounded-xl bg-white overflow-hidden min-h-[480px] lg:min-h-0">
                     <EditPanel
                         mode={mode}
                         item={selectedItem}

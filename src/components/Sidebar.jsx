@@ -50,17 +50,26 @@ import {
   Settings,
   Settings2,
   ShieldCheck,
+  ShieldAlert,
   SignalHigh,
   Signal,
   Sliders,
   ScatterChart,
   Terminal,
+  Timer,
+  Target,
   TriangleAlert,
   TrendingDown,
   TrendingUp,
+  Upload,
+  Download,
+  Waves,
   Wifi,
   WifiHigh,
   Wrench,
+  Zap,
+  Eye,
+  RefreshCw,
   ChevronDown,
 } from 'lucide-react';
 import { Sidebar_content } from '../utils/sidebar_values';
@@ -308,6 +317,38 @@ const DASHBOARD_ICON_MAP = {
   WifiHigh,
   TriangleAlert,
   ClipboardCheck,
+  /* Analytics / KPI */
+  ChartColumn,
+  ListChecks,
+  Target,
+  Timer,
+  /* Site / Location */
+  MapPin,
+  MapPinned,
+  Antenna,
+  /* Telecom / RF */
+  Waves,
+  Zap,
+  Download,
+  Upload,
+  /* Compliance / Security */
+  ShieldCheck,
+  ShieldAlert,
+  /* Dashboard / Navigation */
+  LayoutDashboard,
+  Settings,
+  Settings2,
+  /* Operations / Monitoring */
+  Eye,
+  RefreshCw,
+  HardDrive,
+  Terminal,
+  FileCode,
+  SearchCheck,
+  GitBranch,
+  /* Alerts / Scheduling */
+  BellRing,
+  CalendarCheck,
 };
 
 const normalizePath = (value = '') => value.replace(/\/+$/, '') || '/';
@@ -467,6 +508,89 @@ const normalizeStoredUser = (raw) => {
   return null;
 };
 
+const InsightsTreeNode = ({ item, activeItem, openInsightsGroups, toggleInsightsGroup, handleChild, topLevelTitle }) => {
+  const isGroup = Array.isArray(item.children) && item.children.length > 0;
+  const isSelected = item.title === activeItem || hasActiveItemInChildren(item.children, activeItem);
+  const isOpen = !!openInsightsGroups[item.title];
+  const ItemIcon = item.icon || getSidebarChildIcon(item.title);
+
+  if (isGroup) {
+    return (
+      <div className="space-y-1.5">
+        <button
+          type="button"
+          onClick={() => toggleInsightsGroup(item.title)}
+          className={`
+            group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
+            ${isSelected
+              ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
+              : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
+            }
+          `}
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            {ItemIcon ? (
+              <ItemIcon
+                className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
+                  isSelected ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
+                }`}
+              />
+            ) : null}
+            <span className={`min-w-0 truncate text-slate-800 dark:text-white ${isSelected ? 'font-bold' : 'font-medium'}`}>
+              {item.title}
+            </span>
+          </div>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 transition-all duration-300 ${
+              isOpen ? 'rotate-180 text-[#F26522]' : 'text-slate-500 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
+            }`}
+          />
+        </button>
+        {isOpen ? (
+          <div className="space-y-1 border-l border-slate-200 pl-4 dark:border-white/10">
+            {item.children.map((child) => (
+              <InsightsTreeNode
+                key={child.title}
+                item={child}
+                activeItem={activeItem}
+                openInsightsGroups={openInsightsGroups}
+                toggleInsightsGroup={toggleInsightsGroup}
+                handleChild={handleChild}
+                topLevelTitle={topLevelTitle}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => handleChild(topLevelTitle, item)}
+      className={`
+        group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
+        ${activeItem === item.title
+          ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
+          : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
+        }
+      `}
+    >
+      {ItemIcon ? (
+        <ItemIcon
+          className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
+            activeItem === item.title ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
+          }`}
+        />
+      ) : null}
+      <span className={`min-w-0 truncate text-slate-800 dark:text-white ${activeItem === item.title ? 'font-bold' : 'font-medium'}`}>
+        {item.title}
+      </span>
+    </button>
+  );
+};
+
 export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, onMobileClose, onOpen }) {
   const apiMenuRaw = useSelector((state) => state.auth.sidebarMenu);
   const insightsMenuRaw = useSelector((state) => state.insightsEngine.dashboardList);
@@ -545,11 +669,15 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
       setActiveItem(nextActive);
       setOpenCategory(nextOpenCategory);
 
-      if (matchedRoute.trail[0] === 'Insights Engine' && matchedRoute.trail[1]) {
-        setOpenInsightsGroups((current) => ({
-          ...current,
-          [matchedRoute.trail[1]]: true,
-        }));
+      if (matchedRoute.trail[0] === 'Insights Engine') {
+        const insightsTrail = matchedRoute.trail.slice(1);
+        if (insightsTrail.length > 0) {
+          setOpenInsightsGroups((current) => {
+            const next = { ...current };
+            insightsTrail.forEach((t) => { next[t] = true; });
+            return next;
+          });
+        }
       }
 
       return;
@@ -792,122 +920,17 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
                       item.title === 'Insights Engine' ? (
                         <div className="ml-4 mt-2 border-l border-slate-200 pl-3 dark:border-white/10">
                           <div className="space-y-1">
-                            {item.children.map((child) => {
-                              const isNestedGroup = Array.isArray(child.children) && child.children.length > 0;
-                              const isNestedSelected = child.title === activeItem || hasActiveItemInChildren(child.children, activeItem);
-                              const isNestedOpen = !!openInsightsGroups[child.title];
-                              const ChildIcon = child.icon || getSidebarChildIcon(child.title);
-
-                              if (isNestedGroup) {
-                                return (
-                                  <div key={child.title} className="space-y-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleInsightsGroup(child.title)}
-                                      className={`
-                                        group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
-                                        ${
-                                          isNestedSelected
-                                            ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
-                                            : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
-                                        }
-                                      `}
-                                    >
-                                      <div className="flex min-w-0 items-center gap-3">
-                                        {ChildIcon ? (
-                                          <ChildIcon
-                                            className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
-                                              isNestedSelected ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
-                                            }`}
-                                          />
-                                        ) : null}
-                                        <span
-                                          className={`min-w-0 truncate text-slate-800 dark:text-white ${
-                                            isNestedSelected ? 'font-bold' : 'font-medium'
-                                          }`}
-                                        >
-                                          {child.title}
-                                        </span>
-                                      </div>
-                                      <ChevronDown
-                                        className={`h-4 w-4 shrink-0 transition-all duration-300 ${
-                                          isNestedOpen ? 'rotate-180 text-[#F26522]' : 'text-slate-500 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
-                                        }`}
-                                      />
-                                    </button>
-
-                                    {isNestedOpen ? (
-                                      <div className="space-y-1 border-l border-slate-200 pl-4 dark:border-white/10">
-                                        {child.children.map((grandchild) => {
-                                          const GrandchildIcon = grandchild.icon || getSidebarChildIcon(grandchild.title);
-                                          return (
-                                            <button
-                                              key={grandchild.title}
-                                              type="button"
-                                              onClick={() => handleChild(item.title, grandchild)}
-                                              className={`
-                                                group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
-                                                ${
-                                                  activeItem === grandchild.title
-                                                    ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
-                                                    : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
-                                                }
-                                              `}
-                                            >
-                                              {GrandchildIcon ? (
-                                                <GrandchildIcon
-                                                  className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
-                                                    activeItem === grandchild.title ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
-                                                  }`}
-                                                />
-                                              ) : null}
-                                              <span
-                                                className={`min-w-0 truncate text-slate-800 dark:text-white ${
-                                                  activeItem === grandchild.title ? 'font-bold' : 'font-medium'
-                                                }`}
-                                              >
-                                                {grandchild.title}
-                                              </span>
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <button
-                                  key={child.title}
-                                  type="button"
-                                  onClick={() => handleChild(item.title, child)}
-                                  className={`
-                                    group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[12.5px] transition-all duration-200
-                                    ${
-                                      activeItem === child.title
-                                        ? 'bg-orange-50 text-slate-900 dark:bg-[rgba(43,19,37,0.7)] dark:text-white'
-                                        : 'text-slate-800 hover:bg-[#F26522]/5 hover:pl-4 dark:text-white dark:hover:bg-white/5'
-                                    }
-                                  `}
-                                >
-                                  {ChildIcon ? (
-                                    <ChildIcon
-                                      className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
-                                        activeItem === child.title ? 'text-[#F26522]' : 'text-slate-600 group-hover:text-[#F26522] dark:text-white dark:group-hover:text-[#F26522]'
-                                      }`}
-                                    />
-                                  ) : null}
-                                  <span
-                                    className={`min-w-0 truncate text-slate-800 dark:text-white ${
-                                      activeItem === child.title ? 'font-bold' : 'font-medium'
-                                    }`}
-                                  >
-                                    {child.title}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                            {item.children.map((child) => (
+                              <InsightsTreeNode
+                                key={child.title}
+                                item={child}
+                                activeItem={activeItem}
+                                openInsightsGroups={openInsightsGroups}
+                                toggleInsightsGroup={toggleInsightsGroup}
+                                handleChild={handleChild}
+                                topLevelTitle={item.title}
+                              />
+                            ))}
                           </div>
                         </div>
                       ) : (

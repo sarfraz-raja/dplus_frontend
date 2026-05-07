@@ -3,17 +3,22 @@ import Button from "../../components/Button"
 import Api from "../../utils/api"
 import { Urls } from "../../utils/url"
 import { ROLE_LIST, USERS_LIST } from "../reducers/adminManagement-reducer"
+import { SET_SIDEBAR_MENU } from "../reducers/auth-reducer"
 import CommonActions from "./common-actions"
+import AuthActions from "./auth-actions"
 // import Notify from "./notify-actions"
 
 
 const AdminManagementActions = {
-    getUsersList: (reset=true,args="") => async (dispatch, _) => {
+    getUsersList: (reset=true, args="", excludeIds=[]) => async (dispatch, _) => {
         try {
             console.log("AuthActions.signin")
             const res = await Api.get({ url: `${Urls.admin_userList}${args!=""?"?"+args:""}`})
             if (res?.status !== 200) return
-            const dataAll = res.data.data
+            let dataAll = res.data.data
+            if (excludeIds.length) {
+                dataAll = dataAll.filter((u) => !excludeIds.includes(u.id))
+            }
             dispatch(USERS_LIST({dataAll,reset}))
         } catch (error) {
             console.log(error, "amit errorerror 37")
@@ -35,28 +40,63 @@ const AdminManagementActions = {
             // dispatch(Notify.error('something went wrong! please try again after a while'))
         }
     },
-    postUser: (reset, data, cb, uniqueId) => async (dispatch, _) => {
+    getUserById: (id) => async (dispatch, _) => {
         try {
-            console.log("AuthActions.signin", uniqueId)
-            // if(reset){
-            //     dispatch(GENERATED_SQL_QUERY({}))
-            // }
-
+            const res = await Api.get({ url: `${Urls.admin_userList}/${id}` });
+            if (res?.status !== 200) return null;
+            const user = res.data?.data || res.data;
+            return (user && typeof user === 'object' && user.id) ? user : null;
+        } catch (error) {
+            console.log(error, 'getUserById error');
+            return null;
+        }
+    },
+    postUser: (reset, data, cb, uniqueId, errorCb) => async (dispatch, _) => {
+        try {
             let res;
-            
+
             if(uniqueId==null){
                 res = await Api.post({ data: data, url: Urls.admin_userList })
             }
             else{
                 res = await Api.put({ data: data, url: Urls.admin_userList + "/" + uniqueId })
             }
-                
-            if (res?.status !== 201 && res?.status !== 200) return
+
+            if (res?.status !== 201 && res?.status !== 200) {
+                if (errorCb) errorCb(res?.data || res);
+                return;
+            }
             cb()
         } catch (error) {
             console.log(error, "amit errorerror 37")
-
-            // dispatch(Notify.error('something went wrong! please try again after a while'))
+            if (errorCb) errorCb({ msg: 'Something went wrong. Please try again.' });
+        }
+    },
+    getRoleMenu: (roleid) => async (dispatch, _) => {
+        try {
+            const res = await Api.get({ url: `${Urls.role_menu}?role_id=${roleid}` });
+            if (res?.status !== 200) return null;
+            const menu = res.data?.menu;
+            return Array.isArray(menu) ? menu : null;
+        } catch (error) {
+            console.log(error, 'getRoleMenu error');
+            return null;
+        }
+    },
+    saveRoleMenu: (roleid, menuItems, cb) => async (dispatch, _) => {
+        try {
+            const flatten = (items) => items.reduce((acc, item) => {
+                acc.push({ id: item.id, is_active: item.is_active, title: item.title, route: item.route, sequence: item.sequence });
+                if (item.children?.length) acc.push(...flatten(item.children));
+                return acc;
+            }, []);
+            const res = await Api.patch({ data: { role_id: roleid, permissions: flatten(menuItems) }, url: Urls.role_menu });
+            if (res?.status !== 200 && res?.status !== 201) return;
+            dispatch(SET_SIDEBAR_MENU(menuItems));
+            cb?.();
+            dispatch(AuthActions.fetchMe());
+        } catch (error) {
+            console.log(error, 'saveRoleMenu error');
         }
     },
     postRole: (reset, data, cb, uniqueId) => async (dispatch, _) => {

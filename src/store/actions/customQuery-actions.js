@@ -26,16 +26,15 @@ const CustomQueryActions = {
     },
     getUserList: (reset=true,args="") => async (dispatch, _) => {
         try {
-            console.log("AuthActions.signin")
-            const res = await Api.get({ url: `${Urls.querybuilder_userList}${args!=""?"?"+args:""}`})
+            const res = await Api.get({ url: `${Urls.admin_userList}${args!=""?"?"+args:""}`})
             if (res?.status !== 200) return
-            console.log(res.data, "res.data")
-            const dataAll = res.data.data
+            const dataAll = (res.data.data ?? []).map((u) => ({
+                value: u.id,
+                label: `${u.firstname ?? ''} ${u.lastname ?? ''}`.trim() || u.username || String(u.id),
+            }))
             dispatch(USERS_LIST({dataAll,reset}))
         } catch (error) {
             console.log(error, "amit errorerror 37")
-
-            // dispatch(Notify.error('something went wrong! please try again after a while'))
         }
     },
     getTablesList: (reset, data, cb) => async (dispatch, _) => {

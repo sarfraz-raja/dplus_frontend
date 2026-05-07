@@ -5,10 +5,19 @@ import Api from '../../utils/api';
 import { Urls } from '../../utils/url';
 import nokiaPrePostActions from '../../store/actions/nokiaPrePost-actions';
 import AutoSuggestion from '../../components/FormElements/AutoSuggestion';
-import Table from '../../components/Table';
+import DataTable from '../../components/DataTable';
 import Button from '../../components/Button';
 
 const FILTERS = ['All', 'Issues only', 'Warnings', 'OK only', 'Accessibility', 'Capacity', 'Mobility', 'Integrity', 'Quality'];
+
+const COLUMNS = [
+    { label: 'Tech',             key: '_tech'     },
+    { label: 'Rule Name',        key: 'rule_name' },
+    { label: 'Category',         key: '_category' },
+    { label: 'Details',          key: 'details'   },
+    { label: 'Status',           key: '_status'   },
+    { label: 'Issues / Remarks', key: '_issues'   },
+];
 
 const statusColor = (s = '') => {
     const v = s.toLowerCase();
@@ -27,6 +36,15 @@ const categoryColor = (c = '') => {
         case 'quality':       return '#be185d';
         default:              return '#374151';
     }
+};
+
+const renderCell = (row, col) => {
+    if (col.key === '_tech')     return <span className="font-medium text-slate-700">{row.tech || row.technology || '-'}</span>;
+    if (col.key === '_category') return <span className="font-semibold" style={{ color: categoryColor(row.category) }}>{row.category || '-'}</span>;
+    if (col.key === '_status')   return <span className="font-semibold" style={{ color: statusColor(row.status) }}>{row.status || '-'}</span>;
+    if (col.key === '_issues')   return <span className="text-slate-600">{row.issues || row.remarks || '-'}</span>;
+    const val = row[col.key];
+    return <span className="text-slate-700">{val ?? '-'}</span>;
 };
 
 const CellProRulesPage = () => {
@@ -50,7 +68,6 @@ const CellProRulesPage = () => {
     const [error,        setError]        = useState(null);
     const [filter,       setFilter]       = useState('All');
 
-    // Auto-fetch if cell came from URL
     useEffect(() => {
         if (urlCellName) fetchCellProRules(urlCellName, date);
     }, []);
@@ -121,16 +138,20 @@ const CellProRulesPage = () => {
         required: true,
     };
 
+    const emptyMessage = loading
+        ? 'Loading…'
+        : error || (total === 0 && cellData.length === 0 ? 'Enter a Cell Name and click Submit to load data.' : 'No records match this filter.');
+
     return (
         <div
-            className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
+            className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden p-5 gap-4"
             style={{ background: '#ffffff' }}
         >
             {/* ── Header ── */}
             <div className="flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                        style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
+                        style={{ background: '#0b1830' }}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M7 15l5-5 5 5" />
                             <path d="M12 20V4" />
@@ -197,33 +218,15 @@ const CellProRulesPage = () => {
                 </div>
             )}
 
-            {/* ── Table ── */}
-            <div className="flex-1 overflow-auto">
-                <div className="rounded-xl border border-slate-200 shadow-sm overflow-hidden bg-white">
-                    <Table headers={['Tech', 'Rule Name', 'Category', 'Details', 'Status', 'Issues / Remarks']} className="min-w-full text-left text-sm">
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={6} className="text-center text-slate-400 py-16 text-sm">Loading...</td></tr>
-                            ) : filteredData.length === 0 ? (
-                                <tr><td colSpan={6} className="text-center text-slate-400 py-16 text-sm">
-                                    {error || (total === 0 && cellData.length === 0 ? 'Enter a Cell Name and click Submit to load data.' : 'No records match this filter.')}
-                                </td></tr>
-                            ) : (
-                                filteredData.map((item, idx) => (
-                                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                        <td className="px-4 py-3 border-b border-slate-100 font-medium text-slate-700">{item.tech || item.technology || '-'}</td>
-                                        <td className="px-4 py-3 border-b border-slate-100 text-slate-700">{item.rule_name || '-'}</td>
-                                        <td className="px-4 py-3 border-b border-slate-100 font-semibold" style={{ color: categoryColor(item.category) }}>{item.category || '-'}</td>
-                                        <td className="px-4 py-3 border-b border-slate-100 text-slate-600">{item.details || '-'}</td>
-                                        <td className="px-4 py-3 border-b border-slate-100 font-semibold" style={{ color: statusColor(item.status) }}>{item.status || '-'}</td>
-                                        <td className="px-4 py-3 border-b border-slate-100 text-slate-600">{item.issues || item.remarks || '-'}</td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </Table>
-                </div>
-            </div>
+            {/* ── DataTable ── */}
+            <DataTable
+                columns={COLUMNS}
+                data={loading ? [] : filteredData}
+                renderCell={renderCell}
+                emptyMessage={emptyMessage}
+                searchPlaceholder="Search rules…"
+                countLabel="rule"
+            />
         </div>
     );
 };

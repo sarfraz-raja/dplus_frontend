@@ -1,188 +1,117 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import moment from 'moment';
-import * as Unicons from '@iconscout/react-unicons';
-import { useDispatch, useSelector } from 'react-redux';
-import AlertConfigurationActions from '../../../store/actions/alertConfiguration-actions';
-import CustomQueryActions from '../../../store/actions/customQuery-actions';
-import Modal from '../../../components/Modal';
-import CommonForm from '../../../components/CommonForm';
-import Button from '../../../components/Button';
+import { useDispatch } from 'react-redux';
 import AdminManagementActions from '../../../store/actions/adminManagement-actions';
-import { Sidebar_content } from '../../../utils/sidebar_values';
-import NestedDropdown from '../../../components/NestedDropdown';
-const RoleManagementForm = ({ isOpen, setIsOpen, resetting, formValue = {} }) => {
+import AuthActions from '../../../store/actions/auth-actions';
 
-    console.log(isOpen, setIsOpen, resetting, formValue, "formValueformValue")
+const inputCls = 'w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-slate-50 disabled:text-slate-400';
+const labelCls = 'block text-xs text-slate-500 uppercase tracking-wide mb-1';
+const errorCls = 'text-xs text-red-500 mt-0.5';
 
-    const [modalOpen, setmodalOpen] = useState(false)
-    const [filtering, setFiltering] = useState("Select * from values;")
-    const [gopen, SetgOpen] = useState([])
-    const [dataValue, setDataValue] = useState({})
+// Recursively set is_active on an item and all its descendants
+const setActiveDeep = (item, active) => ({
+    ...item,
+    is_active: active,
+    children: item.children?.map(child => setActiveDeep(child, active)) || [],
+});
 
-
-    let dispatch = useDispatch()
-    let roleList = useSelector((state) => {
-        // console.log(state, "state state")
-        return state?.adminManagement?.roleList
-    })
-    let databaseList = useSelector((state) => {
-        console.log(state, "state")
-        let interdata = state?.customQuery?.databaseList
-
-        console.log(interdata, "interdatainterdata")
-        return state?.customQuery?.databaseList
-    })
-    // let Form = [
-    //     { label: "DB Server", value: "", option: ["Please Select Your DB Server"], type: "select" },
-    //     { label: "Custom Queries", value: "", type: "textarea" }
-    // ]
-    let Form = [
-        {
-            label: "Role Name",
-            value: "",
-            name: "label",
-            type: "text",
-            required: true,
-            disabled: true,
-            props: {
-                onChange: ((e) => {
-                    // console.log(e.target.value, "e geeter")
-
-                    // setValue("queries",e.target.name)
-
-                }),
-            },
-            classes: "col-span-1"
+// Update an item by id anywhere in the tree; recalculate parent active state bottom-up
+const updateById = (items, id, active) =>
+    items.map(item => {
+        if (item.id === id) return setActiveDeep(item, active);
+        if (item.children?.length) {
+            const updatedChildren = updateById(item.children, id, active);
+            const anyChildActive = updatedChildren.some(c => c.is_active);
+            return { ...item, children: updatedChildren, is_active: anyChildActive };
         }
-    ]
+        return item;
+    });
 
-    const {
-        register,
-        handleSubmit,
-        watch,
-        reset,
-        setValue,
-        getValues,
-        formState: { errors },
-    } = useForm()
+const MenuRow = ({ item, depth, onChange }) => (
+    <div>
+        <label
+            className={`flex items-center gap-2.5 py-1.5 px-2 cursor-pointer rounded hover:bg-slate-50 select-none`}
+            style={{ paddingLeft: `${(depth * 20) + 8}px` }}
+        >
+            <input
+                type="checkbox"
+                checked={!!item.is_active}
+                onChange={e => onChange(item.id, e.target.checked)}
+                className="w-4 h-4 rounded accent-orange-500 cursor-pointer"
+            />
+            <span className={`text-sm ${depth === 0 ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>
+                {item.title}
+            </span>
+        </label>
+        {item.children?.map(child => (
+            <MenuRow key={child.id} item={child} depth={depth + 1} onChange={onChange} />
+        ))}
+    </div>
+);
 
-    const onSubmit = (data) => {
-        console.log(data)
-        // dispatch(AuthActions.signIn(data, () => {
-        //     navigate('/authenticate')
-        // }))
+const RoleManagementForm = ({ setIsOpen, resetting, formValue = {}, submitRef }) => {
+    const dispatch = useDispatch();
+    const [menuItems, setMenuItems] = useState([]);
 
-    }
-
-
-    const onTableViewSubmit = (data) => {
-        console.log(data, dataValue, "datadata")
-
-        data["permission"] = JSON.stringify(dataValue)
-
-
-
-        // dasdsadsadasdas
-        if (data.value) {
-            dispatch(AdminManagementActions.postRole(true, data, () => {
-                console.log("CustomQueryActions.postDBConfig")
-                setIsOpen(false)
-                dispatch(AdminManagementActions.getRoleList())
-            }, data.value))
-        } else {
-            dispatch(AdminManagementActions.postRole(true, data, () => {
-                console.log("CustomQueryActions.postDBConfig")
-                setIsOpen(false)
-                dispatch(AdminManagementActions.getRoleList())
-            }))
-        }
-
-
-    }
-
-
-
-
-
-    console.log(Form, "Form 11")
-
-
-    console.log("Sidebar_content", Sidebar_content["all_routes"])
-
-
+    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
 
     useEffect(() => {
-        dispatch(AdminManagementActions.getRoleList())
-        console.log(formValue,"formValueformValue")
+        reset({});
         if (resetting) {
-            reset({})
-            Form.map((fieldName) => {
-                setValue(fieldName["name"], fieldName["value"]);
-            });
+            setMenuItems([]);
         } else {
-            reset({})
-
-            console.log(formValue["permission"],"formValue[")
-            if(formValue["permission"]!=null){
-                setDataValue(JSON.parse(formValue["permission"]))
-            }else{
-                setDataValue({})
-            }
-            console.log(Object.keys(formValue), "Object.keys(formValue)")
-            Object.keys(formValue).forEach((key) => {
-                if (["endAt", "startAt","permission"].indexOf(key) != -1) {
-                    console.log("date formValuekey", key, formValue[key])
-                    const momentObj = moment(formValue[key]);
-                    setValue(key, momentObj.toDate());
-
-
-                } else {
-                    // console.log("formValuekey",key,key)
-                    setValue(key, formValue[key]);
-                }
-            })
-
-            
-
+            const menu = formValue.menuPermission;
+            setMenuItems(Array.isArray(menu) ? JSON.parse(JSON.stringify(menu)) : []);
+            Object.keys(formValue).forEach(key => {
+                if (!['permission', 'menuPermission'].includes(key)) setValue(key, formValue[key]);
+            });
         }
-    }, [formValue, resetting])
-    return <>
+    }, [formValue, resetting]);
 
+    const handleChange = (id, active) => {
+        setMenuItems(prev => updateById(prev, id, active));
+    };
 
-        <Modal
-            size={"sm"}
-            children={<>
-                <CommonForm classes={"grid-cols-1 gap-1"} Form={Form} errors={errors} register={register} setValue={setValue} getValues={getValues} />
-            </>}
-            isOpen={modalOpen}
-            setIsOpen={setmodalOpen} />
+    const onSubmit = (data) => {
+        const done = () => {
+            setIsOpen(false);
+            dispatch(AdminManagementActions.getRoleList());
+            dispatch(AuthActions.fetchMe());
+        };
+        if (data.value) {
+            dispatch(AdminManagementActions.saveRoleMenu(data.value, menuItems, done));
+        } else {
+            done();
+        }
+    };
 
-        <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-3xl">
+    useEffect(() => { if (submitRef) submitRef.current = handleSubmit(onSubmit); });
 
-            <CommonForm classes={"grid-cols-2 gap-1"} Form={Form} errors={errors} register={register} setValue={setValue} getValues={getValues} />
-            {/* <button></button> */}
+    return (
+        <div className="flex flex-col gap-5">
 
-            <div className='grid grid-cols-1 sm:grid-cols-2 gap-x-8'>
-
-
-                    {
-                        Sidebar_content["all_routes"].map((itm) => {
-                            return <>
-                                <NestedDropdown filtering={filtering} SetgOpen={SetgOpen} gopen={gopen} setDataValue={setDataValue} dataValue={dataValue} itm={itm} value={20} size={0} parentation={itm} />
-                            </>
-                        })
-                    }
+            <div>
+                <label className={labelCls}>Role Name <span className="text-red-400">*</span></label>
+                <input type="text" className={inputCls} placeholder="Role name" disabled
+                    {...register('label', { required: 'Required' })} />
+                {errors.label && <p className={errorCls}>{errors.label.message}</p>}
             </div>
 
-            {/* <button onClick={() => { setmodalOpen(true) }} className='flex bg-primaryLine mt-6 w-42 absolute right-1 top-1 justify-center rounded-md bg-pbutton px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bg-pbutton'>Add DB Type <Unicons.UilPlus /></button> */}
-            {/* <Table headers={["S.No.", "DB Type", "DB Server", "DB Name", "Created By", "Created Date", "Last Modified By", "Last Modified Date", "Actions"]} columns={[["1", "abcd", "ancd", "abcd", "ancd"], ["2", "adsa", "dasdas", "abcd", "ancd"]]} /> */}
-            {/* <button onClick={(handleSubmit(onTableViewSubmit))} className='bg-primaryLine mt-6 w-full justify-center rounded-md bg-pbutton px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bg-pbutton'>Submit</button> */}
-            <Button classes={"mt-2 "} onClick={(handleSubmit(onTableViewSubmit))} name="Submit" />
+            <div>
+                <p className={labelCls}>Module Permissions</p>
+                {menuItems.length === 0 ? (
+                    <p className="text-sm text-slate-400 py-2">No menu items available.</p>
+                ) : (
+                    <div className="flex flex-col border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
+                        {menuItems.map(item => (
+                            <MenuRow key={item.id} item={item} depth={0} onChange={handleChange} />
+                        ))}
+                    </div>
+                )}
+            </div>
+
         </div>
-    </>
-
-
+    );
 };
 
 export default RoleManagementForm;

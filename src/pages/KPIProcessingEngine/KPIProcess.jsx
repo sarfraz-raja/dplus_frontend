@@ -94,7 +94,7 @@ const KPIProcess = () => {
             <div className="flex items-center gap-3 shrink-0">
                 <div
                     className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}
+                    style={{ background: '#0b1830' }}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>

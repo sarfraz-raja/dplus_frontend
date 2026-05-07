@@ -113,7 +113,7 @@ const CellAnalyticsProPage = () => {
             <div className="flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                        style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
+                        style={{ background: '#0b1830' }}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                             <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
                             <line x1="8" y1="21" x2="16" y2="21" />

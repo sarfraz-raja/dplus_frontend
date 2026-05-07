@@ -321,12 +321,12 @@ const Profile = () => {
 
             <label className="block min-w-0">
               <span className={labelClass}><User className="h-4 w-4 text-[#F26522]" />Username</span>
-              <input type="text" value={profile?.username || ''} onChange={(e) => handleChange('username', e.target.value)} className={inputClass} placeholder="Enter username" />
+              <input type="text" value={profile?.username || ''} readOnly className={`${inputClass} cursor-not-allowed opacity-60 select-text`} placeholder="Username" />
             </label>
 
             <label className="block min-w-0">
               <span className={labelClass}><Mail className="h-4 w-4 text-[#F26522]" />Email ID</span>
-              <input type="email" value={profile?.email || ''} onChange={(e) => handleChange('email', e.target.value)} className={inputClass} placeholder="Enter email address" />
+              <input type="email" value={profile?.email || ''} readOnly className={`${inputClass} cursor-not-allowed opacity-60 select-text`} placeholder="Enter email address" />
             </label>
 
             <label className="block min-w-0">

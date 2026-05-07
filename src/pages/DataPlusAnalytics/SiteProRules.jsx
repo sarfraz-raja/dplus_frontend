@@ -91,14 +91,14 @@ const SiteProRules = () => {
     ]
     return <>
         <div className="w-full min-h-full bg-slate-50">
-            <div className="flex flex-col min-h-full" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}>
+            <div className="flex flex-col min-h-full" style={{ background: '#ffffff' }}>
 
                 <div className="px-6 py-6">
                     <div className="mx-auto max-w-7xl space-y-6">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-md"
-                                    style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
+                                    style={{ background: '#0b1830' }}>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                                         <path d="M7 15l5-5 5 5" />
                                         <path d="M12 20V4" />

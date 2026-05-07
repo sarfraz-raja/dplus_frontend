@@ -1,3 +1,5 @@
+import React from 'react';
+
 const ORANGE = '#EC7D09';
 
 /**
@@ -24,6 +26,7 @@ const FormModal = ({
     size = 'form',
     children,
     footer,
+    contained = false,   // true → overlay scoped to nearest `relative` ancestor
 }) => {
     if (!isOpen) return null;
 
@@ -33,13 +36,19 @@ const FormModal = ({
         size === 'lg'   ? 'w-[94vw] md:w-[860px]  max-h-[90vh]' :
                           'w-[94vw] md:w-[640px]   max-h-[90vh]';
 
+    const positionClass = contained ? 'absolute inset-0 z-[400]' : 'fixed inset-0 z-[4000]';
+
+    const backdropRef = React.useRef(false);
+
     return (
         <div
-            className="z-[4000] flex justify-center items-center fixed inset-0"
+            className={`${positionClass} flex justify-center items-center`}
             style={{ background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)' }}
-            onClick={() => setIsOpen(false)}
+            onMouseDown={() => { backdropRef.current = true; }}
+            onMouseUp={() => { if (backdropRef.current) setIsOpen(false); backdropRef.current = false; }}
         >
             <div
+                onMouseDown={(e) => { e.stopPropagation(); backdropRef.current = false; }}
                 onClick={(e) => e.stopPropagation()}
                 className={`flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden border border-white/10 ${sizeClass}`}
             >

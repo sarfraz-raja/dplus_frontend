@@ -577,30 +577,35 @@ const QueryWorkbench = () => {
     return (
         <>
         <div
-            className="flex flex-col p-2 gap-2 overflow-hidden"
+            className="flex flex-col p-5 gap-4 overflow-hidden"
             style={{ height: 'calc(100vh - 4rem)', background: '#ffffff' }}
         >
             {/* ── Header ── */}
-            <div className="flex items-center gap-2 shrink-0">
-                {/* Mobile sidebar toggle */}
-                <button
-                    className="sm:hidden p-1.5 rounded-lg border border-slate-200 bg-white shadow-sm shrink-0"
-                    onClick={() => setShowSidebar(s => !s)}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-                </button>
-                <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center shadow-md shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                    </svg>
+            <div className="flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                    {/* Mobile sidebar toggle */}
+                    <button
+                        className="sm:hidden p-1.5 rounded-lg border border-slate-200 bg-white shadow-sm shrink-0"
+                        onClick={() => setShowSidebar(s => !s)}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                    </button>
+                    <div
+                        className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
+                        style={{ background: '#0b1830' }}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-bold text-slate-800 leading-tight">Query Workbench</h1>
+                        <p className="text-xs text-slate-400 font-medium tracking-wide">Write and execute custom SQL queries</p>
+                    </div>
                 </div>
-                <h1 className="text-base font-bold text-slate-800 leading-tight">Query Workbench</h1>
 
                 {/* Mode Switcher */}
-                <div className="ml-2 sm:ml-4 flex rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-white">
+                <div className="flex rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-white">
                     {[{ key: 'sql', label: 'SQL Mode' }, { key: 'builder', label: 'Visual Builder' }].map(m => (
                         <button
                             key={m.key}

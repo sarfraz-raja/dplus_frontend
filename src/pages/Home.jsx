@@ -9,7 +9,7 @@ const Home = () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-white px-6 py-6 dark:bg-gradient-to-br dark:from-[#0f1419] dark:to-[#1a1f2e]">
+    <div className="h-[calc(100vh-4rem)] overflow-hidden bg-white px-6 py-6 dark:bg-gradient-to-br dark:from-[#0f1419] dark:to-[#1a1f2e]">
       <div className="mx-auto h-full max-w-[1600px] flex flex-col">
         <section className="mb-6">
           <p className="text-xs font-bold uppercase tracking-widest text-[#090728] dark:text-blue-400">Dashboard</p>

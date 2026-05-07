@@ -164,13 +164,13 @@ const XAlertConfigure = () => {
     return (
         <>
             <div className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
-                style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 50%, #fef3c7 100%)' }}>
+                style={{ background: '#ffffff' }}>
 
                 {/* Top header */}
                 <div className="flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                            style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
+                            style={{ background: '#0b1830' }}>
                             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
                                 <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>

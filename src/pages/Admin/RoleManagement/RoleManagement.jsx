@@ -1,182 +1,139 @@
-import React, { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import * as Unicons from '@iconscout/react-unicons';
+import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import AdvancedTable from '../../../components/AdvancedTable';
-import Modal from '../../../components/Modal';
-import Button from '../../../components/Button';
-import CstmButton from '../../../components/CstmButton';
-import EditButton from '../../../components/EditButton';
-import DeleteButton from '../../../components/DeleteButton';
-import ToggleButton from '../../../components/ToggleButton';
 import AdminManagementActions from '../../../store/actions/adminManagement-actions';
+import Button from '../../../components/Button';
+import FormModal from '../../../components/FormModal';
+import DataTable from '../../../components/DataTable';
 import RoleManagementForm from './RoleManagementForm';
 
-
+const COLUMNS = [
+    { label: 'Role Name',     key: 'label'      },
+    { label: 'Module Access', key: 'permission' },
+    { label: 'Actions',       key: '_actions'   },
+];
 
 const RoleManagement = () => {
+    const dispatch = useDispatch();
+    const submitRef = useRef(null);
 
+    const [modalOpen,      setModalOpen]      = useState(false);
+    const [modalResetting, setModalResetting] = useState(false);
+    const [modalHead,      setModalHead]      = useState('');
+    const [formValue,      setFormValue]      = useState({});
 
-    const [modalOpen, setmodalOpen] = useState(false)
-    const [modalBody, setmodalBody] = useState(<></>)
-    const [modalHead, setmodalHead] = useState(<></>)
+    const roles = useSelector((s) => s?.adminManagement?.roleList ?? []);
+    const [menuCounts, setMenuCounts] = useState({});
 
-
-
-    let dispatch = useDispatch()
-    let dbConfigList = useSelector((state) => {
-        // console.log(state, "state state")
-        let interdata = state?.adminManagement?.roleList
-
-        return interdata.map((itm) => {
-            let updateditm = {
-                ...itm,
-                "status": <CstmButton child={<ToggleButton onChange={(e) => {
-
-                    console.log(e.target.checked, "e.target.checked")
-
-                    let data = {
-                        "enabled": e.target.checked ? 1 : 0
-                    }
-                    dispatch(AlertConfigurationActions.patchAlertConfig(true, data, () => {
-                        // alert(e.target.checked)
-                        e.target.checked = e.target.checked
-                    }, itm.id))
-
-                    // if(itm.enabled==0){
-                    //     itm.enabled=1
-                    // }else{
-                    //     itm.enabled=0
-                    // }
-                    // itm.enabled=itm.enabled==0?1:0
-
-                    console.log(itm.enabled, "itm.enabled")
-
-
-
-
-                }} defaultChecked={itm.enabled == 1 ? true : false}></ToggleButton>} />,
-
-                "edit": <CstmButton child={<EditButton name={""} onClick={() => {
-
-                    console.log(itm, "itm,dsadsadadada")
-                    setmodalOpen(true)
-                    dispatch(AdminManagementActions.getUsersList())
-                    setmodalHead("Edit User")
-                    setmodalBody(<>
-                        <RoleManagementForm isOpen={modalOpen} setIsOpen={setmodalOpen} resetting={false} formValue={itm} />
-                        {/* <div className='mx-3'><Button name={"Submit"} classes={""} onClick={(handleSubmit(onTableViewSubmit))} /></div> */}
-                    </>)
-                }}></EditButton>} />,
-
-
-                "delete": <CstmButton child={<DeleteButton name={""} onClick={() => {
-                    let msgdata = {
-                        show: true,
-                        icon: 'warning',
-                        buttons: [
-                            <Button classes='w-15 bg-green-500' onClick={() => {
-                                dispatch(CommonActions.deleteApiCaller(`${Urls.alertConfiguration_configureAlert}/${itm.uniqueId}`, () => {
-                                    dispatch(CustomQueryActions.getDBConfig())
-                                    dispatch(ALERTS({ show: false }))
-                                }))
-                            }} name={"OK"} />,
-                            <Button classes='w-24' onClick={() => {
-                                dispatch(ALERTS({ show: false }))
-                            }} name={"Cancel"} />
-                        ],
-                        text: "Are you sure you want to Delete?"
-                    }
-                    dispatch(ALERTS(msgdata))
-                }}></DeleteButton>} />
-            }
-            return updateditm
-        });
-    })
-
-    let dbConfigTotalCount = useSelector((state) => {
-        let interdata = state?.adminManagement?.roleList
-
-        if (interdata.length > 0) {
-            return interdata[0]["overall_table_count"]
-        } else {
-            return 0
-        }
-    })
-
-    const {
-        register,
-        handleSubmit,
-        watch,
-        setValue,
-        setValues,
-        getValues,
-        formState: { errors },
-    } = useForm()
-
-    let table = {
-        columns: [
-            {
-                name: "Role",
-                value: "label",
-                style: "min-w-[100px] max-w-[100px]"
-            },
-            {
-                name: "Module Access",
-                value: "permission"
-            },
-            {
-                name: "Permission",
-                value: "edit",
-                style: "min-w-[100px] max-w-[200px]"
-            }
-        ],
-        properties: {
-            rpp: [10, 20, 50, 100]
-        },
-        filter: []
-    }
-
-    const onSubmit = (data) => {
-        let value = data.reseter
-        delete data.reseter
-        dispatch(AdminManagementActions.getRoleList(value, objectToQueryString(data)))
-    }
+    const countActive = (items) => (items || []).reduce((sum, item) => {
+        return sum + (item.is_active ? 1 : 0) + countActive(item.children);
+    }, 0);
 
     useEffect(() => {
-        dispatch(AdminManagementActions.getRoleList())
-    }, [])
+        dispatch(AdminManagementActions.getRoleList());
+    }, []);
 
+    useEffect(() => {
+        if (!roles.length) return;
+        Promise.all(
+            roles.map(async (role) => {
+                const menu = await dispatch(AdminManagementActions.getRoleMenu(role.value));
+                return { id: role.value, count: Array.isArray(menu) ? countActive(menu) : 0 };
+            })
+        ).then(results => {
+            const counts = {};
+            results.forEach(r => { counts[r.id] = r.count; });
+            setMenuCounts(counts);
+        });
+    }, [roles]);
 
-    return <>
-        <AdvancedTable
+    const openEdit = async (itm) => {
+        submitRef.current = null;
+        setModalHead('Edit Role');
+        setModalResetting(false);
+        const menu = await dispatch(AdminManagementActions.getRoleMenu(itm.value));
+        setFormValue({ ...itm, menuPermission: menu });
+        setModalOpen(true);
+    };
 
-            filterAfter={onSubmit}
-            tableName={"RoleManagement"}
-            handleSubmit={handleSubmit}
-            headerButton={<>
-                {/* <Button onClick={(e) => {
-                setmodalOpen(prev => !prev)
-                dispatch(AdminManagementActions.getRoleList())
-                setmodalHead("New Role")
-                setmodalBody(<RoleManagementForm isOpen={modalOpen} setIsOpen={setmodalOpen} resetting={true} formValue={{}} />)
-            }} name={"Add New"}></Button> */}
-            </>}
-            table={table}
-            data={dbConfigList}
-            errors={errors}
-            register={register}
-            setValue={setValue}
-            getValues={getValues}
-            totalCount={dbConfigTotalCount}
-        />
+    const renderCell = (row, col) => {
+        if (col.key === '_actions') return (
+            <button
+                onClick={() => openEdit(row)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-[#0b1830]/20 text-[#0b1830] bg-[#0b1830]/5 hover:bg-[#0b1830]/10 transition-colors"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                Edit
+            </button>
+        );
 
-        <Modal size={"xl"} modalHead={modalHead} children={modalBody} isOpen={modalOpen} setIsOpen={setmodalOpen} />
+        if (col.key === 'permission') {
+            const count = menuCounts[row.value] ?? '—';
+            return (
+                <span className="px-2 py-0.5 rounded text-xs font-medium bg-[#0b1830]/8 text-[#0b1830]">
+                    {count}{typeof count === 'number' ? ` permission${count !== 1 ? 's' : ''}` : ''}
+                </span>
+            );
+        }
 
-        {/* <CommonForm/> */}
-    </>
+        const val = row[col.key];
+        return <span className="truncate max-w-[200px] block text-slate-700" title={String(val ?? '')}>{val}</span>;
+    };
 
+    return (
+        <>
+            <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden p-5 gap-4" style={{ background: '#ffffff' }}>
 
+                {/* Header */}
+                <div className="flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
+                            style={{ background: '#0b1830' }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-slate-800 leading-tight">Role Management</h1>
+                            <p className="text-xs text-slate-400 font-medium tracking-wide">Configure roles and module access permissions</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* DataTable */}
+                <DataTable
+                    columns={COLUMNS}
+                    data={roles}
+                    renderCell={renderCell}
+                    emptyMessage="No roles found."
+                    searchPlaceholder="Search roles…"
+                    countLabel="role"
+                />
+            </div>
+
+            {/* Edit modal */}
+            <FormModal
+                title={modalHead}
+                isOpen={modalOpen}
+                setIsOpen={setModalOpen}
+                footer={
+                    <div className="flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+                        <Button variant="primary" onClick={() => submitRef.current?.()}>Save Changes</Button>
+                    </div>
+                }
+            >
+                <RoleManagementForm
+                    setIsOpen={setModalOpen}
+                    resetting={modalResetting}
+                    formValue={formValue}
+                    submitRef={submitRef}
+                />
+            </FormModal>
+        </>
+    );
 };
 
 export default RoleManagement;

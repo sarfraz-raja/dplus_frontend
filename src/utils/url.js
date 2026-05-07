@@ -1,5 +1,3 @@
-
-
 const trimTrailingSlash = (value = "") => value.replace(/\/+$/, "");
 const toFlag = (value, fallback = false) => {
   if (value === undefined || value === null || value === "") return fallback;
@@ -38,6 +36,7 @@ export const Urls={
     setupConf:"/setupConf",
     admin_userList:"/admin/users",
     admin_roleList:"/admin/roles",
+    role_menu:"/sidebar-menu",
     querybuilder_userList:"/userList",
     querybuilder_getDatabase:"/querybuilder/getDatabase",
     querybuilder_getTables:"/querybuilder/getTables",

@@ -1,218 +1,143 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import moment from 'moment';
-import * as Unicons from '@iconscout/react-unicons';
 import { useDispatch, useSelector } from 'react-redux';
-import AlertConfigurationActions from '../../../store/actions/alertConfiguration-actions';
-import CustomQueryActions from '../../../store/actions/customQuery-actions';
-import Modal from '../../../components/Modal';
-import CommonForm from '../../../components/CommonForm';
-import Button from '../../../components/Button';
+import moment from 'moment';
 import AdminManagementActions from '../../../store/actions/adminManagement-actions';
-const UserManagementForm = ({ isOpen, setIsOpen, resetting, formValue = {} }) => {
 
-    console.log(isOpen, setIsOpen, resetting, formValue, "formValueformValue")
+const inputCls = 'w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-slate-50 disabled:text-slate-400';
+const labelCls = 'block text-xs text-slate-500 uppercase tracking-wide mb-1';
+const errorCls = 'text-xs text-red-500 mt-0.5';
 
-    const [modalOpen, setmodalOpen] = useState(false)
+const UserManagementForm = ({ setIsOpen, resetting, formValue = {}, submitRef }) => {
+    const dispatch = useDispatch();
+    const roleList = useSelector((s) => s?.adminManagement?.roleList ?? []);
 
-
-    let dispatch = useDispatch()
-    let roleList = useSelector((state) => {
-        // console.log(state, "state state")
-        return state?.adminManagement?.roleList
-    })
-    let databaseList = useSelector((state) => {
-        // console.log(state, "state")
-        let interdata = state?.customQuery?.databaseList
-
-        // console.log(interdata, "interdatainterdata")
-        return state?.customQuery?.databaseList
-    })
-    // let Form = [
-    //     { label: "DB Server", value: "", option: ["Please Select Your DB Server"], type: "select" },
-    //     { label: "Custom Queries", value: "", type: "textarea" }
-    // ]
-    let Form = [
-        {
-            label: "Login Type",
-            name: "loginType",
-            value: "Select",
-            type: "select",
-            option: [
-                { "label": "Password Based", "value": "PasswordBased" },
-                { "label": "Two Way Auth", "value": "TwoWayAuth" }
-            ],
-            props: "",
-            required: true,
-            classes: "col-span-1"
-        }, {
-            label: "First Name",
-            value: "",
-            name: "firstname",
-            type: "text",
-            required: true,
-            props: {
-                onChange: ((e) => {
-                    // console.log(e.target.value, "e geeter")
-
-                    // setValue("queries",e.target.name)
-
-                }),
-            },
-            classes: "col-span-1"
-        }, {
-            label: "Last Name",
-            value: "",
-            name: "lastname",
-            type: "text",
-            required: true,
-            props: {
-                onChange: ((e) => {
-                    // console.log(e.target.value, "e geeter")
-
-                    // setValue("queries",e.target.name)
-
-                }),
-            },
-            classes: "col-span-1"
-        }, {
-            label: "Username",
-            value: "",
-            name: "username",
-            type: "text",
-            required: true,
-            props: {
-                onChange: ((e) => {
-                    // console.log(e.target.value, "e geeter")
-
-                    // setValue("queries",e.target.name)
-
-                }),
-            },
-            classes: "col-span-1"
-        }, {
-            label: "Password",
-            value: "",
-            name: "password",
-            type: "password",
-            required: true,
-            props: {
-                onChange: ((e) => {
-                    // console.log(e.target.value, "e geeter")
-
-                    // setValue("queries",e.target.name)
-
-                }),
-            },
-            classes: "col-span-1"
-        }, {
-            label: "Role",
-            name: "roleId",
-            value: "Select",
-            type: "select",
-            option: roleList,
-            props: "",
-            required: true,
-            classes: "col-span-1"
-        }, 
-        // { label: "User", value: "", option: ["User Name"], type: "select" }
-    ]
-
-    const {
-        register,
-        handleSubmit,
-        watch,
-        reset,
-        setValue,
-        getValues,
-        formState: { errors },
-    } = useForm()
-
-    const onSubmit = (data) => {
-        console.log(data)
-        // dispatch(AuthActions.signIn(data, () => {
-        //     navigate('/authenticate')
-        // }))
-
-    }
-
-
-    const onTableViewSubmit = (data) => {
-        console.log(data, "datadata")
-
-
-
-
-        // dasdsadsadasdas
-        if (data.id) {
-            dispatch(AdminManagementActions.postUser(true, data, () => {
-                console.log("CustomQueryActions.postDBConfig")
-                setIsOpen(false)
-                dispatch(AdminManagementActions.getUsersList())
-            }, data.id))
-        } else {
-            dispatch(AdminManagementActions.postUser(true, data, () => {
-                console.log("CustomQueryActions.postDBConfig")
-                setIsOpen(false)
-                dispatch(AdminManagementActions.getUsersList())
-            }))
-        }
-
-
-    }
-
-
-
-
-
-    console.log(Form, "Form 11")
-
-
+    const { register, handleSubmit, reset, setValue, setError, formState: { errors } } = useForm();
 
     useEffect(() => {
-        dispatch(AdminManagementActions.getRoleList())
+        dispatch(AdminManagementActions.getRoleList());
+        reset({});
+        setValue('sendEmail', resetting);
+        if (resetting) return;
+        // logintype / login_type are backend variants — normalised below, skip here to avoid duplicate keys
+        const skipKeys = new Set(['logintype', 'login_type', 'sendemail', 'send_email']);
+        Object.keys(formValue).forEach((key) => {
+            if (skipKeys.has(key)) return;
+            if (['endAt', 'startAt'].includes(key)) {
+                setValue(key, moment(formValue[key]).toDate());
+            } else {
+                setValue(key, formValue[key]);
+            }
+        });
+        // Normalise loginType regardless of what casing the backend returned
+        const loginType = formValue.loginType || formValue.logintype || formValue.login_type;
+        if (loginType) setValue('loginType', loginType);
+    }, [formValue, resetting]);
 
-        if (resetting) {
-            reset({})
-            Form.map((fieldName) => {
-                setValue(fieldName["name"], fieldName["value"]);
-            });
+    const handleServerError = (errData) => {
+        const msg = errData?.msg || errData?.message || 'Something went wrong. Please try again.';
+        setError('root.server', { type: 'server', message: msg });
+    };
+
+    const onSubmit = (data) => {
+        if (data.id) {
+            dispatch(AdminManagementActions.postUser(true, data, () => {
+                setIsOpen(false);
+                dispatch(AdminManagementActions.getUsersList());
+            }, data.id, handleServerError));
         } else {
-            reset({})
-
-            console.log(Object.keys(formValue), "Object.keys(formValue)")
-            const formFieldNames = Form.map(f => f.name)
-            Object.keys(formValue).forEach((key) => {
-                if (!formFieldNames.includes(key) && key !== 'id' && key !== 'uniqueId') return
-                if (["endAt", "startAt"].indexOf(key) != -1) {
-                    console.log("date formValuekey", key, formValue[key])
-                    const momentObj = moment(formValue[key]);
-                    setValue(key, momentObj.toDate());
-                } else {
-                    setValue(key, formValue[key]);
-                }
-            })
+            dispatch(AdminManagementActions.postUser(true, data, () => {
+                setIsOpen(false);
+                dispatch(AdminManagementActions.getUsersList());
+            }, null, handleServerError));
         }
-    }, [formValue, resetting])
-    return <>
+    };
 
+    useEffect(() => {
+        if (submitRef) submitRef.current = handleSubmit(onSubmit);
+    });
 
-        <Modal size={"sm"} children={<><CommonForm classes={"grid-cols-1 gap-1"} Form={Form} errors={errors} register={register} setValue={setValue} getValues={getValues} /></>} isOpen={modalOpen} setIsOpen={setmodalOpen} />
+    return (
+        <div className="flex flex-col gap-0">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
 
-        <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
+            <div>
+                <label className={labelCls}>Login Type <span className="text-red-400">*</span></label>
+                <select className={inputCls} {...register('loginType', { required: 'Required' })}>
+                    <option value="">Select</option>
+                    <option value="PasswordBased">Password Based</option>
+                    <option value="TwoWayAuth">Two Way Auth</option>
+                </select>
+                {errors.loginType && <p className={errorCls}>{errors.loginType.message}</p>}
+            </div>
 
-            <CommonForm classes={"grid-cols-1 gap-1"} Form={Form} errors={errors} register={register} setValue={setValue} getValues={getValues} />
-            {/* <button></button> */}
+            <div>
+                <label className={labelCls}>Role <span className="text-red-400">*</span></label>
+                <select className={inputCls} {...register('roleid', { required: 'Required' })}>
+                    <option value="">Select role</option>
+                    {roleList.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                </select>
+                {errors.roleid && <p className={errorCls}>{errors.roleid.message}</p>}
+            </div>
 
+            <div>
+                <label className={labelCls}>First Name <span className="text-red-400">*</span></label>
+                <input type="text" className={inputCls} placeholder="First name"
+                    {...register('firstname', { required: 'Required' })} />
+                {errors.firstname && <p className={errorCls}>{errors.firstname.message}</p>}
+            </div>
 
-            {/* <button onClick={() => { setmodalOpen(true) }} className='flex bg-primaryLine mt-6 w-42 absolute right-1 top-1 justify-center rounded-md bg-pbutton px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bg-pbutton'>Add DB Type <Unicons.UilPlus /></button> */}
-            {/* <Table headers={["S.No.", "DB Type", "DB Server", "DB Name", "Created By", "Created Date", "Last Modified By", "Last Modified Date", "Actions"]} columns={[["1", "abcd", "ancd", "abcd", "ancd"], ["2", "adsa", "dasdas", "abcd", "ancd"]]} /> */}
-            {/* <button onClick={(handleSubmit(onTableViewSubmit))} className='bg-primaryLine mt-6 w-full justify-center rounded-md bg-pbutton px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bg-pbutton'>Submit</button> */}
-            <Button classes={"mt-2 "} onClick={(handleSubmit(onTableViewSubmit))} name="Submit" />
+            <div>
+                <label className={labelCls}>Last Name <span className="text-red-400">*</span></label>
+                <input type="text" className={inputCls} placeholder="Last name"
+                    {...register('lastname', { required: 'Required' })} />
+                {errors.lastname && <p className={errorCls}>{errors.lastname.message}</p>}
+            </div>
+
+            <div>
+                <label className={labelCls}>Username <span className="text-red-400">*</span></label>
+                <input type="text" className={inputCls} placeholder="Username"
+                    {...register('username', { required: 'Username is required' })} />
+                {errors.username && <p className={errorCls}>{errors.username.message}</p>}
+            </div>
+
+            <div>
+                <label className={labelCls}>Email <span className="text-red-400">*</span></label>
+                <input type="email" className={inputCls} placeholder="Email address"
+                    {...register('email', {
+                        required: 'Email is required',
+                        pattern: {
+                            value: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
+                            message: 'Enter a valid email address (e.g. user@example.com)',
+                        },
+                    })} />
+                {errors.email && <p className={errorCls}>{errors.email.message}</p>}
+            </div>
+
+            <div>
+                <label className={labelCls}>Password {resetting && <span className="text-red-400">*</span>}</label>
+                <input type="password" className={inputCls}
+                    placeholder={resetting ? 'Password' : 'Leave blank to keep unchanged'}
+                    {...register('password', { required: resetting ? 'Password is required' : false })} />
+                {errors.password && <p className={errorCls}>{errors.password.message}</p>}
+            </div>
+
         </div>
-    </>
 
+        <label className="mt-4 flex items-center gap-2.5 cursor-pointer select-none w-fit">
+            <input type="checkbox" className="w-4 h-4 rounded border-slate-300 accent-orange-500 cursor-pointer" {...register('sendEmail')} />
+            <span className="text-sm text-slate-600">Send email to user</span>
+        </label>
 
+        {errors.root?.server && (
+            <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 border border-red-200">
+                {errors.root.server.message}
+            </p>
+        )}
+        </div>
+    );
 };
 
 export default UserManagementForm;

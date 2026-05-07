@@ -25,6 +25,10 @@ const adminManagement = createSlice({
             }
         },
 
+        REMOVE_USER: (state, { payload }) => {
+            state.usersList = state.usersList.filter((u) => u.id !== payload);
+        },
+
         RESET_STATE: (state) => {
             state.roleList = [];
             state.usersList = {};
@@ -33,5 +37,5 @@ const adminManagement = createSlice({
     }
 })
 
-export const { ROLE_LIST, USERS_LIST, RESET_STATE } = adminManagement.actions
+export const { ROLE_LIST, USERS_LIST, REMOVE_USER, RESET_STATE } = adminManagement.actions
 export default adminManagement.reducer

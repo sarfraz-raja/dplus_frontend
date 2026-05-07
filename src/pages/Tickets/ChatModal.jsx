@@ -77,17 +77,11 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
         contentType: null,
       });
 
-      if (res.data?.success) {
-        // Clear input and files
+      if (res?.status === 200) {
         setNewMessage("");
         setSelectedFiles([]);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-        
-        // Immediately fetch updated messages
+        if (fileInputRef.current) fileInputRef.current.value = "";
         await fetchMessages();
-        toast.success("Message sent successfully");
       }
     } catch (err) {
       console.error("Error sending message:", err);
@@ -157,9 +151,9 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 transition-opacity" onClick={onClose}>
+    <div className="absolute inset-0 z-[400] overflow-y-auto">
+      <div className="flex items-center justify-center min-h-full px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div className="absolute inset-0 transition-opacity" onClick={onClose}>
           <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
         </div>
 
