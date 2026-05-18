@@ -36,27 +36,57 @@ const updateById = (items, id, active) =>
         return item;
     });
 
-const MenuRow = ({ item, depth, onChange }) => (
-    <div>
-        <label
-            className={`flex items-center gap-2.5 py-1.5 px-2 cursor-pointer rounded hover:bg-slate-50 select-none`}
-            style={{ paddingLeft: `${(depth * 20) + 8}px` }}
-        >
-            <input
-                type="checkbox"
-                checked={!!item.is_active}
-                onChange={e => onChange(item.id, e.target.checked)}
-                className="w-4 h-4 rounded accent-orange-500 cursor-pointer"
-            />
-            <span className={`text-sm ${depth === 0 ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>
-                {item.title}
-            </span>
-        </label>
-        {item.children?.map(child => (
-            <MenuRow key={child.id} item={child} depth={depth + 1} onChange={onChange} />
-        ))}
-    </div>
-);
+const MenuRow = ({ item, depth, onChange }) => {
+    const hasChildren = item.children?.length > 0;
+    const [open, setOpen] = useState(true);
+
+    return (
+        <div>
+            <div
+                className="flex items-center gap-2.5 py-1.5 px-2 rounded hover:bg-slate-50 select-none"
+                style={{ paddingLeft: `${(depth * 20) + 8}px` }}
+            >
+                <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
+                    <input
+                        type="checkbox"
+                        checked={!!item.is_active}
+                        onChange={e => onChange(item.id, e.target.checked)}
+                        className="w-4 h-4 rounded accent-orange-500 cursor-pointer shrink-0"
+                    />
+                    <span className={`text-sm truncate ${depth === 0 ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>
+                        {item.title}
+                    </span>
+                </label>
+                <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                    {item.sequence != null && (
+                        <span className="text-[10px] font-mono font-medium text-slate-400 bg-slate-100 rounded px-1.5 py-0.5 leading-none">
+                            #{item.sequence}
+                        </span>
+                    )}
+                    {hasChildren && (
+                        <button
+                            type="button"
+                            onClick={() => setOpen(o => !o)}
+                            className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg" width="11" height="11"
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                                style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s' }}
+                            >
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            </div>
+            {hasChildren && open && item.children.map(child => (
+                <MenuRow key={child.id} item={child} depth={depth + 1} onChange={onChange} />
+            ))}
+        </div>
+    );
+};
 
 const RoleManagementForm = ({ setIsOpen, resetting, formValue = {}, submitRef }) => {
     const dispatch = useDispatch();
