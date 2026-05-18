@@ -32,7 +32,7 @@ function topLevelIconLookupKey(rawTitle) {
  */
 export function meMenuToSidebarItems(menu, { resolveTopIcon }) {
   const walk = (nodes, isTop) =>
-    sortMenuBySequence(nodes)
+    (nodes || [])
       .filter((n) => n && n.is_active !== false)
       .map((n) => {
         const children = walk(n.children || [], false);
