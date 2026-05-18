@@ -459,6 +459,7 @@ const readStoredOpenCategories = () => {
   }
 };
 
+
 const persistOpenCategories = (categories) => {
   if (!categories.length) {
     localStorage.removeItem(OPEN_CATEGORY_STORAGE_KEY);
