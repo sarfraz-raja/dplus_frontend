@@ -142,6 +142,7 @@ export const SweetAlerts = () => {
         return interdata
     })
 
+    
     const [swalProps, setSwalProps] = useState({
         show: true,
         title: 'Example',
