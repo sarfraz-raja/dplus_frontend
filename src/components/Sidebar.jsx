@@ -300,7 +300,6 @@ const DASHBOARD_ICON_MAP = {
   Radio,
   Rss,
   Satellite,
-  Antenna,
   Monitor,
   Layout,
   Box,
