@@ -129,7 +129,7 @@ export const SweetAlerts = () => {
 
     const dispatch = useDispatch()
     let swAlerts = useSelector((state) => {
-        console.log(state, "statedsadsadsadsadasdsada")
+        // console.log(state, "statedsadsadsadsadasdsada")
         let interdata = state?.component?.alerts
         interdata = {
             ...interdata,
