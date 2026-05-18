@@ -362,13 +362,17 @@ const hasActiveItemInChildren = (children, activeTitle) => {
 const buildOrderedChildren = (rawChildren = [], childSpec = []) => {
   if (!Array.isArray(rawChildren)) return [];
 
-  const childMap = new Map(rawChildren.map((child) => [child.name, child]));
+  // const childMap = new Map(rawChildren.map((child) => [child.name, child]));
+  const childMap = new Map(
+  rawChildren.map((child) => [normTitle(child.name), child])
+);
   const used = new Set();
   const ordered = [];
 
   childSpec.forEach((specEntry) => {
     const spec = typeof specEntry === 'string' ? { name: specEntry } : specEntry;
-    const rawChild = childMap.get(spec.name);
+    // const rawChild = childMap.get(spec.name);
+    const rawChild = childMap.get(normTitle(spec.name));
     if (!rawChild) return;
 
     used.add(spec.name);
@@ -392,12 +396,16 @@ const buildOrderedChildren = (rawChildren = [], childSpec = []) => {
 };
 
 const buildOrderedMenu = (sourceMenu) => {
-  const sourceMap = new Map(sourceMenu.map((item) => [item.name, item]));
+  // const sourceMap = new Map(sourceMenu.map((item) => [item.name, item]));
+  const sourceMap = new Map(
+  sourceMenu.map((item) => [normTitle(item.name), item])
+);
   const used = new Set();
   const ordered = [];
 
   REFERENCE_MENU.forEach((specEntry) => {
-    const rawItem = sourceMap.get(specEntry.name);
+    // const rawItem = sourceMap.get(specEntry.name);
+    const rawItem = sourceMap.get(normTitle(specEntry.name));
     if (!rawItem) return;
 
     used.add(specEntry.name);
@@ -628,6 +636,7 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
           LayoutDashboard,
       }));
       apiItems = applyDynamicInsightsMenu(apiItems, dynamicInsightsRoot);
+      console.log("[Sidebar] Final rendered menu order:", apiItems.map((i) => i.title));
       // Admin always gets the Admin panel appended — but only if the API didn't already include it.
       if (rolename?.toLowerCase() === 'admin') {
         const apiTitles = new Set(apiItems.map((i) => i.title.toLowerCase()));

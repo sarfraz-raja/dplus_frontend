@@ -31,8 +31,12 @@ function topLevelIconLookupKey(rawTitle) {
  * @param {{ resolveTopIcon: (iconKey: string, rawTitle: string) => any }} opts
  */
 export function meMenuToSidebarItems(menu, { resolveTopIcon }) {
-  const walk = (nodes, isTop) =>
-    (nodes || [])
+  const walk = (nodes, isTop) => {
+    const sorted = sortMenuBySequence(nodes || []);
+    if (isTop) {
+      console.log("[Sidebar] API menu order after sort:", sorted.map((n) => ({ title: n.title, sequence: n.sequence })));
+    }
+    return sorted
       .filter((n) => n && n.is_active !== false)
       .map((n) => {
         const children = walk(n.children || [], false);
@@ -48,7 +52,9 @@ export function meMenuToSidebarItems(menu, { resolveTopIcon }) {
           children,
         };
       });
+  };
 
   if (!Array.isArray(menu) || !menu.length) return [];
+  console.log("[Sidebar] Raw API menu from Redux:", menu.map((n) => ({ title: n.title, sequence: n.sequence })));
   return walk(menu, true);
 }
