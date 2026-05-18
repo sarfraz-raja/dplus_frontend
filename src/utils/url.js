@@ -20,8 +20,9 @@ export const supersetUiOrigin = trimTrailingSlash(
     import.meta.env.VITE_SUPERSET_UI_ORIGIN 
 );
 export const supersetGuestTokenUrl = trimTrailingSlash(
-    import.meta.env.VITE_SUPERSET_GUEST_TOKEN_URL 
+    import.meta.env.VITE_SUPERSET_GUEST_TOKEN_URL
 );
+export const grafanaOrigin = trimTrailingSlash(import.meta.env.VITE_GRAFANA_URL);
 
 export const Urls={
     login:"/login",
@@ -87,6 +88,7 @@ export const Urls={
     rf_prediction_data: "/map/rf-predictions/data",
 
     gis_ta: "/kpi/multi-vendor/gis-ta",
+    neighbour_relations: "/map/neighbour-relations",
     cell_pro_rules: "/kpi/multi-vendor/cell-pro-rules",
     site_pro_rules: "/kpi/multi-vendor/site-pro-rules",
 

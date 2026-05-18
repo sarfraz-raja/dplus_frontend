@@ -1,3 +1,5 @@
+// STALE — only imported by the dead CellProRulesQueryOutput.jsx, which itself has no route.
+// Superseded by DataPlusAnalytics/CellProRulesPage.jsx.
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';

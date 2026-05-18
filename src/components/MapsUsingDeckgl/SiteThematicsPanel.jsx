@@ -488,8 +488,8 @@ const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,
     ]);
 
     useEffect(() => {
-        setSiteScale(mapConfig.mapScale ?? 1);
-    }, [mapConfig.mapScale]);
+        setSiteScale(mapConfig.siteScale ?? 1);
+    }, [mapConfig.siteScale]);
 
     useEffect(() => {
         // reset to Default mode and load new defaults when KPI changes

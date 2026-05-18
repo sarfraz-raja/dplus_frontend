@@ -26,7 +26,7 @@ import { ALERTS } from '../../store/reducers/component-reducer';
 import { FIXED_COLORS, getDriveTestColor } from "./Utils/colorEngine";
 import LegendBox from "./LegendBox";
 import LegendBoxV2 from "./LegendBoxV2";
-import { Check, Compass, Copy, MapPin, Maximize, Minus, Plus, Ruler, Settings, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Compass, Copy, MapPin, Maximize, Minus, Plus, Ruler, Settings, X } from "lucide-react";
 import {
   buildDraftMeasurement,
   buildDraftMeasurementLineCollection,
@@ -46,6 +46,53 @@ import { TELECOM_GIS_NAV_BTN_CLASS, TelecomMapStyleRightControl } from "./Teleco
 const USE_LEGEND_BOX_V2 = true;
 /** `false` → `CellInfoPopup`; `true` → `CellInfoPopupV2` (currently same UI as legacy). */
 const USE_CELL_INFO_POPUP_V2 = true;
+
+const NR_TYPE_COLORS = {
+  "2G-2G":       [234, 179,   8, 230],
+  "2G-3G":       [ 34, 197,  94, 230],
+  "3G-2G":       [249, 115,  22, 230],
+  "3G-3G_Intra": [ 59, 130, 246, 230],
+  "3G-3G_Inter": [168,  85, 247, 230],
+};
+
+const NR_TYPE_COLORS_LIGHT = {
+  "2G-2G":       [250, 220, 120, 180],
+  "2G-3G":       [120, 230, 150, 180],
+  "3G-2G":       [255, 180, 120, 180],
+  "3G-3G_Intra": [140, 180, 255, 180],
+  "3G-3G_Inter": [210, 160, 255, 180],
+};
+
+const NR_COLOR_DEFAULT = [107, 114, 128, 230];
+// const getNrColor = (type) => NR_TYPE_COLORS[type] ?? NR_COLOR_DEFAULT;
+const getNrColor = (type, biDirectional = true) => {
+
+  if (biDirectional) {
+    return NR_TYPE_COLORS[type] ?? NR_COLOR_DEFAULT;
+  }
+
+  return (
+    NR_TYPE_COLORS_LIGHT[type] ??
+    NR_COLOR_DEFAULT
+  );
+
+};
+
+// Smooth exponential zoomBoost — anchored at zoom 12, capped at 8 to prevent sector blowup
+// at zoom 9-11: z9-11→8, z12→6, z13→3, z15+→1. Sectors appear starting at zoom 9.
+const computeZoomBoost = (zoom) => Math.min(8, Math.max(1, 6 * Math.pow(0.5, zoom - 12)));
+
+// Arc tip at center azimuth — explicit mirror of generateCoordinates formula.
+// generateCoordinates(lng, lat, az, radius_m, radius_m*zoomBoost, mapScale*20) uses:
+//   factor = c_length / (69.093*9000) * (scale/20)  → *20 and /20 cancel
+//   → factor = radius_m * zoomBoost * mapScale / (69.093*9000)
+const getSectorTip = (lat, lng, azimuth, radius_m, mapScale = 1, zoomBoost = 1) => {
+  const c_length = radius_m * zoomBoost;
+  const scale    = mapScale * 20;
+  const factor   = c_length / (69.093 * 9000) * (scale / 20);
+  const azRad    = azimuth * Math.PI / 180;
+  return [lng + Math.sin(azRad) * factor, lat + Math.cos(azRad) * factor];
+};
 
 const DASHBOARD_UUID = "0ccb9f27-ef5c-47bb-8c86-5126f34bad2f";
 const FILTER_Id = "NATIVE_FILTER-Frwtlbdl8UhCOYVoGiXp9";
@@ -327,12 +374,28 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
   const rawSites = useSelector(state => state.map.rawSites);
   const activeSiteThematic = useSelector(state => state.map.activeSiteThematic);
   const selectedTaCells = useSelector(state => state.map.selectedTaCells || []);
+  const neighbourRelationsRaw = useSelector(state => state.map.neighbourRelations);
+  // Attach a pre-built Set of target cell_ids so getFillColor can do O(1) lookups
+  const neighbourRelations = useMemo(() => {
+    if (!neighbourRelationsRaw) return null;
+    return {
+      ...neighbourRelationsRaw,
+      targetIds: new Set(neighbourRelationsRaw.data?.map(d => d.target) ?? []),
+    };
+  }, [neighbourRelationsRaw]);
 
   const rulerMode = useSelector(state => state.map.rulerMode);
 
   const [localViewState, setLocalViewState] = useState(viewState);
   const [rulerHover, setRulerHover] = useState(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, cell }
+  const [taError, setTaError] = useState(null); // { cellId, message }
+  const [nrTooltip, setNrTooltip] = useState(null); // { x, y, source, target, type }
+  const [rfTooltip, setRfTooltip] = useState(null); // { x, y, range, color_hex, parameter }
+  const [nrSkippedDismissed, setNrSkippedDismissed] = useState(false);
+  const [nrPanelCollapsed, setNrPanelCollapsed] = useState(false);
+  const nrRadiusCacheRef = useRef({});
+  const [nrCacheTrigger, setNrCacheTrigger] = useState(0);
   const [hoveringRulerDot, setHoveringRulerDot] = useState(false);
   const [isDraggingRulerDot, setIsDraggingRulerDot] = useState(false);
   const [rulerSegments, setRulerSegments] = useState([]); // [{id, a:[lng,lat], b:[lng,lat]|null}]
@@ -401,6 +464,33 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
     if (rulerMode) setCoordinatePopup(null);
   }, [rulerMode]);
 
+  useEffect(() => {
+    // nrRadiusCacheRef.current = {};   // clear on source change — old targets are irrelevant
+    setNrSkippedDismissed(false);
+    setNrPanelCollapsed(false);
+  }, [neighbourRelations?.cellId]);
+
+  useEffect(() => {
+    dispatch(
+      MapActions.setLayerLegend(
+        "NEIGHBORS",
+        !!neighbourRelations?.data?.length
+      )
+    );
+  }, [dispatch, neighbourRelations]);
+
+  useEffect(() => {
+    const cache = nrRadiusCacheRef.current;
+    let grew = false;
+    rawCells.forEach(c => {
+      if (Number.isFinite(c.radius_m) && c.radius_m > 0 && cache[c.cell_id] === undefined) {
+        cache[c.cell_id] = c.radius_m;
+        grew = true;
+      }
+    });
+    if (grew) setNrCacheTrigger(t => t + 1);
+  }, [rawCells]);
+
   const layerLegends = useSelector(state => state.map.layerLegends);
   const boundaryGroups = useSelector(state => state.map.boundaryGroups || []);
   const boundaryColors = useSelector(state => state.map.boundaryColors || {});
@@ -428,6 +518,24 @@ const rfLegendThematic = useMemo(() => {
     return { type: activeParam, colors };
 }, [rfColorConfig, config.rfParameter]);
 
+const nrLegendThematic = useMemo(() => {
+
+  if (!neighbourRelations?.data?.length) return null;
+
+  return {
+    type: "Neighbour Relations",
+    colors: {
+      "3G-2G": "#f97316",
+      "3G-3G_Intra": "#3b82f6",
+      "3G-3G_Inter": "#a855f7",
+      "4G-4G_Intra": "#22c55e",
+      "4G-4G_Inter": "#ef4444",
+      "2G-2G": "#eab308",
+    }
+  };
+
+}, [neighbourRelations]);
+
 const boundaryLegendThematic = useMemo(() => {
     // Build colors object: one entry per group that has selections
     const colors = {};
@@ -442,6 +550,50 @@ const boundaryLegendThematic = useMemo(() => {
     return { type: "Boundary", colors };
 }, [boundaryGroups, selectedBoundaries, boundaryColors]);
 
+// const neighborsLegendThematic = useMemo(() => {
+
+//   if (!neighbourRelations?.data?.length) return null;
+
+//   return {
+//     type: "",
+//     colors: Object.fromEntries(
+//       Object.entries(NR_TYPE_COLORS).map(
+//         ([key, value]) => [
+//           key,
+//           `rgb(${value[0]}, ${value[1]}, ${value[2]})`
+//         ]
+//       )
+//     )
+//   };
+
+// }, [neighbourRelations]);
+
+const neighborsLegendThematic = useMemo(() => {
+
+  if (!neighbourRelations?.data?.length) return null;
+    return {
+      type: "",
+      colors: Object.fromEntries(
+        Object.entries(NR_TYPE_COLORS).map(
+          ([key, value]) => [
+            key,
+            `rgb(${value[0]}, ${value[1]}, ${value[2]})`
+          ]
+        )
+      ),
+
+      typeCount: Object.fromEntries(
+        Object.entries(neighbourRelations.typeCount || {}).map(
+          ([key, value]) => [
+            key,
+            { name: value }
+          ]
+        )
+      ),
+    };
+
+  }, [neighbourRelations]);
+
   const activeLegendKeys = useMemo(() => {
     const a = [];
     if (layerLegends.SITES) a.push("SITES");
@@ -449,6 +601,8 @@ const boundaryLegendThematic = useMemo(() => {
     if (layerLegends.DRIVE_TEST && driveTestThematic) a.push("DRIVE_TEST");
     if (layerLegends.BOUNDARY && boundaryLegendThematic) a.push("BOUNDARY");
     if (layerLegends.RF && rfLegendThematic) a.push("RF");
+    
+    if (layerLegends.NEIGHBORS && neighborsLegendThematic) a.push("NEIGHBORS");
     return a;
   }, [
     layerLegends.SITES,
@@ -498,11 +652,13 @@ const boundaryLegendThematic = useMemo(() => {
     [legendStackOrder, activeLegendKeys],
   );
 
+  // Default view state of map - when no data loaded yet,  
+  // or if sync disabled and no local view state (e.g. on first load)
   const activeViewState =
   (syncEnabled ? viewState : localViewState) || {
-     longitude: 37.9062,
-    latitude: 0.0236,
-    zoom: 6,
+    longitude: Number(import.meta.env.VITE_DEFAULT_MAP_LNG) || 34.3,
+    latitude: Number(import.meta.env.VITE_DEFAULT_MAP_LAT) || -13.2,
+    zoom: Number(import.meta.env.VITE_DEFAULT_MAP_ZOOM) || 6,
     pitch: 0,
     bearing: 0
   };
@@ -851,7 +1007,7 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
 
     return new ScatterplotLayer({
       id: `marker-layer-${operator}`,
-      data: (currentZoom < 10 ? siteAggregated : operatorFiltered)
+      data: siteAggregated
               .filter(d => !isNaN(Number(d.longitude)) && !isNaN(Number(d.latitude))),
       pickable: !blockMapDataPick,
       getPosition: d => {
@@ -873,6 +1029,8 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
         return 60;
       },
       radiusScale: config.mapScale,
+      radiusMaxPixels: currentZoom < 10 ? 28 : 18,
+      radiusMinPixels: 3,
       // getFillColor: [255, 0, 0, 200],
       getFillColor: d => {
         const opacity =
@@ -1029,7 +1187,7 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
 
       pickable: !blockMapDataPick,
       stroked: true,
-      filled: false,
+      filled: true,
 
         // getPolygon: d =>
         //     generateSectorPolygon(
@@ -1042,15 +1200,21 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
         //     ),
 
         getPolygon: d => {
-          // boost radius at zoom 12–13 so sectors aren't tiny at the scatterplot→sector transition
-          const zoomBoost = currentZoom <= 12 ? 6 : currentZoom <= 13 ? 3 : 1;
+          const zoomBoost = computeZoomBoost(currentZoom);
 
+          // generateCoordinates parameter mapping (intentional):
+          //   antBW   ← d.radius_m  (= gisCells API: item.length)
+          //   c_length← d.radius_m * zoomBoost
+          //
+          // d.beam_width (= item.beamwidth) is intentionally NOT used as antBW.
+          // Using radius_m for both antBW and c_length produces the correct visual sector shape
+          // with this formula. Switching to beam_width here would break the rendering.
           return generateCoordinates(
             d.longitude,
             d.latitude,
             d.azimuth,
-            d.radius_m,
-            d.radius_m * zoomBoost,
+            d.radius_m,             // antBW  — intentionally radius_m, not beam_width
+            d.radius_m * zoomBoost, // c_length
             config.mapScale * 20,
           );
         },
@@ -1095,15 +1259,22 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
         //   return [0,150,255,160];
         // },
 
+        getFillColor: d => {
+          if (d.cell_id === neighbourRelations?.cellId) return [80, 80, 80, 140];
+          if (neighbourRelations?.targetIds?.has(d.cell_id)) return [100, 100, 255, 110];
+          return [0, 0, 0, 0];
+        },
+
         updateTriggers: {
-          getPolygon: config.mapScale,
+          getPolygon: [config.mapScale, currentZoom],
           getLineColor: [
             selectedCell,
             activeThematic?.type,
             activeThematic?.colors,
             activeThematic?.opacity,
             layerOpacity.CELLS,
-          ]
+          ],
+          getFillColor: [neighbourRelations?.cellId, neighbourRelations?.data?.length],
         },
 
         getLineColor: d => {
@@ -1148,7 +1319,7 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
         lineJointRounded: true,
         lineCapRounded: true,
 
-        visible: layerVisibility.CELLS && currentZoom >= 12, // show sectors only at higher zooms
+        visible: layerVisibility.CELLS, // zoom gating handled by the layers array
 
         onClick: (info, event) => {
             if (blockMapDataPick) return;
@@ -1178,6 +1349,8 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
       layerOpacity.CELLS,
       layerVisibility.CELLS,
       blockMapDataPick,
+      neighbourRelations?.cellId,
+      neighbourRelations?.data?.length,
     ]);
 
 const siteLayer = useMemo(() => {
@@ -1457,6 +1630,7 @@ const siteLayer = useMemo(() => {
   const rfPredictionLayer = useMemo(() => {
     if (!rfPredictionGeoJson) return null;
 
+    // console.log(rfPredictionGeoJson);
     const activeParam = config.rfParameter || "RSRP";
 
     return new GeoJsonLayer({
@@ -1464,19 +1638,85 @@ const siteLayer = useMemo(() => {
       data: rfPredictionGeoJson,
       filled: true,
       stroked: false,
+      // getFillColor: feature => {
+      //   const range = feature.properties.range;
+      //   const entry = rfColorConfig.find(
+      //     c => c.parameter_name === activeParam && c.range_label === range
+      //   );
+      //   if (entry) return hexToRgba(entry.color_hex, layerOpacity.RF);
+      //   return [200, 200, 200, Math.round(layerOpacity.RF * 255)];
+
+      //     // console.log(feature.properties.range, "feature.properties.range");
+      //     // console.log(rfColorConfig, "rfColorConfig");
+      // },
       getFillColor: feature => {
-        const range = feature.properties.range;
+
+        const props = feature.properties;
         const entry = rfColorConfig.find(
-          c => c.parameter_name === activeParam && c.range_label === range
+          c =>
+            c.parameter_name === props.parameter &&
+            c.range_label === props.range
         );
-        if (entry) return hexToRgba(entry.color_hex, layerOpacity.RF);
-        return [200, 200, 200, Math.round(layerOpacity.RF * 255)];
+
+      //   console.log({
+      //   range: props.range,
+      //   color: entry?.color_hex
+      // });
+
+        return hexToRgba(
+          entry?.color_hex || "#9CA3AF",
+          1
+        );
       },
       pickable: !blockMapDataPick,
       opacity: layerOpacity.RF,
       updateTriggers: {
         getFillColor: [rfColorConfig, config.rfParameter, layerOpacity.RF],
       },
+      // onHover: (info) => {
+      //   if (info.object) {
+      //     const range = info.object.properties.range;
+      //     const activeParam = config.rfParameter || "RSRP";
+      //     const entry = rfColorConfig.find(
+      //       c => c.parameter_name === activeParam && c.range_label === range
+      //     );
+      //     setRfTooltip({
+      //       x: info.x,
+      //       y: info.y,
+      //       range,
+      //       color_hex: entry?.color_hex || "#C8C8C8",
+      //       parameter: activeParam,
+      //     });
+      //   } else {
+      //     setRfTooltip(null);
+      //   }
+      // },
+onHover: (info) => {
+
+  if (!info.object) {
+    setRfTooltip(null);
+    return;
+  }
+
+  const props = info.object.properties;
+
+  const parameter = props.parameter;
+  const range = props.range;
+
+  const entry = rfColorConfig.find(
+    c =>
+      c.parameter_name === parameter &&
+      c.range_label === range
+  );
+
+  setRfTooltip({
+    x: info.x,
+    y: info.y,
+    parameter,
+    range,
+    color_hex: entry?.color_hex || "#9CA3AF",
+  });
+},
     });
   }, [rfPredictionGeoJson, rfColorConfig, config.rfParameter, layerOpacity.RF, blockMapDataPick]);
 
@@ -2018,6 +2258,89 @@ const siteLayer = useMemo(() => {
 
   
   /* ============================================================
+     🔹 NEIGHBOR RELATIONS LAYERS
+  ============================================================ */
+
+  // Classify each NR relation. Radius comes from rawCells.radius_m via nrRadiusCacheRef —
+  // the SAME value generateCoordinates uses to draw the sector polygon, so tips land exactly
+  // on the visible arc edge. Lines with missing radius are SKIPPED (never drawn at apex).
+  const nrClassified = useMemo(() => {
+    if (!neighbourRelations?.data?.length) return { drawable: [], skipped: [] };
+console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
+    const cache = nrRadiusCacheRef.current;
+    const drawable = [];
+    const skipped  = [];
+
+    for (const d of neighbourRelations.data) {
+      const reasons = [];
+
+      if (d.s_latitude == null || d.s_longitude == null) reasons.push('source coords missing');
+      if (d.t_latitude == null || d.t_longitude == null) reasons.push('target coords missing');
+      if (d.s_azimuth == null)                           reasons.push('s_azimuth missing');
+      if (d.t_azimuth == null)                           reasons.push('t_azimuth missing');
+      if (reasons.length) { skipped.push({ source: d.source, target: d.target, type: d.type, reasons }); continue; }
+
+      const srcRadius = cache[d.source];
+      const tgtRadius = cache[d.target];
+      if (!Number.isFinite(srcRadius) || srcRadius <= 0) reasons.push('source cell radius not yet loaded (pan to its site)');
+      if (!Number.isFinite(tgtRadius) || tgtRadius <= 0) reasons.push('target cell radius not yet loaded (pan to its site)');
+
+      if (reasons.length) {
+        skipped.push({ source: d.source, target: d.target, type: d.type, reasons });
+      } else {
+        drawable.push({ ...d, srcRadius, tgtRadius });
+      }
+    }
+
+    return { drawable, skipped };
+  }, [neighbourRelations, nrCacheTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const nrSkipped   = nrClassified.skipped;
+  const nrPositions = nrClassified.drawable.length ? nrClassified.drawable : null;
+
+  // Tips computed dynamically with the same zoomBoost as sectorLayer so lines always land on
+  // the visible sector arc edge. updateTriggers explicitly forces DeckGL to recompute positions
+  // on every zoom/scale change, preventing stale-accessor issues at zoom transitions.
+  const neighbourLinesLayer = useMemo(() => {
+    if (!nrPositions?.length) return null;
+    const mapScale  = config.mapScale || 1;
+    const zoomBoost = computeZoomBoost(currentZoom); // same function as sectorLayer — never diverges
+    return new LineLayer({
+      id: "nr-lines-layer",
+      data: nrPositions,
+      pickable: true,
+      getSourcePosition: d => getSectorTip(d.s_latitude, d.s_longitude, d.s_azimuth, d.srcRadius, mapScale, zoomBoost),
+      getTargetPosition: d => getSectorTip(d.t_latitude, d.t_longitude, d.t_azimuth, d.tgtRadius, mapScale, zoomBoost),
+      updateTriggers: {
+        getSourcePosition: [currentZoom, config.mapScale],
+        getTargetPosition: [currentZoom, config.mapScale],
+      },
+      getColor: d => getNrColor(d.type, d.bi_directional),
+      getWidth: d => d.bi_directional ? 3 : 1.5,
+      widthUnits: "pixels",
+      onHover: info => {
+        if (info.object) {
+          const distance = haversineKm(
+            [info.object.s_longitude, info.object.s_latitude],
+            [info.object.t_longitude, info.object.t_latitude]
+          );
+          setNrTooltip({
+            x: info.x,
+            y: info.y,
+            source: info.object.source,
+            target: info.object.target,
+            type: info.object.type,
+            distance,
+            biDirectional: info.object.bi_directional,
+          });
+        } else {
+          setNrTooltip(null);
+        }
+      },
+    });
+  }, [nrPositions, currentZoom, config.mapScale]);
+
+  /* ============================================================
      🔹 ALL LAyers Dispatching logic
   ============================================================ */
   const layers = useMemo(() => {
@@ -2028,12 +2351,16 @@ const siteLayer = useMemo(() => {
     if (gisDraftPathLayer) baseLayers.push(gisDraftPathLayer);
 
     if (layerVisibility.CELLS) {
-      if (currentZoom < 12 && markerLayer) baseLayers.push(markerLayer); // site markers (<10) + cell dots (10-12)
-      if (currentZoom >= 12 && sectorLayer) baseLayers.push(sectorLayer); // cell sectors
+      if (currentZoom < 9 && markerLayer) baseLayers.push(markerLayer); // site aggregated blobs
+      if (currentZoom >= 9 && sectorLayer) baseLayers.push(sectorLayer); // cell sectors
 
       if (siteHighlightLayer) baseLayers.push(siteHighlightLayer);
       if (taSectorLayer) baseLayers.push(...taSectorLayer);
     }
+
+    // NR lines visible at zoom ≥ 9 (same as sectorLayer). zoomBoost is baked into the layer
+    // accessors so tips always land on the visible sector arc edge at every zoom level.
+    if (currentZoom >= 9 && neighbourLinesLayer) baseLayers.push(neighbourLinesLayer);
 
     if (siteLayer) baseLayers.push(siteLayer);
 
@@ -2055,6 +2382,8 @@ const siteLayer = useMemo(() => {
     sectorLayer,
     siteHighlightLayer,
     taSectorLayer,
+    nrPositions,
+    neighbourLinesLayer,
     customGeoJsonLayer,
     rfPredictionLayer,
     drivetestLayer,
@@ -2271,14 +2600,24 @@ const siteLayer = useMemo(() => {
       >
         📍
       </button> */}
+      {/* zoom level badge */}
+      <div style={{
+        position: "absolute", bottom: 8, left: 8, zIndex: 999,
+        background: "rgba(0,0,0,0.65)", color: "#fff",
+        fontSize: 11, fontFamily: "monospace",
+        padding: "2px 7px", borderRadius: 4, pointerEvents: "none",
+      }}>
+        Zoom Level {currentZoom?.toFixed(2)}x
+      </div>
+
       <DeckGL
         ref={deckRef}
         viewState={{ ...activeViewState }}
         controller={{
-          dragPan: !isDraggingRulerDot && !gisMeasuring,
-          dragRotate: !isDraggingRulerDot && !gisMeasuring,
-          touchZoom: !isDraggingRulerDot && !gisMeasuring,
-          touchRotate: !isDraggingRulerDot && !gisMeasuring,
+          dragPan: !isDraggingRulerDot,
+          dragRotate: !isDraggingRulerDot,
+          touchZoom: !isDraggingRulerDot,
+          touchRotate: !isDraggingRulerDot,
           doubleClickZoom: !rulerMode && !gisMeasuring,
         }}
         // getMapboxApiAccessToken={() => MAPBOX_TOKEN}
@@ -2466,6 +2805,8 @@ const siteLayer = useMemo(() => {
             // language="en"
           />
         </DeckGL>
+
+        
 
         {/* Compass only (top-right). Map style tray lives bottom-right above Settings. */}
         <div
@@ -2712,6 +3053,22 @@ const siteLayer = useMemo(() => {
             />
           ))}
 
+          {layerLegends.NEIGHBORS && neighborsLegendThematic && (
+            <LegendBoxV2
+              layer="NEIGHBORS"
+              thematic={neighborsLegendThematic}
+              zIndex={legendZIndex("NEIGHBORS")}
+              onFocus={() => bringLegendToFront("NEIGHBORS")}
+              onSendBackward={() => sendLegendBackward("NEIGHBORS")}
+              initialPosition={{ x: Math.max(10, (mapBox?.w ?? window.innerWidth) - 260), y: 100 }}
+              onClose={() =>
+                dispatch(
+                  MapActions.setLayerLegend("NEIGHBORS", false)
+                )
+              }
+            />
+          )}
+
         {/* Cell info popup */}
         {selectedCell && selectedCell.operator === operator && (
           USE_CELL_INFO_POPUP_V2 ? (
@@ -2839,6 +3196,11 @@ const siteLayer = useMemo(() => {
           />
 
           <div className="flex items-center justify-end gap-3">
+            {(gisMeasuring || rulerMode) && (
+              <div className="pointer-events-none select-none rounded-full bg-[rgba(11,23,48,0.88)] px-3 py-1 text-[11px] font-semibold tracking-wide text-[#F26522] ring-1 ring-[#F26522]/30">
+                {gisMeasuring ? "Measuring · double-click zoom off" : "Ruler · double-click zoom off"}
+              </div>
+            )}
             {toolsExpanded ? (
               <>
                 <button
@@ -2877,19 +3239,64 @@ const siteLayer = useMemo(() => {
               title={toolsExpanded ? "Close tools" : "Tools — zoom, fullscreen, measurement"}
               onClick={() => setToolsExpanded((c) => !c)}
               className={`${GIS_TRAY_BTN_CLASS} ${
-                toolsExpanded ? "border-[#F26522]/45 bg-[rgba(31,21,26,0.96)] text-[#F26522]" : ""
+                (toolsExpanded || gisMeasuring || rulerMode) ? "border-[#F26522]/45 bg-[rgba(31,21,26,0.96)] text-[#F26522]" : ""
               }`}
             >
               {toolsExpanded ? (
                 <X className="h-5 w-5" aria-hidden />
               ) : (
-                <Settings className="h-5 w-5" aria-hidden />
+                <Settings className={`h-5 w-5 ${(gisMeasuring || rulerMode) ? "!text-[#F26522]" : ""}`} aria-hidden />
               )}
             </button>
           </div>
         </div>
 
         {/* ── Context Menu (right-click on cell sector) ── */}
+        {nrTooltip && (
+            <div
+                className="absolute z-[25] pointer-events-none bg-[#162a52] text-white text-xs px-3 py-2 rounded-lg shadow-lg border border-blue-500/30"
+                style={{ left: nrTooltip.x + 12, top: nrTooltip.y - 10 }}
+            > 
+                <div className="font-semibold text-blue-300 mb-1.5">{nrTooltip.type}</div>
+                <div className="space-y-1 text-gray-200">
+                    <div><span className="text-gray-400">Source:</span> {nrTooltip.source}</div>
+                    <div><span className="text-gray-400">Target:</span> {nrTooltip.target}</div>
+                    <div className={nrTooltip.biDirectional ? 'text-green-500 font-bold' : 'text-red-500 font-bold'}>
+                        {nrTooltip.biDirectional ? '↔ Bidirectional' : '→ Unidirectional'}
+                    </div>
+                    <div><span className="text-gray-400">Distance:</span> {nrTooltip.distance?.toFixed(2)} km</div>
+                </div>
+            </div>
+        )}
+
+      {rfTooltip && (
+        <div
+            className="absolute z-[25] pointer-events-none bg-[#162a52] text-white text-xs px-3 py-2 rounded-lg shadow-lg border border-blue-500/30"
+            style={{
+                left: rfTooltip.x + 12,
+                top: rfTooltip.y - 10,
+            }}
+        >
+            <div className="font-semibold text-blue-300 mb-1.5">
+                {rfTooltip.parameter}
+                <div>{rfTooltip.range}</div>
+            </div>
+
+            <div className="flex items-center gap-2 text-gray-200">
+                <div
+                    className="w-3 h-3 rounded-sm border border-white/20 shrink-0"
+                    style={{
+                        background: rfTooltip.color_hex,
+                    }}
+                />
+
+                <span className="text-gray-200">
+                    {rfTooltip.range}
+                </span>
+            </div>
+        </div>
+    )}
+
         {contextMenu && (
             <>
                 {/* backdrop – click outside closes menu */}
@@ -2927,6 +3334,7 @@ const siteLayer = useMemo(() => {
                                 checked={selectedTaCells.some(c => c.cellId === contextMenu.cell.cell_id)}
                                 onChange={e => {
                                     if (e.target.checked) {
+                                        setTaError(null);
                                         dispatch(MapActions.fetchTaSectors(
                                             contextMenu.cell.cell_id,
                                             contextMenu.cell.cell_id,
@@ -2935,9 +3343,11 @@ const siteLayer = useMemo(() => {
                                                 lng: Number(contextMenu.cell.longitude),
                                                 azimuth: Number(contextMenu.cell.azimuth),
                                                 beamWidth: Number(contextMenu.cell.radius_m) || 60,
-                                            }
+                                            },
+                                            (msg) => setTaError({ cellId: contextMenu.cell.cell_id, message: msg })
                                         ));
                                     } else {
+                                        setTaError(null);
                                         dispatch(MapActions.setTaSectorData(contextMenu.cell.cell_id, null));
                                     }
                                 }}
@@ -2945,6 +3355,39 @@ const siteLayer = useMemo(() => {
                             />
                             <span className="text-[13px] font-medium text-gray-800">TA Rings</span>
                         </label>
+
+                        {taError?.cellId === contextMenu.cell.cell_id && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2.5 text-[12px] text-amber-800">
+                                <div className="text-amber-700">{taError.message || "No TA data found for this cell."}</div>
+                            </div>
+                        )}
+
+                        {/* Neighbor Relations toggle */}
+                        <label
+                            className="flex items-center gap-2.5 cursor-pointer select-none"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={neighbourRelations?.cellId === contextMenu.cell.cell_id}
+                                onChange={e => {
+                                    if (e.target.checked) {
+                                        dispatch(MapActions.fetchNeighbourRelations(contextMenu.cell.cell_id));
+                                    } else {
+                                        dispatch(MapActions.clearNeighbourRelations());
+                                    }
+                                }}
+                                className="w-4 h-4 shrink-0 cursor-pointer accent-[#162a52]"
+                            />
+                            <span className="text-[13px] font-medium text-gray-800">Neighbors</span>
+                        </label>
+
+                        {neighbourRelations?.hasNoData && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2.5 text-[12px] text-amber-800">
+                                {/* <div className="font-medium mb-1">No neighbor data available</div> */}
+                                <div className="text-amber-700">{neighbourRelations?.message || "This cell has no recorded neighbor relations."}</div>
+                            </div>
+                        )}
 
                         {/* Dismiss button */}
                         <button

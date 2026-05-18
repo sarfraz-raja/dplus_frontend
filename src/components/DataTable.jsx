@@ -211,7 +211,8 @@ const DataTable = ({
 
             {/* ── Glass table ── */}
             <div
-                className="flex-1 overflow-auto rounded-xl min-h-0 backdrop-blur-md border border-white/60 shadow-lg"
+                className="flex-1 overflow-auto rounded-xl min-h-0 backdrop-blur-md border border-white/60 shadow-lg 
+                scrollbar scrollbar-w-2 scrollbar-thumb-[#EC7D09] scrollbar-track-transparent scrollbar-thumb-rounded-none"
                 style={{ background: 'rgba(255,255,255,0.55)' }}
             >
                 <Table headers={visibleCols.map(col => col.label)} className="w-full min-w-max text-left text-sm">

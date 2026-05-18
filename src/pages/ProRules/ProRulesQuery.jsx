@@ -1,3 +1,5 @@
+// STALE — lazy-imported in sidebar_values.jsx but never assigned to any route.
+// Superseded by DataPlusAnalytics/SiteProRulesOutputPage.jsx and DataPlusAnalytics/CellProRulesPage.jsx.
 // import React, { useEffect, useState } from 'react';
 // import { useForm } from 'react-hook-form';
 // import * as Unicons from '@iconscout/react-unicons';

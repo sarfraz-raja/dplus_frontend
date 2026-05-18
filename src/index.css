@@ -1,5 +1,9 @@
 /* Removed unused @fontsource/dancing-script (4 weights ~450KB) and slabo-27px */
 
+::-webkit-scrollbar-thumb {
+  border-radius: 0 !important;
+}
+
 @font-face {
   font-family: "DatayogQuantico";
   src: url("/Quantico-Bold.ttf") format("truetype");
@@ -109,8 +113,8 @@ html[data-theme="dark"] body {
 
 html[data-theme="light"] ::-webkit-scrollbar {
   background-color: #f1f1f1;
-  width: 2px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
 }
 
 html[data-theme="light"] ::-webkit-scrollbar-track {
@@ -119,6 +123,7 @@ html[data-theme="light"] ::-webkit-scrollbar-track {
 
 html[data-theme="light"] ::-webkit-scrollbar-thumb {
   background-color: #ec7d09;
+  border-radius: 0;
 }
 
 html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
@@ -131,8 +136,8 @@ html[data-theme="light"] ::-webkit-scrollbar-track:hover {
 
 html[data-theme="dark"] ::-webkit-scrollbar {
   background-color: #1b0027;
-  width: 2px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
 }
 
 html[data-theme="dark"] ::-webkit-scrollbar-track {
@@ -141,6 +146,7 @@ html[data-theme="dark"] ::-webkit-scrollbar-track {
 
 html[data-theme="dark"] ::-webkit-scrollbar-thumb {
   background-color: #ec7d09;
+  border-radius: 0;
 }
 
 html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {

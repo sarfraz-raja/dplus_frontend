@@ -1,3 +1,5 @@
+// STALE — copy/scratch file, not imported anywhere in the app.
+// Active version: CustomQuery/QueryWorkbench.jsx.
 // import { useState } from 'react';
 // import { useDispatch, useSelector } from 'react-redux';
 

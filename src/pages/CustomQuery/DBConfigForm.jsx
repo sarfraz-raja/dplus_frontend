@@ -169,14 +169,13 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
 
     useEffect(() => {
         reset({})
-        if (resetting) {
-            // new form — clear all
-        } else {
-            Object.keys(formValue).forEach((key) => {
-                setValue(key, formValue[key])
-            })
+        if (!resetting) {
+            Object.keys(formValue).forEach((key) => setValue(key, formValue[key]))
+            // API returns userid (lowercase) but field is registered as userId — handle both
+            const userIdValue = formValue.userId ?? formValue.userid ?? formValue.user_id
+            if (userIdValue) setValue('userId', userIdValue)
         }
-    }, [formValue, resetting])
+    }, [formValue, resetting, userList])
 
     const onTableViewTest = (data) => {
         dispatch(CustomQueryActions.testDBConfig(true, data, () => {}))

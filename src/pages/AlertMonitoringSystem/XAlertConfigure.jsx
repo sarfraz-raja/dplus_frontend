@@ -11,7 +11,7 @@ import XAlertConfigureForm from './XAlertConfigureForm';
 const COLUMNS = [
     { label: 'Frequency',       key: 'frequency' },
     { label: 'DB Name',         key: 'dbname' },
-    { label: 'Mail Query',      key: 'mailquery' },
+    { label: 'Mail Attachement',      key: 'mailquery' },
     { label: 'Graph Query',     key: 'graphquery' },
     { label: 'Mail Subject',    key: 'mailsubject' },
     { label: 'Mail Recipients', key: 'mailrecipients' },

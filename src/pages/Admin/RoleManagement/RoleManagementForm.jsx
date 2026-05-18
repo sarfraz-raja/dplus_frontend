@@ -8,6 +8,15 @@ const inputCls = 'w-full border border-slate-300 rounded px-3 py-2 text-sm text-
 const labelCls = 'block text-xs text-slate-500 uppercase tracking-wide mb-1';
 const errorCls = 'text-xs text-red-500 mt-0.5';
 
+const sortBySequence = (items) =>
+    [...(items || [])].sort((a, b) => (a?.sequence ?? 999) - (b?.sequence ?? 999));
+
+const sortMenuDeep = (items) =>
+    sortBySequence(items).map(item => ({
+        ...item,
+        children: sortMenuDeep(item.children || []),
+    }));
+
 // Recursively set is_active on an item and all its descendants
 const setActiveDeep = (item, active) => ({
     ...item,
@@ -61,7 +70,7 @@ const RoleManagementForm = ({ setIsOpen, resetting, formValue = {}, submitRef })
             setMenuItems([]);
         } else {
             const menu = formValue.menuPermission;
-            setMenuItems(Array.isArray(menu) ? JSON.parse(JSON.stringify(menu)) : []);
+            setMenuItems(Array.isArray(menu) ? sortMenuDeep(JSON.parse(JSON.stringify(menu))) : []);
             Object.keys(formValue).forEach(key => {
                 if (!['permission', 'menuPermission'].includes(key)) setValue(key, formValue[key]);
             });

@@ -1,3 +1,5 @@
+// STALE — only used by NokiaToolCategory/NokiaToolManagementQuery.jsx which is itself not imported anywhere.
+// Duplicate of NokiaToolManagement/NokiaToolManagementQueryForm.jsx.
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import moment from 'moment';

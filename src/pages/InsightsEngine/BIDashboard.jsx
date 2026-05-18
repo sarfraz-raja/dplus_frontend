@@ -1,3 +1,5 @@
+// STALE — not imported anywhere in the app.
+// Replaced by InsightsEngine/DynamicInsightsDashboard.jsx which handles all Insights Engine dashboards.
 import React, { useEffect, useState } from 'react';
 import PowerBIDashboard from '../../components/PowerBIDashboard';
 

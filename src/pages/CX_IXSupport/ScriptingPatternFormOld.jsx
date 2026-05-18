@@ -1,3 +1,5 @@
+// STALE — old version, not imported anywhere in the app.
+// Replaced by CX_IXSupport/ScriptingPatternForm.jsx.
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import CCDash from '../../components/CCDash'

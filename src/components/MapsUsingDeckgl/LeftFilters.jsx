@@ -56,6 +56,11 @@ const allSelectedInSection = (group, selected) => {
   });
 };
 
+const someSelectedInSection = (group, selected) => {
+  const children = group?.child || [];
+  return children.some((tb) => (selected[tb.name] || []).length > 0);
+};
+
 const LeftFilters = ({ mode = "toolbar", onClose }) => {
   const dispatch = useDispatch();
 
@@ -80,32 +85,160 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
   }, [d1, activeSectionParent]);
 
   /** Restore draft from last applied filters whenever floating panel is shown / saved config updates */
+  // useEffect(() => {
+  //   if (mode !== "floating") return;
+  //   try {
+  //     if (!saveMapFilters || saveMapFilters === "{}" || saveMapFilters === "null") {
+  //       setSelected({});
+  //       setSiteSearch("");
+  //       return;
+  //     }
+  //     const parsed = JSON.parse(saveMapFilters);
+  //     if (!parsed || typeof parsed !== "object") {
+  //       setSelected({});
+  //       setSiteSearch("");
+  //       return;
+  //     }
+  //     const next = { ...parsed };
+  //     const site = next.site_name;
+  //     delete next.site_name;
+  //     setSelected(next);
+  //     if (Array.isArray(site) && site[0]) setSiteSearch(String(site[0]));
+  //     else setSiteSearch("");
+  //   } catch {
+  //     setSelected({});
+  //     setSiteSearch("");
+  //   }
+  // }, [mode, saveMapFilters]);
+
   useEffect(() => {
-    if (mode !== "floating") return;
-    try {
-      if (!saveMapFilters || saveMapFilters === "{}" || saveMapFilters === "null") {
-        setSelected({});
-        setSiteSearch("");
-        return;
-      }
-      const parsed = JSON.parse(saveMapFilters);
-      if (!parsed || typeof parsed !== "object") {
-        setSelected({});
-        setSiteSearch("");
-        return;
-      }
-      const next = { ...parsed };
-      const site = next.site_name;
-      delete next.site_name;
-      setSelected(next);
-      if (Array.isArray(site) && site[0]) setSiteSearch(String(site[0]));
-      else setSiteSearch("");
-    } catch {
+
+  if (mode !== "floating") return;
+  if (!allFilters?.d1?.length) return;
+
+  try {
+
+    if (
+      !saveMapFilters ||
+      saveMapFilters === "{}" ||
+      saveMapFilters === "null"
+    ) {
+      // No saved filters = all data shows. Pre-select every option so the panel
+      // reflects the actual state (all visible) rather than looking empty.
+      const allSelected = {};
+      (allFilters?.d1 || []).forEach((group) => {
+        (group.child || []).forEach((tb) => {
+          allSelected[tb.name] = (tb.columnName || []).map((v) => v.name);
+        });
+      });
+      setSelected(allSelected);
+      setSiteSearch("");
+      return;
+    }
+
+    const parsed = JSON.parse(saveMapFilters);
+
+    if (!parsed || typeof parsed !== "object") {
       setSelected({});
       setSiteSearch("");
+      return;
     }
-  }, [mode, saveMapFilters]);
 
+    // ---------------------------------------------------
+    // BUILD VALID FILTER MAP FROM CURRENT METADATA
+    // ---------------------------------------------------
+
+    const validMap = {};
+
+    (allFilters?.d1 || []).forEach(group => {
+
+      (group.child || []).forEach(tb => {
+
+        validMap[tb.name] = new Set(
+          (tb.columnName || []).map(v => v.name)
+        );
+
+      });
+
+    });
+
+    // ---------------------------------------------------
+    // SANITIZE SAVED FILTERS
+    // ---------------------------------------------------
+
+    const next = {};
+
+    Object.entries(parsed).forEach(([key, values]) => {
+
+      if (key === "site_name") return;
+
+      if (!Array.isArray(values)) return;
+
+      if (!validMap[key]) return;
+
+      const filtered = values.filter(v =>
+        validMap[key].has(v)
+      );
+
+      if (filtered.length > 0) {
+        next[key] = filtered;
+      }
+
+    });
+
+    // ---------------------------------------------------
+    // RESTORE SITE SEARCH
+    // ---------------------------------------------------
+
+    const site = parsed.site_name;
+
+    setSelected(next);
+
+    if (Array.isArray(site) && site[0]) {
+      setSiteSearch(String(site[0]));
+    } else {
+      setSiteSearch("");
+    }
+
+    // ---------------------------------------------------
+    // AUTO-HEAL INVALID SAVED FILTERS
+    // ---------------------------------------------------
+
+    const cleanedPayload = {
+      ...next,
+      ...(Array.isArray(site) && site[0]
+        ? { site_name: [String(site[0])] }
+        : {})
+    };
+
+    if (
+      JSON.stringify(cleanedPayload) !==
+      JSON.stringify(parsed)
+    ) {
+
+      dispatch(
+        AuthActions.setupConf(true, {
+          ...mapConfig,
+          saveMapFilters: JSON.stringify(cleanedPayload),
+        })
+      );
+
+    }
+
+  } catch {
+
+    setSelected({});
+    setSiteSearch("");
+
+  }
+
+}, [
+  mode,
+  saveMapFilters,
+  allFilters?.d1,
+  dispatch,
+  mapConfig
+]);
   const toggleTech = (name) => {
     setOpenTech((prev) => ({
       ...prev,
@@ -324,6 +457,7 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
             {d1.map((group) => {
               const active = activeSectionParent === group.parent;
               const allOn = allSelectedInSection(group, selected);
+              const someOn = !allOn && someSelectedInSection(group, selected);
               return (
                 <div
                   key={group.parent}
@@ -331,14 +465,19 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
                 >
                   <div className="flex items-center justify-between gap-1.5">
                     <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                      <span className="inline-flex h-3.5 shrink-0 items-center justify-center self-center">
-                        <input
-                          type="checkbox"
-                          checked={allOn}
-                          onChange={() => toggleAllInSection(group)}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`${dy3FilterCbCompact} m-0 align-middle`}
-                        />
+                      <span
+                        role="checkbox"
+                        aria-checked={allOn ? true : someOn ? "mixed" : false}
+                        className={`inline-flex h-3 w-3 shrink-0 cursor-pointer items-center justify-center self-center rounded-[3px] border transition-colors ${
+                          allOn
+                            ? "border-[#F26522] bg-[#F26522]"
+                            : someOn
+                            ? "border-[#F26522] bg-transparent"
+                            : "border-white/30 bg-transparent"
+                        }`}
+                        onClick={(e) => { e.stopPropagation(); toggleAllInSection(group); }}
+                      >
+                        {someOn && <span className="block h-[2px] w-[5px] rounded-full bg-[#F26522]" />}
                       </span>
                       <button
                         type="button"
@@ -455,6 +594,7 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
                           const opts = techBlock.columnName?.map((b) => b.name) || [];
                           const isGroupSelected =
                             opts.length > 0 && opts.every((option) => selectedValues.includes(option));
+                          const isGroupPartial = !isGroupSelected && selectedValues.length > 0;
                           const siblingNames = (activeGroup.child || []).map((c) => c.name);
                           return (
                             <div key={techBlock.name} className="last:pb-0">
@@ -469,13 +609,16 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
                                   }}
                                   className="group flex min-w-0 flex-1 items-center gap-2 text-left"
                                 >
-                                  <span className="inline-flex h-3.5 shrink-0 items-center justify-center self-center">
-                                    <input
-                                      type="checkbox"
-                                      readOnly
-                                      className={`pointer-events-none m-0 align-middle ${dy3FilterCbCompact}`}
-                                      checked={isGroupSelected}
-                                    />
+                                  <span
+                                    className={`inline-flex h-3 w-3 shrink-0 items-center justify-center self-center rounded-[3px] border transition-colors ${
+                                      isGroupSelected
+                                        ? "border-[#F26522] bg-[#F26522]"
+                                        : isGroupPartial
+                                        ? "border-[#F26522] bg-transparent"
+                                        : "border-white/30 bg-transparent"
+                                    }`}
+                                  >
+                                    {isGroupPartial && <span className="block h-[2px] w-[5px] rounded-full bg-[#F26522]" />}
                                   </span>
                                   <span
                                     className={`truncate text-[11px] font-semibold leading-[1.1] transition-colors ${

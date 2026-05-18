@@ -80,7 +80,6 @@ const TelecomMapsPage = () => {
           dispatch(MapActions.getBoundaryGroups()),
           dispatch(MapActions.getRfPredictionFilters()),
           dispatch(MapActions.getUserMapSetup()),
-          dispatch(MapActions.getGisCells({})),
           dispatch(MapActions.getSites()),
         ]);
       } catch (e) {

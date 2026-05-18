@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import UrlDashboard from '../SuperSet/UrlDashboard';
+import GrafanaDashboard from '../Grafana/GrafanaDashboard';
 
 const flattenMenu = (items) =>
     (items || []).reduce((acc, item) => {
@@ -10,7 +11,7 @@ const flattenMenu = (items) =>
         return acc;
     }, []);
 
-const InsightsDashboard = () => {
+const DynamicInsightsDashboard = () => {
     const { pathname } = useLocation();
     const menuList = useSelector(state => state.insightsEngine.dashboardList);
 
@@ -19,10 +20,23 @@ const InsightsDashboard = () => {
         return flat.find(i => i.route === pathname || i.route === pathname.replace(/\/$/, ''));
     }, [menuList, pathname]);
 
-    if (!menuItem?.dashboard_id) {
+    const isGrafana = menuItem?.dashboard_platform === 'grafana';
+    const isConfigured = isGrafana ? !!menuItem?.dashboard_uuid : !!menuItem?.dashboard_id;
+
+    if (!isConfigured) {
         return (
             <div className="flex items-center justify-center h-full text-slate-400 text-sm">
                 Dashboard not configured
+            </div>
+        );
+    }
+
+    if (isGrafana) {
+        return (
+            <div className="w-full h-full flex flex-col">
+                <div className="flex-1">
+                    <GrafanaDashboard accessToken={menuItem.dashboard_uuid} />
+                </div>
             </div>
         );
     }
@@ -36,4 +50,4 @@ const InsightsDashboard = () => {
     );
 };
 
-export default InsightsDashboard;
+export default DynamicInsightsDashboard;

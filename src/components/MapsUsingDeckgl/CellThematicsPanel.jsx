@@ -41,6 +41,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
     const techMeta = useSelector(state => state.map.telecomTechMeta) ?? [];
     const filterMeta = useSelector(state => state.map.telecomFilterMeta) ?? {};
     const activeThematic = useSelector(state => state.map.activeThematic);
+    const typeCount = activeThematic?.typeCount;
 
     const mapConfig = useSelector(state => state.map.config);
 
@@ -246,6 +247,17 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
 
     }, [techMeta, regions]);
 
+    const filteredColors = useMemo(() => {
+        if (!typeCount || Object.keys(typeCount).length === 0) {
+            return tempColors;
+        }
+        return Object.fromEntries(
+            Object.entries(tempColors).filter(([key]) =>
+                Object.prototype.hasOwnProperty.call(typeCount, key)
+            )
+        );
+    }, [tempColors, typeCount]);
+
     const initDone = useRef(false);
     useEffect(() => {
         const t = setTimeout(() => { initDone.current = true; }, 0);
@@ -261,7 +273,13 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
         hasInitialized.current = true;
         setTempType("Band");
         setTempColors(defaultColors.Band);
-        setSelectedBandPalette("Default"); 
+        setSelectedBandPalette("Default");
+
+        dispatch(MapActions.setActiveThematic({
+            type: "Band",
+            colors: defaultColors.Band,
+            opacity: 0.9
+        }));
 
     }, [defaultColors.Band]);
 
@@ -463,6 +481,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                 : defaultColors[tempType] || {},
             layerOpacity: cellOpacity,
             scale: cellScale,
+            typeCount,
             kpiConfig: {
                 startDateTime: kpiStartDateTime,
                 endDateTime: kpiEndDateTime,
@@ -484,6 +503,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
         kpiMode,
         kpiRanges,
         cellScale,
+        typeCount,
         // defaultColors,
     ]);
 
@@ -929,7 +949,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                         <div className="border rounded p-2 mb-3">
                             <div className="text-xs font-semibold text-gray-500 mb-2">Currently Selected Colors</div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                                {["2G", "3G", "4G", "5G"].map((tech) => (
+                                {["2G", "3G", "4G", "5G"]
+                                    .filter(tech => !typeCount || Object.prototype.hasOwnProperty.call(typeCount, tech))
+                                    .map((tech) => (
                                     <div key={tech} className="flex items-center gap-2">
                                         <div
                                             className="w-3 h-3 rounded-sm flex-shrink-0"

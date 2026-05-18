@@ -1,3 +1,5 @@
+// STALE — entire NokiaToolCategory/ folder is not imported anywhere in the app.
+// Duplicate of NokiaToolManagement/NokiaToolManagementQuery.jsx (which is itself also unrouted).
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as Unicons from '@iconscout/react-unicons';

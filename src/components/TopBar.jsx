@@ -8,6 +8,8 @@ import {
   ChevronDown,
   Globe,
   LogOut,
+  Maximize2,
+  Minimize2,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -23,20 +25,10 @@ import CommonActions from '../store/actions/common-actions';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { baseassetUrl } from '../utils/url.js'; 
 
-/** Neutral session hint — not live infra telemetry (avoids misleading demo alerts). */
-const HEADER_SESSION_LIGHT = {
-  text: 'Session active',
-  dot: 'bg-emerald-500',
-  tone: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-};
-const HEADER_SESSION_DARK = {
-  text: 'Session active',
-  dot: 'bg-emerald-400',
-  tone: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
-};
 
 const timezoneFallbacks = [
   'UTC',
+  'Africa/Blantyre',
   'Asia/Kolkata',
   'Asia/Dubai',
   'Asia/Singapore',
@@ -54,6 +46,7 @@ const timezoneFallbacks = [
 ];
 const timezoneCodeMap = {
   UTC: 'UTC',
+  'Africa/Blantyre': 'CAT',
   'Asia/Kolkata': 'IST',
   'Asia/Dubai': 'GST',
   'Asia/Singapore': 'SGT',
@@ -70,8 +63,9 @@ const timezoneCodeMap = {
   'Pacific/Auckland': 'NZST',
 };
 const timezoneNameMap = {
-  'Asia/Kolkata': 'IST - India Standard Time',
+  'Africa/Blantyre': 'CAT - Central Africa Time',
   UTC: 'Universal Time Coordinated',
+  'Asia/Kolkata': 'IST - India Standard Time',
   'Asia/Dubai': 'Gulf Standard Time',
   'Asia/Singapore': 'Singapore Standard Time',
   'Asia/Tokyo': 'Japan Standard Time',
@@ -87,6 +81,7 @@ const timezoneNameMap = {
   'Pacific/Auckland': 'New Zealand Standard Time',
 };
 const TIMEZONE_STORAGE_KEY = 'dy3-header-timezone';
+const DEFAULT_TIMEZONE = import.meta.env.VITE_TIME_ZONE || 'Africa/Blantyre';
 
 const formatTimezoneLabel = (value) => value.split('/').map((part) => part.replace(/_/g, ' ')).join(' / ');
 const getTimezoneOptions = () => {
@@ -138,9 +133,8 @@ const readLocalUser = () => {
   }
 };
 
-const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
+const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle, isFullscreen, onToggleFullscreen }) => {
   const { theme, toggleTheme } = useTheme();
-  const sessionStatus = theme === 'dark' ? HEADER_SESSION_DARK : HEADER_SESSION_LIGHT;
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const storedUser = useSelector((state) => state?.auth?.user);
@@ -186,9 +180,9 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
   const [currentTime, setCurrentTime] = useState(null);
   const [selectedTz, setSelectedTz] = useState(() => {
     try {
-      return localStorage.getItem(TIMEZONE_STORAGE_KEY) || 'Asia/Kolkata';
+      return localStorage.getItem(TIMEZONE_STORAGE_KEY) || DEFAULT_TIMEZONE;
     } catch (_) {
-      return 'Asia/Kolkata';
+      return DEFAULT_TIMEZONE;
     }
   });
   const [timezoneQuery, setTimezoneQuery] = useState('');
@@ -426,11 +420,6 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
         </div>
 
         <div className="flex shrink-0 items-center space-x-2 sm:space-x-5">
-          <div className={`hidden min-w-0 items-center gap-3 rounded-[8px] border px-3 py-1.5 text-sm font-semibold lg:flex ${theme === 'light' ? 'shadow-[inset_0_1px_0_rgba(0,0,0,0.03)]' : 'shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]'} ${sessionStatus.tone}`}>
-            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${sessionStatus.dot}`} />
-            <span className="max-w-[min(240px,18vw)] truncate whitespace-nowrap">{sessionStatus.text}</span>
-          </div>
-
           {/* <button
             type="button"
             className="hidden h-10 w-10 items-center justify-center rounded-[10px] border border-white/10 bg-white/5 text-white/75 transition-all duration-200 hover:border-[#F26522]/45 hover:bg-[#F26522]/10 hover:text-[#F26522] md:inline-flex"
@@ -459,6 +448,18 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle }) => {
           >
             {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
           </button>
+
+          {onToggleFullscreen && (
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-slate-200 bg-slate-50 text-slate-600 transition-colors duration-200 hover:border-[#F26522]/40 hover:bg-orange-50 hover:text-[#F26522] focus:outline-none focus-visible:ring-0 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:border-[#F26522]/40 dark:hover:bg-[#F26522]/10 dark:hover:text-[#F26522]"
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            >
+              {isFullscreen ? <Minimize2 className="h-[18px] w-[18px]" /> : <Maximize2 className="h-[18px] w-[18px]" />}
+            </button>
+          )}
 
           <div className="relative">
             <button

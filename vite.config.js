@@ -41,10 +41,10 @@ export default defineConfig({
       },
     },
   },
-  server: {
+  server: {         
     port: 5173,
     strictPort: true,
-    allowedHosts: ['dell5070l', 'dyserver2'],
+    allowedHosts: ['dell5070l', 'dyserver2', '192.168.0.172', '192.168.0.181'],
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       Pragma: 'no-cache',

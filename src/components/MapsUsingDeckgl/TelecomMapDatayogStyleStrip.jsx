@@ -67,14 +67,14 @@ export function TelecomMapStyleRightControl({
                   type="button"
                   title={text}
                   onClick={() => onSelectMapStyle(opt.value)}
-                  className={`group relative flex h-[46px] w-[46px] items-center justify-center overflow-hidden rounded-[16px] border bg-[rgba(8,18,36,0.94)] text-white transition-all duration-200 focus:outline-none ${
+                  className={`group relative flex h-[46px] w-[46px] items-center justify-center overflow-hidden rounded-[16px] border-2 bg-transparent text-white transition-all duration-200 focus:outline-none ${
                     active
-                      ? "border-[#F26522]/55 text-[#F26522]"
-                      : "border-[#27365C] text-white/82 hover:border-[#F26522]/45 hover:text-[#F26522]"
+                      ? "border-[#F26522] text-[#F26522]"
+                      : "border-[#27365C] text-white/82 hover:border-[#F26522] hover:text-[#F26522]"
                   }`}
                 >
                   <span
-                    className="absolute inset-[1px] rounded-[14px]"
+                    className="absolute inset-0 rounded-[14px]"
                     style={
                       ps
                         ? {

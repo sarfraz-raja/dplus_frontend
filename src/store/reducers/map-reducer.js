@@ -26,6 +26,7 @@ const initialState = {
     rawCellsPerMap: {},   // keyed by map table name, e.g. "cell_gis_map_1"
     rawSites: [],
     selectedTaCells: [], // array of {cellId, cellName, taData: [...]}
+    neighbourRelations: null, // { cellId, data: [...] } | null
 
     // 🔹 UI Filters (shared across all maps)
     filters: {
@@ -37,16 +38,18 @@ const initialState = {
     // 🔹 Map configuration (scale + style)
     config: {
         mapScale: 1,
+        siteScale: 2,
         mapView: "mapbox://styles/mapbox/light-v10",
     },
 
-    // 🔹 Shared camera state (for sync behavior)
+    //  This object defines the initial state for the shared camera view.
+    //  It sets the initial longitude, latitude, zoom level, pitch, and bearing.
     viewState: {
-        longitude: 77.2090,
-        latitude: 28.6139,
-        zoom: 6,
-        pitch: 0,
-        bearing: 0,
+        longitude: Number(import.meta.env.VITE_DEFAULT_MAP_LNG) || 34.3, // longitude of the default map view
+        latitude: Number(import.meta.env.VITE_DEFAULT_MAP_LAT) || -13.2, // latitude of the default map view
+        zoom: Number(import.meta.env.VITE_DEFAULT_MAP_ZOOM) || 6, // zoom level of the default map view
+        pitch: 0, // pitch of the default map view
+        bearing: 0, // bearing of the default map view
     },
 
     // 🔹 Toggle: Are maps synced?
@@ -108,7 +111,8 @@ const initialState = {
         SITES: false,
         BOUNDARY: false,
         RF: false,
-        DRIVE_TEST: false
+        DRIVE_TEST: false,
+        NEIGHBORS: false,
     },
 
     rulerPoints: [],      // [] | [[lng,lat]] | [[lng,lat],[lng,lat]]
@@ -393,6 +397,10 @@ const mapQuery = createSlice({
             }
         },
 
+        SET_NEIGHBOUR_RELATIONS: (state, { payload }) => {
+            state.neighbourRelations = payload; // null clears it
+        },
+
         SET_ACTIVE_SITE_THEMATIC: (state, { payload }) => {
             state.activeSiteThematic = payload;
         },
@@ -485,6 +493,7 @@ export const {
     SET_LAYER_LEGEND,
     SET_BOUNDARY_COLORS,
     SET_TA_SECTOR_DATA,
+    SET_NEIGHBOUR_RELATIONS,
 
 } = mapQuery.actions
 

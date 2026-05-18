@@ -409,7 +409,6 @@ export function resolveColor({
 
 }
 
-
 // It creates deterministic colors  using hashing
 // (Band A → same color every time) 
 export const stringToColor = (str) => {
@@ -445,12 +444,12 @@ export const generateColorMap = (values = []) => {
  * Moved from rfColorScale.js — single source of truth.
  */
 export const rsrpColorScale = {
-    "-65 to -50 dBm (Excellent)":  [0, 176, 80, 255],
-    "-75 to -65 dBm (Very Good)":  [112, 173, 71, 255],
-    "-85 to -75 dBm (Good)":       [255, 255, 0, 255],
-    "-90 to -85 dBm (Fair)":       [255, 192, 0, 255],
-    "-95 to -90 dBm (Weak)":       [255, 128, 0, 255],
-    "-100 to -95 dBm (Poor)":      [255, 0, 0, 255],
-    "-105 to -100 dBm (Bad)":      [192, 0, 0, 255],
-    "-120 to -105 dBm (No Cov.)":  [128, 128, 128, 255]
+    // "-65 to -50 dBm (Excellent)":  [128, 128, 128, 255],
+    // "-75 to -65 dBm (Very Good)":  [192, 0, 0, 255],
+    // "-85 to -75 dBm (Good)":       [255, 0, 0, 255],
+    // "-90 to -85 dBm (Fair)":       [255, 128, 0, 255],
+    // "-95 to -90 dBm (Weak)":       [255, 192, 0, 255],
+    // "-100 to -95 dBm (Poor)":      [255, 255, 0, 255],
+    // "-105 to -100 dBm (Bad)":      [112, 173, 71, 255],
+    // "-120 to -105 dBm (No Cov.)":  [0, 176, 80, 255]
 };

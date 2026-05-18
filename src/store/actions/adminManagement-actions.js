@@ -74,7 +74,7 @@ const AdminManagementActions = {
     },
     getRoleMenu: (roleid) => async (dispatch, _) => {
         try {
-            const res = await Api.get({ url: `${Urls.role_menu}?role_id=${roleid}` });
+            const res = await Api.get({ url: `${Urls.role_menu}?role_id=${roleid}&include_inactive=true` });
             if (res?.status !== 200) return null;
             const menu = res.data?.menu;
             return Array.isArray(menu) ? menu : null;
@@ -92,9 +92,7 @@ const AdminManagementActions = {
             }, []);
             const res = await Api.patch({ data: { role_id: roleid, permissions: flatten(menuItems) }, url: Urls.role_menu });
             if (res?.status !== 200 && res?.status !== 201) return;
-            dispatch(SET_SIDEBAR_MENU(menuItems));
             cb?.();
-            dispatch(AuthActions.fetchMe());
         } catch (error) {
             console.log(error, 'saveRoleMenu error');
         }

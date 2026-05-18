@@ -40,6 +40,8 @@ const TelecomMapGisToolbar = () => {
   const dispatch = useDispatch();
   const rawCells = useSelector((state) => state.map.rawCells || []);
   const saveMapFilters = useSelector((state) => state.auth?.commonConfig?.saveMapFilters);
+  const layerVisibility = useSelector((state) => state.map.layerVisibility);
+  const allFilters = useSelector((state) => state.map.telecomFilterMeta);
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [layerOpen, setLayerOpen] = useState(false);
@@ -52,11 +54,15 @@ const TelecomMapGisToolbar = () => {
 
   const parsedCoords = searchMode === "coords" ? parseCoords(siteSearch) : null;
 
+  // Orange when user has explicit saved filters OR when filter metadata is loaded
+  // (meaning Technology/Region groups exist and are selected — either by user or by default all-selected).
   const hasAppliedFilters = Boolean(
-    saveMapFilters && saveMapFilters !== "{}" && saveMapFilters !== "null",
+    (saveMapFilters && saveMapFilters !== "{}" && saveMapFilters !== "null") ||
+    allFilters?.d1?.length > 0,
   );
   const filterActive = filterOpen || hasAppliedFilters;
-  const layerActive = layerOpen;
+  const hasActiveLayer = Object.values(layerVisibility || {}).some(Boolean);
+  const layerActive = layerOpen || hasActiveLayer;
   const hasValue = Boolean(siteSearch.trim() || selectedSite || selectedCell || parsedCoords);
   /** Chevron panel toggle + reset (X) only after user typed or picked a result */
   const showSearchExtras = hasValue;

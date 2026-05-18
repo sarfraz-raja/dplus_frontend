@@ -40,6 +40,7 @@ const UserManagementForm = ({ setIsOpen, resetting, formValue = {}, submitRef })
     };
 
     const onSubmit = (data) => {
+        if (!resetting && !data.password) delete data.password; // Don't send empty password when not resetting
         if (data.id) {
             dispatch(AdminManagementActions.postUser(true, data, () => {
                 setIsOpen(false);

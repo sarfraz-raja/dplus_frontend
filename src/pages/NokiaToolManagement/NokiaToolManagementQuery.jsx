@@ -1,3 +1,5 @@
+// STALE — lazy-imported in sidebar_values.jsx but never assigned to any route.
+// NokiaToolManagementQueryForm.jsx is also stale as it is only used here.
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as Unicons from '@iconscout/react-unicons';

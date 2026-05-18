@@ -32,8 +32,6 @@ const ISONForm = lazy(() => import('../pages/iSON/iSonForm'));
 const UserManagement = lazy(() => import('../pages/Admin/UserManagement/UserManagement'));
 const RoleManagement = lazy(() => import('../pages/Admin/RoleManagement/RoleManagement'));
 const NokiaToolManagementQuery = lazy(() => import('../pages/NokiaToolManagement/NokiaToolManagementQuery'));
-const SiteAnalyticsPro = lazy(() => import('../pages/DataPlusAnalytics/SiteAnalyticsPro'));
-const CellAnalyticsPro = lazy(() => import('../pages/DataPlusAnalytics/CellAnalyticsPro'));
 const ProRulesQuery = lazy(() => import('../pages/ProRules/ProRulesQuery'));
 const ProRulesQueryOutput = lazy(() => import('../pages/ProRules/ProRulesQueryOutput'));
 const CellProRulesQueryOutput = lazy(() => import('../pages/ProRules/CellProRulesQueryOutput'));
@@ -43,9 +41,9 @@ const SiteProRulesOutputPage = lazy(() => import('../pages/DataPlusAnalytics/Sit
 const CellProRulesPage = lazy(() => import('../pages/DataPlusAnalytics/CellProRulesPage'));
 const KPICheckRulesPage = lazy(() => import('../pages/DataPlusAnalytics/KPICheckRulesPage'));
 const ProRulesManagementPage = lazy(() => import('../pages/DataPlusAnalytics/ProRulesManagementPage'));
-const KPICounters = lazy(() => import('../pages/KPIprocessingengine/KPICounters'));
-const KPIProcess = lazy(() => import('../pages/KPIprocessingengine/KPIProcess'));
-const KPIMeasurements = lazy(() => import('../pages/KPIprocessingengine/KPIMeasurements'));
+const KPICounters = lazy(() => import('../pages/KPIProcessingEngine/KPICounters'));
+const KPIProcess = lazy(() => import('../pages/KPIProcessingEngine/KPIProcess'));
+const KPIMeasurements = lazy(() => import('../pages/KPIProcessingEngine/KPIMeasurements'));
 
 const MapChart = lazy(() => import('../pages/MapBox/MapChart'));
 const Scripting = lazy(() => import('../pages/CX_IXSupport/Scripting'));
@@ -55,8 +53,8 @@ const DBUpdate = lazy(() => import('../pages/CX_IXSupport/DBUpdate'));
 const ScriptingPatternList = lazy(() => import('../pages/CX_IXSupport/ScriptingPatternList'));
 const AuditPatternList = lazy(() => import('../pages/CX_IXSupport/AuditPatternList'));
 const AuditPattern = lazy(() => import('../pages/CX_IXSupport/AuditPattern'));
-const InsightsEngineDashboardManager = lazy(() => import('../pages/InsightsEngineDashboardManager'));
-const InsightsDashboard = lazy(() => import('../pages/InsightsEngine/InsightsDashboard'));
+const InsightsDashboardManager = lazy(() => import('../pages/Admin/InsightsDashboardManager'));
+const DynamicInsightsDashboard = lazy(() => import('../pages/InsightsEngine/DynamicInsightsDashboard'));
 const TelecomMapsPage = lazy(() => import('../pages/TelecomMapsPage'));
 const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsPage'));
 const TicketsPage = lazy(() => import('../pages/Tickets/index'));
@@ -204,19 +202,19 @@ export const Sidebar_content = {
                             name: "MSS Dashboard",
                             link: "/insights-engine/core-dashboard/mss",
                             subMenu: [],
-                            component: <InsightsDashboard />,
+                            component: <DynamicInsightsDashboard />,
                         },
                         {
                             name: "UGW Dashboard",
                             link: "/insights-engine/core-dashboard/ugw",
                             subMenu: [],
-                            component: <InsightsDashboard />,
+                            component: <DynamicInsightsDashboard />,
                         },
                         {
                             name: "MGW Dashboard",
                             link: "/insights-engine/core-dashboard/mgw",
                             subMenu: [],
-                            component: <InsightsDashboard />,
+                            component: <DynamicInsightsDashboard />,
                         },
                     ],
                 },
@@ -228,25 +226,25 @@ export const Sidebar_content = {
                             name: "Worst Cells Dashboard",
                             link: "/insights-engine/ran-dashboard/worstcells",
                             subMenu: [],
-                            component: <InsightsDashboard />,
+                            component: <DynamicInsightsDashboard />,
                         },
                         {
                             name: "4G Dashboard",
                             link: "/insights-engine/ran-dashboard/huawei4g",
                             subMenu: [],
-                            component: <InsightsDashboard />,
+                            component: <DynamicInsightsDashboard />,
                         },
                         {
                             name: "5G NSA to SA Pre-Post Dashboard",
                             link: "/insights-engine/ran-dashboard/5GNSAtoSAPrePostDashboard",
                             subMenu: [],
-                            component: <InsightsDashboard />,
+                            component: <DynamicInsightsDashboard />,
                         },
                         {
                             name: "5G Dashboard",
                             link: "/insights-engine/ran-dashboard/huawei5g",
                             subMenu: [],
-                            component: <InsightsDashboard />,
+                            component: <DynamicInsightsDashboard />,
                         },
                     ],
                 },
@@ -254,13 +252,13 @@ export const Sidebar_content = {
                     name: "Network Dashboard",
                     link: "/insights-engine/network-dashboard",
                     subMenu: [],
-                    component: <InsightsDashboard />,
+                    component: <DynamicInsightsDashboard />,
                 },
                 {
                     name: "Parameter Audit Dashboard",
                     link: "/insights-engine/parameter-audit-dashboard",
                     subMenu: [],
-                    component: <InsightsDashboard />,
+                    component: <DynamicInsightsDashboard />,
                 },
             ],
         },
@@ -381,7 +379,7 @@ export const Sidebar_content = {
                 name: "Insights Dashboard Manager",
                 link: "/admin/insights-dashboard-manager",
                 subMenu: [],
-                component: <InsightsEngineDashboardManager />,
+                component: <InsightsDashboardManager />,
             }],
         },
     ]

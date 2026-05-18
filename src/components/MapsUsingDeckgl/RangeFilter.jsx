@@ -424,19 +424,19 @@ const handleRangeBlur = (index) => {
     <div>
 
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-gray-500">
+        <span className="text-xs font-semibold text-white/60">
           Range Filter
         </span>
 
         <button
           onClick={addRange}
-          className="text-blue-600 font-bold text-lg"
+          className="text-[#F26522] font-bold text-lg leading-none"
         >
           +
         </button>
       </div>
 
-      <div className="grid grid-cols-[60px_60px_28px_20px] gap-1.5 mb-1 text-xs font-semibold text-gray-500">
+      <div className="grid grid-cols-[60px_60px_28px_20px] gap-1.5 mb-1 text-xs font-semibold text-white/50">
         <span>Min (&gt;)</span>
         <span>Max (&le;)</span>
         <span>Color</span>
@@ -456,7 +456,7 @@ const handleRangeBlur = (index) => {
               updateRange(index, "min", e.target.value)
             }
             onBlur={() => handleRangeBlur(index)}
-            className="border rounded px-1 py-0.5 w-[60px] text-xs text-black"
+            className="rounded border border-[#27365C] bg-[#0C1931] px-1 py-0.5 w-[60px] text-xs text-white placeholder:text-white/30 focus:border-[#F26522]/50 focus:outline-none"
           />
 
           <input
@@ -467,7 +467,7 @@ const handleRangeBlur = (index) => {
               updateRange(index, "max", e.target.value)
             }
             onBlur={() => handleRangeBlur(index)}
-            className="border rounded px-1 py-0.5 w-[60px] text-xs text-black"
+            className="rounded border border-[#27365C] bg-[#0C1931] px-1 py-0.5 w-[60px] text-xs text-white placeholder:text-white/30 focus:border-[#F26522]/50 focus:outline-none"
           />
 
           <ColorPicker

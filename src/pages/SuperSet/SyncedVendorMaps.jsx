@@ -1,3 +1,5 @@
+// STALE — not imported anywhere in the app.
+// Map functionality is now handled by TelecomMapsPage.jsx and the MapsUsingDeckgl components.
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import DeckGL from "@deck.gl/react";

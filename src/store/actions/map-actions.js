@@ -916,6 +916,7 @@ import {
     SET_LAYER_LEGEND,
     SET_BOUNDARY_COLORS,
     SET_TA_SECTOR_DATA,
+    SET_NEIGHBOUR_RELATIONS,
 
 } from "../reducers/map-reducer"
 
@@ -1056,10 +1057,11 @@ const MapActions = {
                 latitude: item.latitude,
                 longitude: item.longitude,
                 azimuth: item.azimuth,
-                beam_width: item.beamwidth,
-                radius_m: item.length,
+                beam_width: item.beamwidth, // mapped but intentionally not used in sector rendering (see sectorLayer.getPolygon)
+                radius_m: item.length,      // used as BOTH the beam sweep angle (antBW) and sector radius in generateCoordinates
                 status: "active",
                 color: item.color
+                // item.len_height is not mapped — not needed for rendering
             }));
             dispatch(SET_RAW_CELLS(adapted));
         } catch (err) {
@@ -1323,6 +1325,9 @@ console.log("res.data.data length:", res.data.data?.length);
                 ? JSON.parse(data.saveLayerVisibility)
                 : null;
 
+            // cellsOn: saved preference for returning users; true by default for new users
+            const cellsOn = layerVisibility ? Boolean(layerVisibility.CELLS) : true;
+
             if (layerVisibility) {
                 dispatch(SET_LAYER_VISIBILITY({ layer: "CELLS", value: layerVisibility.CELLS }));
                 dispatch(SET_LAYER_VISIBILITY({ layer: "SITES", value: layerVisibility.SITES }));
@@ -1330,10 +1335,19 @@ console.log("res.data.data length:", res.data.data?.length);
                 dispatch(SET_LAYER_VISIBILITY({ layer: "RF", value: layerVisibility.RF }));
                 dispatch(SET_LAYER_VISIBILITY({ layer: "DRIVE_TEST", value: layerVisibility.DRIVE_TEST }));
             } else {
-                dispatch(SET_LAYER_VISIBILITY({ layer: "CELLS", value: false }));
+                // New user — show cells by default, everything else off
+                dispatch(SET_LAYER_VISIBILITY({ layer: "CELLS", value: true }));
                 dispatch(SET_LAYER_VISIBILITY({ layer: "BOUNDARY", value: false }));
                 dispatch(SET_LAYER_VISIBILITY({ layer: "RF", value: false }));
                 dispatch(SET_LAYER_VISIBILITY({ layer: "DRIVE_TEST", value: false }));
+            }
+
+            /* ---------------- FETCH CELLS ---------------- */
+            // TelecomMapsPage no longer calls getGisCells({}) unconditionally — this is the
+            // single place that fetches cells, using saved filters for returning users or
+            // empty filters (all cells) for new users.
+            if (cellsOn) {
+                dispatch(MapActions.getGisCells(filters));
             }
 
             /* ---------------- BOUNDARIES ---------------- */
@@ -1445,6 +1459,9 @@ console.log("res.data.data length:", res.data.data?.length);
                 : { type: "Technology", colors: {} };
 
             dispatch(SET_ACTIVE_SITE_THEMATIC(siteThematics));
+            if (siteThematics.scale !== undefined) {
+                dispatch(SET_MAP_CONFIG({ siteScale: siteThematics.scale }));
+            }
 
             /* ---------------- RESTORE LEGENDs ---------------- */
             const legends = data.saveLayerLegends
@@ -1556,17 +1573,54 @@ console.log("res.data.data length:", res.data.data?.length);
         dispatch(SET_TA_SECTOR_DATA({ cellId, taData }));
     },
 
-    fetchTaSectors: (cellId, cellName, cellCoords) => async (dispatch) => {
+    fetchNeighbourRelations: (cellId) => async (dispatch) => {
+        try {
+            const url = `${Urls.neighbour_relations}?cell_name=${encodeURIComponent(cellId)}`;
+            const res = await Api.get({ url, inst: 0 });
+
+            if (res?.status === 404 || (res?.status !== 200 && !res?.data?.data?.length)) {
+                dispatch(SET_NEIGHBOUR_RELATIONS({
+                    cellId,
+                    data: [],
+                    typeCount: {},
+                    hasNoData: true,
+                    message: res?.data?.msg || "No neighbour relations found"
+                }));
+                return;
+            }
+
+            if (res?.status !== 200) return;
+            dispatch(SET_NEIGHBOUR_RELATIONS({
+                cellId,
+                data: res.data?.data || [],
+                typeCount: res.data?.typeCount || {},
+                hasNoData: false
+             }));
+        } catch (err) {
+            console.log("[NR] fetchNeighbourRelations error", err);
+        }
+    },
+
+    clearNeighbourRelations: () => (dispatch) => {
+        dispatch(SET_NEIGHBOUR_RELATIONS(null));
+    },
+
+    fetchTaSectors: (cellId, cellName, cellCoords, onError) => async (dispatch) => {
         try {
             const url = `${Urls.gis_ta}?cell_name=${encodeURIComponent(cellName)}`;
-            console.log("[TA] API call:", url);
             const res = await Api.get({ url, inst: 0 });
-            console.log("[TA] API response:", res?.status, res?.data);
-            if (res?.status !== 200) return;
+            if (res?.status === 404 || (res?.status !== 200)) {
+                onError?.(res?.data?.msg || "No TA data found for this cell.");
+                return;
+            }
             const data = res.data?.data || [];
-            console.log("[TA] dispatching rows:", data.length);
+            if (!data.length) {
+                onError?.(res?.data?.msg || "No TA data found for this cell.");
+                return;
+            }
             dispatch(SET_TA_SECTOR_DATA({ cellId, taData: data, cellCoords }));
         } catch (err) {
+            onError?.("Failed to load TA data.");
             console.log("[TA] fetchTaSectors error", err);
         }
     },

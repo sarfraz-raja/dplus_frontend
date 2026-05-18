@@ -20,8 +20,9 @@ const LegendBoxV2 = ({
   zIndex = 10090,
   onBringToFront,
   onSendBackward,
+  initialPosition,
 }) => {
-  const [position, setPosition] = useState({ x: 100, y: 100 });
+  const [position, setPosition] = useState(initialPosition ?? { x: 100, y: 100 });
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   /** null = height follows content (default); number = user-resized */
   const [height, setHeight] = useState(null);
@@ -109,7 +110,10 @@ const LegendBoxV2 = ({
     setHeight(null);
   };
 
-  const titleText = thematic?.type === "Boundary" ? "Boundary Legend" : `${layer} — ${thematic?.type}`;
+  const titleText = thematic?.type === "Boundary" ? "Boundary Legend"  
+  : thematic?.type
+    ? `${layer} — ${thematic.type}`
+    : layer;
 
   const onHeaderDoubleClick = (e) => {
     e.stopPropagation();
@@ -135,7 +139,7 @@ const LegendBoxV2 = ({
 
   if (!thematic) return null;
 
-  const { type, colors, kpiConfig } = thematic;
+  const { type, colors, kpiConfig, typeCount } = thematic;
 
   const iconPx = Math.max(11, Math.round(12 * scale));
   /** Close (X) ~10% larger than reset for visibility */
@@ -258,7 +262,9 @@ const LegendBoxV2 = ({
 
         {type !== "KPIs" && (
           <div className="flex flex-col" style={{ gap: sz(6) }}>
-            {Object.entries(colors || {}).map(([key, color]) => (
+            {Object.entries(colors || {})
+              .filter(([key]) => typeCount && Object.prototype.hasOwnProperty.call(typeCount, key))
+              .map(([key, color]) => (
               <div
                 key={key}
                 className="flex items-start"
@@ -272,9 +278,31 @@ const LegendBoxV2 = ({
                     background: color,
                   }}
                 />
-                <span className="min-w-0 break-words leading-snug" style={{ color: LEGEND_TEXT, fontWeight: 500 }}>
+                {/* <span className="min-w-0 break-words leading-snug" style={{ color: LEGEND_TEXT, fontWeight: 500 }}>
                   {key}
-                </span>
+                </span> */}
+                <div
+                  className="min-w-0 break-words leading-snug"
+                  style={{
+                    color: LEGEND_TEXT,
+                    fontWeight: 500,
+                  }}
+                >
+                  {key}
+
+                  {typeCount?.[key]?.name && (
+                    <span
+                      style={{
+                        color: LEGEND_TEXT_MUTED,
+                        marginLeft: sz(6),
+                        fontSize: sz(11),
+                        fontWeight: 400,
+                      }}
+                    >
+                      ({typeCount[key].name})
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
           </div>

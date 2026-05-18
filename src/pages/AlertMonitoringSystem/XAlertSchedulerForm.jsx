@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import EmailChipInput from '../../components/EmailChipInput';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
 import AlertConfigurationActions from '../../store/actions/alertConfiguration-actions';
@@ -18,7 +19,7 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
     const userList = useSelector((state) => state?.customQuery?.usersList ?? []);
     const databaseList = useSelector((state) => state?.customQuery?.databaseList ?? []);
 
-    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm();
 
     useEffect(() => {
         dispatch(CustomQueryActions.getDatabaseList());
@@ -39,6 +40,9 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
     }, [formValue, resetting]);
 
     const onSubmit = (data) => {
+        if (data.mailrecipients) {
+            data.mailrecipients = data.mailrecipients.split(/[,;:]/).map(e => e.trim()).filter(Boolean).join(',');
+        }
         const id = data.id || data.uniqueid;
         if (id) {
             dispatch(AlertConfigurationActions.pAlertScheduler(true, data, () => {
@@ -85,9 +89,9 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
                     {errors.dbserver && <p className={errorCls}>{errors.dbserver.message}</p>}
                 </div>
 
-                {/* Mail Query */}
+                {/* Mail Attachement */}
                 <div>
-                    <label className={labelCls}>Mail Query <span className="text-red-400">*</span></label>
+                    <label className={labelCls}>Mail Attachement <span className="text-red-400">*</span></label>
                     <textarea className={textareaCls} placeholder="SQL for mail attachment..." {...register('mailquery', { required: 'Required' })} />
                     {errors.mailquery && <p className={errorCls}>{errors.mailquery.message}</p>}
                 </div>
@@ -123,7 +127,18 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
                 {/* Mail Recipients — full width */}
                 <div className="col-span-2">
                     <label className={labelCls}>Mail Recipients <span className="text-red-400">*</span></label>
-                    <input type="text" className={inputCls} placeholder="Comma-separated emails" {...register('mailrecipients', { required: 'Required' })} />
+                    <Controller
+                        name="mailrecipients"
+                        control={control}
+                        rules={{ required: 'Required' }}
+                        render={({ field }) => (
+                            <EmailChipInput
+                                value={field.value || ''}
+                                onChange={field.onChange}
+                                placeholder="Add emails — press comma, semicolon, colon or Enter"
+                            />
+                        )}
+                    />
                     {errors.mailrecipients && <p className={errorCls}>{errors.mailrecipients.message}</p>}
                 </div>
 

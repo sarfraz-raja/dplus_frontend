@@ -12,7 +12,26 @@ const dy3LayerCb =
 
 /** Dark-theme overrides for legacy light panels inside the floating shell */
 const floatingInner =
-  "sidebar-scroll flex-1 overflow-y-auto px-2 py-1.5 [&_input[type=checkbox]]:border-white/30 [&_input[type=range]]:accent-[#F26522] [&_select]:rounded [&_select]:border [&_select]:border-white/25 [&_select]:bg-[#0a1428] [&_select]:px-2 [&_select]:py-1 [&_select]:text-xs [&_select]:text-white [&_input[type=datetime-local]]:rounded [&_input[type=datetime-local]]:border [&_input[type=datetime-local]]:border-white/25 [&_input[type=datetime-local]]:bg-[#0a1428] [&_input[type=datetime-local]]:text-xs [&_input[type=datetime-local]]:text-white [&_.text-gray-500]:text-white/45 [&_.text-gray-600]:text-white/70 [&_.text-gray-400]:text-white/50 [&_.text-gray-300]:text-white/60 [&_label]:text-white/80 [&_.border-gray-300]:border-white/20 [&_.bg-white]:bg-white/[0.06] [&_.border.rounded.p-2]:border-white/15 [&_.border.rounded.p-3]:border-white/15 [&_.bg-blue-600]:bg-[#F26522] [&_.border-blue-600]:border-[#F26522] [&_.text-white]:text-white";
+  "sidebar-scroll flex-1 overflow-y-auto px-2 py-1.5" +
+  // checkboxes — orange accent, no bg change (native look)
+  " [&_input[type=checkbox]]:accent-[#F26522] [&_input[type=checkbox]]:border-white/30" +
+  // range sliders
+  " [&_input[type=range]]:accent-[#F26522]" +
+  // selects
+  " [&_select]:rounded [&_select]:border [&_select]:border-white/25 [&_select]:bg-[#0a1428] [&_select]:px-2 [&_select]:py-1 [&_select]:text-xs [&_select]:text-white" +
+  // datetime inputs
+  " [&_input[type=datetime-local]]:rounded [&_input[type=datetime-local]]:border [&_input[type=datetime-local]]:border-white/25 [&_input[type=datetime-local]]:bg-[#0a1428] [&_input[type=datetime-local]]:text-xs [&_input[type=datetime-local]]:text-white" +
+  // number inputs (Range Filter min/max fields etc.)
+  " [&_input[type=number]]:rounded [&_input[type=number]]:border [&_input[type=number]]:border-white/25 [&_input[type=number]]:bg-[#0a1428] [&_input[type=number]]:text-xs [&_input[type=number]]:text-white [&_input[type=number]]:px-1 [&_input[type=number]]:py-0.5" +
+  // text inputs
+  " [&_input[type=text]]:rounded [&_input[type=text]]:border [&_input[type=text]]:border-white/25 [&_input[type=text]]:bg-[#0a1428] [&_input[type=text]]:text-xs [&_input[type=text]]:text-white [&_input[type=text]]:px-1 [&_input[type=text]]:py-0.5" +
+  // text color overrides for generic gray Tailwind classes
+  " [&_.text-gray-500]:text-white/45 [&_.text-gray-600]:text-white/70 [&_.text-gray-400]:text-white/50 [&_.text-gray-300]:text-white/60 [&_label]:text-white/80" +
+  // border / bg overrides
+  " [&_.border-gray-300]:border-white/20 [&_.bg-white]:bg-white/[0.06] [&_.border.rounded.p-2]:border-white/15 [&_.border.rounded.p-3]:border-white/15" +
+  // button color overrides
+  " [&_.bg-blue-600]:bg-[#F26522] [&_.border-blue-600]:border-[#F26522] [&_.text-blue-600]:text-[#F26522]" +
+  " [&_.text-white]:text-white";
 
 const SECTION_TITLE = {
   SITE: "Sites",

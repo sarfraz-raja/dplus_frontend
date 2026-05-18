@@ -1,3 +1,4 @@
+// STALE — not imported or routed anywhere in the app. NiFi integration was never completed or has been dropped.
 import React from "react";
 
 const NifiViewer = () => {

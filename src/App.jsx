@@ -1,4 +1,4 @@
-import { Component, Suspense, lazy, useEffect, useState } from 'react'
+import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 const Login = lazy(() => import('./pages/Login'))
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
@@ -94,6 +94,24 @@ function App() {
 
     const effectiveSidebarOpen = isMobileViewport ? mobileSidebarOpen : sidebarOpen
 
+    // ── Fullscreen ────────────────────────────────────────────────────────────
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const mainRef = useRef(null)
+
+    useEffect(() => {
+        const onFsChange = () => setIsFullscreen(!!document.fullscreenElement)
+        document.addEventListener('fullscreenchange', onFsChange)
+        return () => document.removeEventListener('fullscreenchange', onFsChange)
+    }, [])
+
+    const toggleFullscreen = useCallback(() => {
+        if (!document.fullscreenElement) {
+            mainRef.current?.requestFullscreen?.().catch(() => {})
+        } else {
+            document.exitFullscreen?.()
+        }
+    }, [])
+
     if (isLoginRoute) {
         return (
             <>
@@ -110,36 +128,36 @@ function App() {
 
     return (
         <ErrorBoundary>
-            <main data-dy3-shell className='flex h-screen overflow-hidden bg-white'>
+            <main ref={mainRef} data-dy3-shell className='flex h-screen overflow-hidden bg-white'>
                 <WebSocketClient />
 
                 <div className="flex flex-1 flex-col min-w-0">
-                    <TopBar
-                        isSidebarOpen={effectiveSidebarOpen}
-                        isMobileViewport={isMobileViewport}
-                        onSidebarToggle={handleSidebarToggle}
-                    />
+                    {!isFullscreen && (
+                        <TopBar
+                            isSidebarOpen={effectiveSidebarOpen}
+                            isMobileViewport={isMobileViewport}
+                            onSidebarToggle={handleSidebarToggle}
+                            isFullscreen={isFullscreen}
+                            onToggleFullscreen={toggleFullscreen}
+                        />
+                    )}
                     <div className="relative flex min-h-0 flex-1 flex-row">
-                        {/*
-                          Option B (current): 88px flex rail + sidebar expands absolute to 290px (map canvas width stable → less WebGL blink).
-                          When expanded, main gets lg:pl-[202px] (290−88) so filters/modals align with the visible edge — no underlap with sidebar.
-
-                          Option A (fallback): remove rail wrapper; sidebar lg:sticky in-flow lg:w-[290px]|lg:w-[88px]; drop the pl-[202px] wrapper; no width transition on sidebar.
-                        */}
-                        <div className="relative z-[25] w-0 shrink-0 self-stretch min-h-0 lg:w-[88px]">
-                            <ErrorBoundary>
-                                <Sidebar
-                                    sidebarOpen={sidebarOpen}
-                                    isMobileViewport={isMobileViewport}
-                                    mobileVisible={mobileSidebarOpen}
-                                    onMobileClose={() => setMobileSidebarOpen(false)}
-                                    onOpen={() => setsidebarOpenn(true)}
-                                />
-                            </ErrorBoundary>
-                        </div>
+                        {!isFullscreen && (
+                            <div className="relative z-[25] w-0 shrink-0 self-stretch min-h-0 lg:w-[88px]">
+                                <ErrorBoundary>
+                                    <Sidebar
+                                        sidebarOpen={sidebarOpen}
+                                        isMobileViewport={isMobileViewport}
+                                        mobileVisible={mobileSidebarOpen}
+                                        onMobileClose={() => setMobileSidebarOpen(false)}
+                                        onOpen={() => setsidebarOpenn(true)}
+                                    />
+                                </ErrorBoundary>
+                            </div>
+                        )}
                         <div
                             className={`flex min-h-0 min-w-0 flex-1 flex-col ${
-                                sidebarOpen ? 'lg:pl-[202px]' : 'lg:pl-0'
+                                !isFullscreen && sidebarOpen ? 'lg:pl-[202px]' : 'lg:pl-0'
                             }`}
                         >
                             <div className="relative flex min-h-0 flex-1 flex-col">
@@ -149,6 +167,19 @@ function App() {
                         </div>
                     </div>
                 </div>
+
+                {/* Floating exit icon — visible only in fullscreen */}
+                {isFullscreen && (
+                    <button
+                        type="button"
+                        onClick={toggleFullscreen}
+                        title="Exit fullscreen (Esc)"
+                        style={{ zIndex: 200000 }}
+                        className="fixed top-3 right-4 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-white/20 bg-black/40 text-white/80 backdrop-blur-sm transition-all hover:bg-black/65 hover:text-white"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+                    </button>
+                )}
 
                 <SweetAlerts />
             </main>

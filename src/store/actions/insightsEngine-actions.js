@@ -21,8 +21,6 @@ const InsightsEngineActions = {
             let res;
             if (id) {
                 const putData = { id, ...data };
-                if (putData.dashboard_id  == null) delete putData.dashboard_id;
-                if (putData.dashboard_uuid == null) delete putData.dashboard_uuid;
                 res = await Api.put({ data: putData, url: Urls.insights_engine_dashboard_manager });
             } else {
                 res = await Api.post({ data, url: Urls.insights_engine_dashboard_manager });

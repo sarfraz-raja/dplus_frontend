@@ -1,3 +1,4 @@
+// STALE — only imported by NokiaToolManagement/NokiaToolManagementQuery.jsx which itself has no route.
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import moment from 'moment';

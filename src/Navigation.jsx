@@ -6,7 +6,7 @@ import { buildInsightsRootTree, INSIGHTS_ROOT_ROUTE } from './utils/insightsMenu
 import { Route, Routes } from 'react-router-dom';
 import Layout from './pages/Layout';
 import Profile from './pages/Profile';
-import InsightsDashboard from './pages/InsightsEngine/InsightsDashboard';
+import DynamicInsightsDashboard from './pages/InsightsEngine/DynamicInsightsDashboard';
 
 // ─── Maps built once at module load from sidebar_values ──────────────────────
 
@@ -95,7 +95,7 @@ const Navigation = ({ sidebarOpen, sidebarPos, setSidebarPos }) => {
     let contentRoutes;   // [{link, component, subMenu:[]}]
     const dynamicInsightsRoot = buildInsightsRootTree(insightsMenuRaw, { rolename });
     const dynamicInsightsRoutes = [...new Set(flattenDashboardRoutes(dynamicInsightsRoot ? [dynamicInsightsRoot] : []))]
-        .map((route) => ({ link: route, component: <InsightsDashboard />, subMenu: [] }));
+        .map((route) => ({ link: route, component: <DynamicInsightsDashboard />, subMenu: [] }));
 
     if (Array.isArray(apiMenuRaw) && apiMenuRaw.length > 0) {
         // ── API-driven mode ──────────────────────────────────────────────────

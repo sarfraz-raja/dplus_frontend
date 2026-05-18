@@ -1,3 +1,5 @@
+// STALE — copy/scratch file, not imported anywhere in the app.
+// Active version: CX_IXSupport/ScriptingPatternList.jsx.
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as Unicons from '@iconscout/react-unicons';

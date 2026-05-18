@@ -1,3 +1,5 @@
+// STALE — not imported anywhere in the app.
+// Active version is CX_IXSupport/AuditingPatternForm.jsx (used by AuditPatternList.jsx).
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import moment from 'moment';
