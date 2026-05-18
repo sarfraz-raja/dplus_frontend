@@ -24,6 +24,13 @@ const setActiveDeep = (item, active) => ({
     children: item.children?.map(child => setActiveDeep(child, active)) || [],
 });
 
+const updateSequenceById = (items, id, sequence) =>
+    items.map(item => {
+        if (item.id === id) return { ...item, sequence };
+        if (item.children?.length) return { ...item, children: updateSequenceById(item.children, id, sequence) };
+        return item;
+    });
+
 // Update an item by id anywhere in the tree; recalculate parent active state bottom-up
 const updateById = (items, id, active) =>
     items.map(item => {
@@ -36,9 +43,9 @@ const updateById = (items, id, active) =>
         return item;
     });
 
-const MenuRow = ({ item, depth, onChange }) => {
+const MenuRow = ({ item, depth, onChange, onSequenceChange }) => {
     const hasChildren = item.children?.length > 0;
-    const [open, setOpen] = useState(true);
+    const [open, setOpen] = useState(false);
 
     return (
         <div>
@@ -59,9 +66,21 @@ const MenuRow = ({ item, depth, onChange }) => {
                 </label>
                 <div className="flex items-center gap-1.5 ml-auto shrink-0">
                     {item.sequence != null && (
-                        <span className="text-[10px] font-mono font-medium text-slate-400 bg-slate-100 rounded px-1.5 py-0.5 leading-none">
-                            #{item.sequence}
-                        </span>
+                        <input
+                            type="number"
+                            min="1"
+                            value={item.sequence}
+                            onChange={e => onSequenceChange(item.id, parseInt(e.target.value, 10) || 1)}
+                            onClick={e => e.stopPropagation()}
+                            className={`font-mono text-center bg-white border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                depth === 0
+                                    ? 'w-14 text-[11px] text-slate-600 border-slate-300 px-1 py-0.5'
+                                    : depth === 1
+                                        ? 'w-10 text-[10px] text-slate-400 border-slate-200 px-1 py-0.5'
+                                        : 'w-8 text-[9px] text-slate-300 border-slate-100 px-0.5 py-0'
+                            }`}
+                            title="Sidebar order (lower = higher in menu)"
+                        />
                     )}
                     {hasChildren && (
                         <button
@@ -82,7 +101,7 @@ const MenuRow = ({ item, depth, onChange }) => {
                 </div>
             </div>
             {hasChildren && open && item.children.map(child => (
-                <MenuRow key={child.id} item={child} depth={depth + 1} onChange={onChange} />
+                <MenuRow key={child.id} item={child} depth={depth + 1} onChange={onChange} onSequenceChange={onSequenceChange} />
             ))}
         </div>
     );
@@ -109,6 +128,10 @@ const RoleManagementForm = ({ setIsOpen, resetting, formValue = {}, submitRef })
 
     const handleChange = (id, active) => {
         setMenuItems(prev => updateById(prev, id, active));
+    };
+
+    const handleSequenceChange = (id, sequence) => {
+        setMenuItems(prev => updateSequenceById(prev, id, sequence));
     };
 
     const onSubmit = (data) => {
@@ -143,7 +166,7 @@ const RoleManagementForm = ({ setIsOpen, resetting, formValue = {}, submitRef })
                 ) : (
                     <div className="flex flex-col border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
                         {menuItems.map(item => (
-                            <MenuRow key={item.id} item={item} depth={0} onChange={handleChange} />
+                            <MenuRow key={item.id} item={item} depth={0} onChange={handleChange} onSequenceChange={handleSequenceChange} />
                         ))}
                     </div>
                 )}

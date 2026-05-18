@@ -39,6 +39,7 @@ const fetchMe = () => async (dispatch) => {
         }
         const res = await Api.get({ url: Urls.me, inst: 0 })
         if (res?.status !== 200 || !res?.data) {
+            dispatch(SET_SIDEBAR_MENU(null))
             return { ok: false }
         }
 
@@ -334,6 +335,7 @@ const AuthActions = {
             dispatch(SET_COMMON_CONFIG(dataFiw))
 
             dispatch(CommonActions.setLastName(true, ""))
+            dispatch(fetchMe())
             cb()
             return { ok: true }
         } catch (error) {
