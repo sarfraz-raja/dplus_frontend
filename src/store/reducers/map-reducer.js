@@ -77,6 +77,11 @@ const initialState = {
         colors: {}
     },
 
+    availableCellKpis: [], // KPI names from gisCells API (e.g. ["cssr", "data_sr", "availability"])
+    cellKpiData: {}, // { cell_name: kpi_value } — fetched from /map/gis-cells-kpi on Apply
+
+    siteKpiData: {}, // { tower_id: kpi_value } — fetched from /map/gis-sites-kpi on Apply
+
     activeSiteThematic: {
         type: "Technology",
         colors: {}
@@ -280,6 +285,18 @@ const mapQuery = createSlice({
             state.activeThematic = payload;
         },
 
+        SET_AVAILABLE_CELL_KPIS: (state, { payload }) => {
+            state.availableCellKpis = Array.isArray(payload) ? payload : [];
+        },
+
+        SET_CELL_KPI_DATA: (state, { payload }) => {
+            state.cellKpiData = payload ?? {};
+        },
+
+        SET_SITE_KPI_DATA: (state, { payload }) => {
+            state.siteKpiData = payload ?? {};
+        },
+
         // RF test Drive layer plotting
         SET_DRIVE_TEST_DATA: (state, { payload }) => {
             state.driveTestData = payload;
@@ -470,6 +487,9 @@ export const {
     SET_HIGHLIGHTED_CELL,
 
     SET_ACTIVE_THEMATIC,
+    SET_AVAILABLE_CELL_KPIS,
+    SET_CELL_KPI_DATA,
+    SET_SITE_KPI_DATA,
     SET_DRIVE_TEST_DATA, 
     SET_ACTIVE_DRIVE_SESSIONS, 
     SET_DRIVE_TEST_FILTERS,

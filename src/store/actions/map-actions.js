@@ -892,7 +892,10 @@ import {
     SET_SELECTED_BOUNDARIES,
     SET_HIGHLIGHTED_CELL,
 
-    SET_ACTIVE_THEMATIC, //cell
+    SET_ACTIVE_THEMATIC,
+    SET_AVAILABLE_CELL_KPIS,
+    SET_CELL_KPI_DATA, //cell
+    SET_SITE_KPI_DATA, //site
     SET_ACTIVE_SITE_THEMATIC,  //site
     SET_DRIVE_TEST_DATA,
     SET_DRIVE_TEST_FILTERS,
@@ -1047,6 +1050,7 @@ const MapActions = {
                 data: { dataValue: filters }
             });
             const apiData = res?.data?.data || [];
+            const apiKpis = res?.data?.kpis || [];
             const adapted = apiData.map(item => ({
                 cell_id: item.cell_name,
                 site_name: item.site_name,
@@ -1064,8 +1068,58 @@ const MapActions = {
                 // item.len_height is not mapped — not needed for rendering
             }));
             dispatch(SET_RAW_CELLS(adapted));
+            if (apiKpis.length > 0) {
+                dispatch(SET_AVAILABLE_CELL_KPIS(apiKpis));
+            }
         } catch (err) {
             console.log("gisCells error", err);
+        }
+    },
+
+    // Fetch KPI values per cell — called on Apply when thematic type is KPIs
+    // startDate / endDate must be YYYY-MM-DD strings
+    getGisCellsKpi: (startDate, endDate, kpi) => async (dispatch) => {
+        try {
+            const res = await Api.get({
+                url: `${Urls.gisCellsKpi}?start_date=${startDate}&end_date=${endDate}&kpi=${kpi}`,
+                inst: 0
+            });
+            if (res?.status !== 200) return;
+            const rows = res?.data?.data || [];
+            // URL param is capitalized (e.g. "CSSR"), response field is lowercase (e.g. "cssr")
+            const responseKey = kpi.toLowerCase();
+            const lookup = {};
+            rows.forEach(row => {
+                if (row.cell_name != null) {
+                    lookup[row.cell_name] = row[responseKey] ?? null;
+                }
+            });
+            dispatch(SET_CELL_KPI_DATA(lookup));
+        } catch (err) {
+            console.log("gisCellsKpi error", err);
+        }
+    },
+
+    // startDate / endDate must be YYYY-MM-DD strings
+    getGisSitesKpi: (startDate, endDate, kpi) => async (dispatch) => {
+        try {
+            const res = await Api.get({
+                url: `${Urls.gisSitesKpi}?start_date=${startDate}&end_date=${endDate}&kpi=${kpi}`,
+                inst: 0
+            });
+            if (res?.status !== 200) return;
+            const rows = res?.data?.data || [];
+            // Response field is lowercase (e.g. "cssr") even though URL param is capitalized
+            const responseKey = kpi.toLowerCase();
+            const lookup = {};
+            rows.forEach(row => {
+                if (row.tower_id != null) {
+                    lookup[row.tower_id] = row[responseKey] ?? null;
+                }
+            });
+            dispatch(SET_SITE_KPI_DATA(lookup));
+        } catch (err) {
+            console.log("gisSitesKpi error", err);
         }
     },
 
@@ -1309,6 +1363,14 @@ console.log("res.data.data length:", res.data.data?.length);
                 }));
             }
 
+            // Re-fetch cell KPI data on reload if KPI thematic was saved
+            if (thematics?.type === "KPIs") {
+                const { startDateTime: kpiStart, endDateTime: kpiEnd, kpi } = thematics.kpiConfig || {};
+                if (kpiStart && kpiEnd && kpi) {
+                    dispatch(MapActions.getGisCellsKpi(kpiStart.slice(0, 10), kpiEnd.slice(0, 10), kpi));
+                }
+            }
+
             /* ---------------- RESTORE LAYER OPACITY ---------------- */
             const savedLayerOpacity = data.saveLayerOpacity
                 ? JSON.parse(data.saveLayerOpacity)
@@ -1456,11 +1518,19 @@ console.log("res.data.data length:", res.data.data?.length);
               /* ---------------- RESTORE SITE THEMATICS ---------------- */
             const siteThematics = data.saveSiteThematics
                 ? JSON.parse(data.saveSiteThematics)
-                : { type: "Technology", colors: {} };
+                : { type: "Technology", colors: FIXED_COLORS.Technology };
 
             dispatch(SET_ACTIVE_SITE_THEMATIC(siteThematics));
             if (siteThematics.scale !== undefined) {
                 dispatch(SET_MAP_CONFIG({ siteScale: siteThematics.scale }));
+            }
+
+            // Re-fetch site KPI data on reload if KPI thematic was saved
+            if (siteThematics?.type === "KPIs") {
+                const { startDateTime: kpiStart, endDateTime: kpiEnd, kpi } = siteThematics.kpiConfig || {};
+                if (kpiStart && kpiEnd && kpi) {
+                    dispatch(MapActions.getGisSitesKpi(kpiStart.slice(0, 10), kpiEnd.slice(0, 10), kpi));
+                }
             }
 
             /* ---------------- RESTORE LEGENDs ---------------- */

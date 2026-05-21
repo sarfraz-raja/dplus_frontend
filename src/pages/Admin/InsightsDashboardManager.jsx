@@ -213,7 +213,7 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
         }
         payload.sequence = payload.sequence !== '' ? Math.trunc(Number(payload.sequence)) : null;
         if (payload.dashboard_platform === 'grafana') {
-            payload.dashboard_id = null;
+            payload.dashboard_id = payload.dashboard_id?.trim() || null;
         } else {
             payload.dashboard_id = payload.dashboard_id !== '' ? Number(payload.dashboard_id) : null;
         }
@@ -384,18 +384,54 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
                             </div>
                         )}
 
-                        {/* v2 (Grafana): Access Token from public dashboard */}
+                        {/* v2 (Grafana): uid & Name for auth token */}
+                        {/* {form.dashboard_platform === 'grafana' && (
+                          <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                                        Dashboard Name
+                                        <span className="text-slate-400 normal-case font-normal ml-1">(optional)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={form.dashboard_id ?? ''}
+                                        onChange={e => set('dashboard_id', slugify(e.target.value))}
+                                        placeholder="e.g. my-dashboard"
+                                        className={inputCls('dashboard_id')}
+                                    />
+                                    {form.dashboard_id && (
+                                        <p className="text-[10px] text-slate-400 mt-0.5 font-mono truncate">
+                                            → {form.dashboard_id}
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                                        dashboard_uid
+                                        <span className="text-slate-400 normal-case font-normal ml-1">(from dashboard link)</span>
+                                    </label>
+                                    <input
+                                        value={form.dashboard_uuid ?? ''}
+                                        onChange={e => set('dashboard_uuid', e.target.value)}
+                                        placeholder="a431809ceb21421d97c69a5a7baa5c74"
+                                        className={inputCls('dashboard_uuid')}
+                                    />
+                                </div>
+                            </div>
+                        )} */}
+
                         {form.dashboard_platform === 'grafana' && (
                             <div>
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                                    Access Token
-                                    <span className="text-slate-400 normal-case font-normal ml-1">(from public dashboard link)</span>
+                                    Access Token 
+                                    <span className="text-slate-400 normal-case font-normal ml-1">*</span>
                                 </label>
                                 <input
-                                    value={form.dashboard_uuid ?? ''}
-                                    onChange={e => set('dashboard_uuid', e.target.value)}
-                                    placeholder="a431809ceb21421d97c69a5a7baa5c74"
-                                    className={inputCls('dashboard_uuid')}
+                                    type="text"
+                                    value={form.dashboard_id ?? ''}
+                                    onChange={e => set('dashboard_id', slugify(e.target.value))}
+                                    placeholder="e.g. ae91f0c3b8d2c238bfb7c8a1d2e3f45"
+                                    className={inputCls('dashboard_id')}
                                 />
                             </div>
                         )}

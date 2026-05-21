@@ -1428,7 +1428,7 @@ import ColorPicker from "./ColorPicker";
 import RangeFilter from "./RangeFilter";
 import OpacitySlider from "./OpacitySlider";
 import SiteThematicsPanel from "./SiteThematicsPanel";
-import { KPI_RANGE_DEFAULTS, deepCopyRanges } from "./Utils/colorEngine";
+import { KPI_RANGE_DEFAULTS, deepCopyRanges, RF_CATEGORY_COLORS, RF_CATEGORY_ORDER } from "./Utils/colorEngine";
 import AddMapLayersPanelFloatingLayout from "./AddMapLayersPanelFloatingLayout";
 
 const AddMapLayersPanel = ({ onClose, mode }) => {
@@ -1488,13 +1488,13 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     const sessionIds = [...new Set(driveTestData.map(d => d.session_id))];
 
     // ── PENDING STATE ─────────────────────────────────────────────
-    const [pendingVisibility, setPendingVisibility] = useState({
-        CELLS: false,
-        SITES: false,   
-        RF: false,
-        DRIVE_TEST: false,
-        ...boundaryGroups.reduce((acc, g) => ({ ...acc, [g.shapegroup]: false }), {})
-    });
+    const [pendingVisibility, setPendingVisibility] = useState(() => ({
+        CELLS: layerVisibility.CELLS || false,
+        SITES: layerVisibility.SITES || false,
+        RF: layerVisibility.RF || false,
+        DRIVE_TEST: layerVisibility.DRIVE_TEST || false,
+        ...boundaryGroups.reduce((acc, g) => ({ ...acc, [g.shapegroup]: layerVisibility[g.shapegroup] || false }), {})
+    }));
 
     // For Kenya/Admin boundaries only
     const [pendingBoundarySelections, setPendingBoundarySelections] = useState({});
@@ -1506,13 +1506,13 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         driveTestFilters?.sessions || []
     );
 
-    const [pendingLegends, setPendingLegends] = useState({
-        SITES: false,
-        CELLS: false,
-        BOUNDARY: false,
-        RF: false,
-        DRIVE_TEST: false,
-    });
+    const [pendingLegends, setPendingLegends] = useState(() => ({
+        SITES: layerLegends?.SITES || false,
+        CELLS: layerLegends?.CELLS || false,
+        BOUNDARY: layerLegends?.BOUNDARY || false,
+        RF: layerLegends?.RF || false,
+        DRIVE_TEST: layerLegends?.DRIVE_TEST || false,
+    }));
     
     // computed — true if ANY boundary group has children selected
     const anyBoundarySelected = boundaryGroups.some(g =>
@@ -1822,14 +1822,36 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     const effectiveCellThematic = cellThematicsConfig ?? reduxActiveThematic ?? { type: "Band", colors: {}, opacity: 1, scale: 1 };
     const effectiveSiteThematic = siteThematicsConfig ?? reduxActiveSiteThematic ?? { type: "Technology", colors: {}, opacity: 1 };
     if (pendingVisibility.CELLS) {
+        if (rawCells.length === 0) {
+            dispatch(MapActions.getGisCells({}));
+        }
         dispatch(MapActions.setActiveThematic(effectiveCellThematic));
         if (effectiveCellThematic.scale !== undefined)
             dispatch(MapActions.setMapConfig({ mapScale: effectiveCellThematic.scale }));
+
+        // Fetch KPI data when KPI thematic is selected and dates are provided
+        if (effectiveCellThematic.type === "KPIs") {
+            const { startDateTime: kpiStart, endDateTime: kpiEnd, kpi } = effectiveCellThematic.kpiConfig || {};
+            if (kpiStart && kpiEnd && kpi) {
+                const startDate = kpiStart.slice(0, 10); // YYYY-MM-DD
+                const endDate = kpiEnd.slice(0, 10);
+                dispatch(MapActions.getGisCellsKpi(startDate, endDate, kpi));
+            }
+        }
     }
     if (pendingVisibility.SITES) {
         dispatch(MapActions.setActiveSiteThematic(effectiveSiteThematic));
         if (effectiveSiteThematic.scale !== undefined)
             dispatch(MapActions.setMapConfig({ siteScale: effectiveSiteThematic.scale }));
+
+        if (effectiveSiteThematic.type === "KPIs") {
+            const { startDateTime: kpiStart, endDateTime: kpiEnd, kpi } = effectiveSiteThematic.kpiConfig || {};
+            if (kpiStart && kpiEnd && kpi) {
+                const startDate = kpiStart.slice(0, 10);
+                const endDate = kpiEnd.slice(0, 10);
+                dispatch(MapActions.getGisSitesKpi(startDate, endDate, kpi));
+            }
+        }
     }
 
     // ── COMMIT OPACITY TO REDUX ───────────────────────────────────
@@ -2382,19 +2404,31 @@ onChange={() => toggleRfRegion(name)}
                         <div className="mt-3">
                             <div className="text-xs font-semibold text-gray-500 mb-1">Range & Colors</div>
                             <div className="space-y-2">
-                                {rfColorConfig
-                                    .filter(c => c.parameter_name === rfParameter)
-                                    .sort((a, b) => a.display_order - b.display_order)
-                                    .map(entry => (
-                                        <div key={entry.range_label} className="flex items-center justify-between border rounded px-2 py-1">
-                                            <span className="text-sm">{entry.range_label}</span>
+                                {(() => {
+                                    const apiEntries = rfColorConfig
+                                        .filter(c => c.parameter_name === rfParameter)
+                                        .sort((a, b) => a.display_order - b.display_order);
+                                    if (apiEntries.length > 0) {
+                                        return apiEntries.map(entry => (
+                                            <div key={entry.range_label} className="flex items-center justify-between border rounded px-2 py-1">
+                                                <span className="text-sm">{entry.range_label}</span>
+                                                <div
+                                                    className="w-5 h-5 rounded border border-gray-300 flex-shrink-0"
+                                                    style={{ backgroundColor: entry.color_hex }}
+                                                />
+                                            </div>
+                                        ));
+                                    }
+                                    return RF_CATEGORY_ORDER.map((category) => (
+                                        <div key={category} className="flex items-center justify-between border rounded px-2 py-1">
+                                            <span className="text-sm">{category}</span>
                                             <div
                                                 className="w-5 h-5 rounded border border-gray-300 flex-shrink-0"
-                                                style={{ backgroundColor: entry.color_hex }}
+                                                style={{ backgroundColor: RF_CATEGORY_COLORS[category] }}
                                             />
                                         </div>
-                                    ))
-                                }
+                                    ));
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -2471,20 +2505,27 @@ onChange={() => toggleRfRegion(name)}
                             ))}
                         </div>
                         <div className="mt-3 space-y-3">
-                            <span className="text-xs font-semibold text-gray-500">Select Start/End DateTime</span>
                             <div className="grid grid-cols-2 gap-2">
-                                <input
-                                    type="datetime-local"
-                                    value={startDateTime}
-                                    onChange={(e) => setStartDateTime(e.target.value)}
-                                    className="border rounded px-2 py-1 text-xs"
-                                />
-                                <input
-                                    type="datetime-local"
-                                    value={endDateTime}
-                                    onChange={(e) => setEndDateTime(e.target.value)}
-                                    className="border rounded px-2 py-1 text-xs"
-                                />
+                                <div className="flex flex-col">
+                                    <label className="text-xs font-semibold text-gray-500 mb-1">Start: Date</label>
+                                    <input
+                                        type="date"
+                                        value={startDateTime ? startDateTime.slice(0, 10) : ""}
+                                        onChange={(e) => setStartDateTime(e.target.value)}
+                                        className="border rounded px-1 py-1 text-[10px] w-full [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                        style={{ backgroundColor: "#091428", color: "white" }}
+                                    />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="text-xs font-semibold text-gray-500 mb-1">End: Date</label>
+                                    <input
+                                        type="date"
+                                        value={endDateTime ? endDateTime.slice(0, 10) : ""}
+                                        onChange={(e) => setEndDateTime(e.target.value)}
+                                        className="border rounded px-1 py-1 text-[10px] w-full [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                        style={{ backgroundColor: "#091428", color: "white" }}
+                                    />
+                                </div>
                             </div>
                             <div className="mb-3">
                                 <span className="text-xs font-semibold text-gray-500 block mb-1">Apply Thematic by</span>

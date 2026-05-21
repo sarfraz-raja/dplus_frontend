@@ -23,7 +23,7 @@ import generateSectorPolygon from "./Utils/GenerateSectorPolygon";
 import { useNavigate } from 'react-router-dom';
 import CommonActions from '../../store/actions/common-actions';
 import { ALERTS } from '../../store/reducers/component-reducer';
-import { FIXED_COLORS, getDriveTestColor } from "./Utils/colorEngine";
+import { FIXED_COLORS, getDriveTestColor, KPI_RANGE_DEFAULTS, RF_CATEGORY_COLORS } from "./Utils/colorEngine";
 import LegendBox from "./LegendBox";
 import LegendBoxV2 from "./LegendBoxV2";
 import { Check, ChevronDown, ChevronUp, Compass, Copy, MapPin, Maximize, Minus, Plus, Ruler, Settings, X } from "lucide-react";
@@ -357,6 +357,8 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
   const selectedCell = useSelector(state => state.map.selectedCell);
   const boundaryGeoJson = useSelector(state => state.map.boundaryGeoJson);
   const activeThematic = useSelector(state => state.map.activeThematic);
+  const cellKpiData = useSelector(state => state.map.cellKpiData ?? {});
+  const siteKpiData = useSelector(state => state.map.siteKpiData ?? {});
   const highlightedCell = useSelector(state => state.map.highlightedCell);
 
   const [showCellProRulesModal, setShowCellProRulesModal] = useState(false);
@@ -508,15 +510,28 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
 const selectedBoundaries = useSelector(state => state.map.selectedBoundaries || {});
 
 const rfLegendThematic = useMemo(() => {
-    if (!rfColorConfig.length) return null;
     const activeParam = config.rfParameter || "RSRP";
     const filtered = rfColorConfig
         .filter(c => c.parameter_name === activeParam)
         .sort((a, b) => a.display_order - b.display_order);
-    if (!filtered.length) return null;
-    const colors = Object.fromEntries(filtered.map(c => [c.range_label, c.color_hex]));
-    return { type: activeParam, colors };
-}, [rfColorConfig, config.rfParameter]);
+    if (filtered.length) {
+        const colors = Object.fromEntries(filtered.map(c => [c.range_label, c.color_hex]));
+        return { type: activeParam, colors };
+    }
+    // Derive ranges from actual GeoJSON features using RF_CATEGORY_COLORS
+    const features = rfPredictionGeoJson?.features || [];
+    const colorMap = {};
+    features.forEach(f => {
+        if (f.properties?.parameter !== activeParam) return;
+        const rangeLabel = f.properties?.range;
+        if (!rangeLabel || colorMap[rangeLabel]) return;
+        const categoryMatch = rangeLabel.match(/\(([^)]+)\)$/);
+        const category = categoryMatch?.[1];
+        colorMap[rangeLabel] = RF_CATEGORY_COLORS[category] || "#9CA3AF";
+    });
+    if (!Object.keys(colorMap).length) return null;
+    return { type: activeParam, colors: colorMap };
+}, [rfColorConfig, config.rfParameter, rfPredictionGeoJson]);
 
 const nrLegendThematic = useMemo(() => {
 
@@ -1042,26 +1057,46 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
           return [255, 255, 0, 255];
         }
 
-        // DEFAULT thematic
-        if (activeThematic?.type === "Default") {
-          const hex =
-            activeThematic.colors?.[d.band] ||
-            activeThematic.colors?.[d.technology] ||
-            activeThematic.colors?.[d.region];
+        // ── NOTE: siteAggregated (used here at zoom < 12) only carries
+        // { site_name, latitude, longitude, cell_count } — no band / technology /
+        // region / kpi fields. All thematic logic below is preserved for when
+        // siteAggregated is enriched with per-cell fields in the future.
+        // For now, dots are intentionally black (neutral site-position markers).
+        // Thematic coloring applies at zoom ≥ 12 via the sector/PathLayer.
 
-          if (hex) return hexToRgba(hex, opacity);
-        }
+        // // KPI thematic — color by fetched KPI value
+        // if (activeThematic?.type === "KPIs") {
+        //   const kpiConfig = activeThematic.kpiConfig || {};
+        //   const kpiValue = cellKpiData[d.cell_id];
+        //   if (kpiValue != null) {
+        //     const { color } = getDriveTestColor(
+        //       kpiValue,
+        //       kpiConfig.kpi,
+        //       kpiConfig.mode,
+        //       kpiConfig.ranges
+        //     );
+        //     return hexToRgba(color, opacity);
+        //   }
+        //   return hexToRgba("#888888", opacity); // grey = no data
+        // }
 
-        // Generic thematics
-        const field = THEMATIC_FIELD_MAP[activeThematic?.type];
+        // // DEFAULT thematic
+        // if (activeThematic?.type === "Default") {
+        //   const hex =
+        //     activeThematic.colors?.[d.band] ||
+        //     activeThematic.colors?.[d.technology] ||
+        //     activeThematic.colors?.[d.region];
+        //   if (hex) return hexToRgba(hex, opacity);
+        // }
 
-        if (field) {
-          const hex = activeThematic.colors?.[d[field]];
-          if (hex) return hexToRgba(hex, opacity);
-        }
+        // // Generic thematics (Band, Region, Vendor, etc.)
+        // const field = THEMATIC_FIELD_MAP[activeThematic?.type];
+        // if (field) {
+        //   const hex = activeThematic.colors?.[d[field]];
+        //   if (hex) return hexToRgba(hex, opacity);
+        // }
 
-        // fallback
-        return hexToRgba("#ff0000", opacity);
+        return hexToRgba("#000000", opacity);
       },
       getLineColor: [0, 0, 0],
       getLineWidth: 1,
@@ -1070,8 +1105,10 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
           activeThematic?.type,
           activeThematic?.colors,
           activeThematic?.opacity,
+          activeThematic?.kpiConfig,
           layerOpacity.CELLS,
           selectedCell,
+          cellKpiData,
         ]
       },
       visible: layerVisibility.CELLS && currentZoom < 12, // markers visible below zoom 12
@@ -1114,7 +1151,9 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
 
       activeThematic?.type,
       activeThematic?.colors,
-      activeThematic?.opacity, 
+      activeThematic?.opacity,
+      activeThematic?.kpiConfig,
+      cellKpiData,
       layerOpacity.CELLS,
       blockMapDataPick
     ]);
@@ -1272,6 +1311,8 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
             activeThematic?.type,
             activeThematic?.colors,
             activeThematic?.opacity,
+            activeThematic?.kpiConfig,
+            cellKpiData,
             layerOpacity.CELLS,
           ],
           getFillColor: [neighbourRelations?.cellId, neighbourRelations?.data?.length],
@@ -1288,6 +1329,22 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
             (layerOpacity.CELLS ?? 1) *
             (activeThematic?.opacity ?? 1);
 
+          // KPI thematic
+          if (activeThematic?.type === "KPIs") {
+            const kpiConfig = activeThematic.kpiConfig || {};
+            const kpiValue = cellKpiData[d.cell_id];
+            if (kpiValue != null) {
+              const { color } = getDriveTestColor(
+                kpiValue,
+                kpiConfig.kpi,
+                kpiConfig.mode,
+                kpiConfig.ranges
+              );
+              return hexToRgba(color, opacity);
+            }
+            return hexToRgba("#888888", opacity);
+          }
+
           // DEFAULT thematic (special logic)
           if (activeThematic?.type === "Default") {
 
@@ -1299,7 +1356,7 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
             if (hex) return hexToRgba(hex, opacity);
 
           }
-          
+
           // Generic thematics
           const field = THEMATIC_FIELD_MAP[activeThematic?.type];
 
@@ -1346,6 +1403,8 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
       activeThematic?.type,
       activeThematic?.colors,
       activeThematic?.opacity,
+      activeThematic?.kpiConfig,
+      cellKpiData,
       layerOpacity.CELLS,
       layerVisibility.CELLS,
       blockMapDataPick,
@@ -1373,6 +1432,16 @@ const siteLayer = useMemo(() => {
 
             const opacity = activeSiteThematic?.opacity ?? 1;
 
+            if (activeSiteThematic?.type === "KPIs") {
+                const kpiConfig = activeSiteThematic.kpiConfig || {};
+                const kpiValue = siteKpiData[d.tower_id];
+                if (kpiValue != null) {
+                    const { color } = getDriveTestColor(kpiValue, kpiConfig.kpi, kpiConfig.mode, kpiConfig.ranges);
+                    return hexToRgba(color, opacity);
+                }
+                return hexToRgba("#888888", opacity); // grey = no data
+            }
+
             const field = THEMATIC_FIELD_MAP[activeSiteThematic?.type];
             if (field) {
                 const hex = activeSiteThematic.colors?.[d[field]];
@@ -1391,6 +1460,8 @@ const siteLayer = useMemo(() => {
                 activeSiteThematic?.type,
                 activeSiteThematic?.colors,
                 activeSiteThematic?.opacity,
+                activeSiteThematic?.kpiConfig,
+                siteKpiData,
             ]
         },
         onClick: info => {
@@ -1415,6 +1486,8 @@ const siteLayer = useMemo(() => {
     activeSiteThematic?.type,
     activeSiteThematic?.colors,
     activeSiteThematic?.opacity,
+    activeSiteThematic?.kpiConfig,
+    siteKpiData,
     blockMapDataPick,
 ]);
   /* ============================================================
@@ -1637,7 +1710,20 @@ const siteLayer = useMemo(() => {
       id: "rf-prediction-layer",
       data: rfPredictionGeoJson,
       filled: true,
-      stroked: false,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      lineWidthMaxPixels: 3,
+      getLineWidth: 30,
+      getLineColor: feature => {
+        const props = feature.properties;
+        const entry = rfColorConfig.find(
+          c => c.parameter_name === props.parameter && c.range_label === props.range
+        );
+        if (entry) return hexToRgba(entry.color_hex, 1);
+        const categoryMatch = props.range?.match(/\(([^)]+)\)$/);
+        const category = categoryMatch?.[1];
+        return hexToRgba(RF_CATEGORY_COLORS[category] || "#9CA3AF", 1);
+      },
       // getFillColor: feature => {
       //   const range = feature.properties.range;
       //   const entry = rfColorConfig.find(
@@ -1650,28 +1736,21 @@ const siteLayer = useMemo(() => {
       //     // console.log(rfColorConfig, "rfColorConfig");
       // },
       getFillColor: feature => {
-
         const props = feature.properties;
         const entry = rfColorConfig.find(
-          c =>
-            c.parameter_name === props.parameter &&
-            c.range_label === props.range
+          c => c.parameter_name === props.parameter && c.range_label === props.range
         );
-
-      //   console.log({
-      //   range: props.range,
-      //   color: entry?.color_hex
-      // });
-
-        return hexToRgba(
-          entry?.color_hex || "#9CA3AF",
-          1
-        );
+        if (entry) return hexToRgba(entry.color_hex, 1);
+        // Extract category from range_label like "-105 to -100 dBm (Bad)" → "Bad"
+        const categoryMatch = props.range?.match(/\(([^)]+)\)$/);
+        const category = categoryMatch?.[1];
+        return hexToRgba(RF_CATEGORY_COLORS[category] || "#9CA3AF", 1);
       },
       pickable: !blockMapDataPick,
       opacity: layerOpacity.RF,
       updateTriggers: {
         getFillColor: [rfColorConfig, config.rfParameter, layerOpacity.RF],
+        getLineColor: [rfColorConfig, config.rfParameter],
       },
       // onHover: (info) => {
       //   if (info.object) {
@@ -1704,21 +1783,83 @@ onHover: (info) => {
   const range = props.range;
 
   const entry = rfColorConfig.find(
-    c =>
-      c.parameter_name === parameter &&
-      c.range_label === range
+    c => c.parameter_name === parameter && c.range_label === range
   );
+  let fallbackColor = "#9CA3AF";
+  if (!entry) {
+    const categoryMatch = range?.match(/\(([^)]+)\)$/);
+    const category = categoryMatch?.[1];
+    fallbackColor = RF_CATEGORY_COLORS[category] || "#9CA3AF";
+  }
 
   setRfTooltip({
     x: info.x,
     y: info.y,
     parameter,
     range,
-    color_hex: entry?.color_hex || "#9CA3AF",
+    color_hex: entry?.color_hex || fallbackColor,
   });
 },
     });
   }, [rfPredictionGeoJson, rfColorConfig, config.rfParameter, layerOpacity.RF, blockMapDataPick]);
+
+  // At low zoom (< 8) the RF polygons are sub-pixel. Show one colored dot per region at its centroid.
+  const rfCentroidLayer = useMemo(() => {
+    if (!rfPredictionGeoJson?.features?.length || currentZoom >= 4) return null;
+
+    const seen = new Set();
+    const points = [];
+
+    rfPredictionGeoJson.features.forEach(f => {
+      const region = f.properties?.region || f.properties?.name || "unknown";
+      if (seen.has(region)) return;
+      seen.add(region);
+
+      const geom = f.geometry;
+      const coords = geom?.type === "Polygon"
+        ? geom.coordinates[0]
+        : geom?.type === "MultiPolygon"
+          ? geom.coordinates.flat(2)
+          : [];
+      if (!coords.length) return;
+
+      const lng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+      const lat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+
+      const props = f.properties;
+      const entry = rfColorConfig.find(
+        c => c.parameter_name === props.parameter && c.range_label === props.range
+      );
+      let colorHex = "#9CA3AF";
+      if (entry) {
+        colorHex = entry.color_hex;
+      } else {
+        const categoryMatch = props.range?.match(/\(([^)]+)\)$/);
+        const category = categoryMatch?.[1];
+        colorHex = RF_CATEGORY_COLORS[category] || "#9CA3AF";
+      }
+      const color = hexToRgba(colorHex, layerOpacity.RF);
+
+      points.push({ position: [lng, lat], color, region });
+    });
+
+    if (!points.length) return null;
+
+    return new ScatterplotLayer({
+      id: "rf-centroid-layer",
+      data: points,
+      getPosition: d => d.position,
+      getFillColor: d => d.color,
+      getRadius: 40000,
+      radiusMinPixels: 6,
+      radiusMaxPixels: 20,
+      pickable: false,
+      opacity: layerOpacity.RF,
+      updateTriggers: {
+        getFillColor: [rfColorConfig, config.rfParameter, layerOpacity.RF],
+      },
+    });
+  }, [rfPredictionGeoJson, rfColorConfig, config.rfParameter, layerOpacity.RF, currentZoom]);
 
   /* ============================================================
      🔹 RF Drive TEST LAYER (deck.gl)
@@ -2367,6 +2508,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
      // NON-CELL layers
     if (customGeoJsonLayer) baseLayers.push(customGeoJsonLayer); // kenya and other boundaries (when selected)
     if (rfPredictionLayer) baseLayers.push(rfPredictionLayer); // RF PRediction Layer (when selected)
+    if (rfCentroidLayer) baseLayers.push(rfCentroidLayer);   // centroid dots at low zoom
     if (drivetestLayer) baseLayers.push(drivetestLayer); // RF drive test layer (when selected)
 
     // Ruler last so clicks work on top of RF / drive-test
@@ -2386,6 +2528,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
     neighbourLinesLayer,
     customGeoJsonLayer,
     rfPredictionLayer,
+    rfCentroidLayer,
     drivetestLayer,
     gisFillLayer,
     gisCompletedLinesLayer,

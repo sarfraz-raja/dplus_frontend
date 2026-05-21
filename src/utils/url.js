@@ -78,6 +78,8 @@ export const Urls={
 
     telecom_getCells: "/telecom/cells",
     gisCells: "/map/gisCells",
+    gisCellsKpi: "/map/gis-cells-kpi",
+    gisSitesKpi: "/map/gis-sites-kpi",
     towers: "/map/towers",
     
     boundary_groups: "/map/boundary-groups",

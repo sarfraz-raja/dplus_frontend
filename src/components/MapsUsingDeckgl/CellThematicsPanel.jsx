@@ -22,14 +22,7 @@ const THEMATIC_TYPES = [
 "Region",
 ];
 
-const kpiThematicOptions = [
-    // "RSSI",
-    "CSSR",
-    "CDR",
-    // "RSRP",
-    "DL Thrp",
-    // "Frequency",
-];
+const FALLBACK_CELL_KPI_OPTIONS = ["CSSR", "CDR", "DL Thrp"];
 
 // const CellThematicsPanel = ({ openDropdown, toggleDropdown }) => {
 const CellThematicsPanel = ({ setCellThematicsConfig,
@@ -41,6 +34,8 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
     const techMeta = useSelector(state => state.map.telecomTechMeta) ?? [];
     const filterMeta = useSelector(state => state.map.telecomFilterMeta) ?? {};
     const activeThematic = useSelector(state => state.map.activeThematic);
+    const availableCellKpis = useSelector(state => state.map.availableCellKpis);
+    const kpiThematicOptions = availableCellKpis.length > 0 ? availableCellKpis : FALLBACK_CELL_KPI_OPTIONS;
     const typeCount = activeThematic?.typeCount;
 
     const mapConfig = useSelector(state => state.map.config);
@@ -58,13 +53,22 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
     const [selectedBandPalette, setSelectedBandPalette] = useState("Telecom20");
     const [selectedRegionPalette, setSelectedRegionPalette] = useState("Telecom20");
 
-    const [kpiStartDateTime, setKpiStartDateTime] = useState("");
-    const [kpiEndDateTime, setKpiEndDateTime] = useState("");
-    const [selectedKpi, setSelectedKpi] = useState(kpiThematicOptions[0]);
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+    // Restore KPI sub-state from last saved thematic on panel open
+    const savedKpi = type === "KPIs" ? (activeThematic?.kpiConfig || {}) : {};
+    const initKpi = savedKpi.kpi || kpiThematicOptions[0];
+
+    const [kpiStartDateTime, setKpiStartDateTime] = useState(savedKpi.startDateTime || yesterday);
+    const [kpiEndDateTime, setKpiEndDateTime] = useState(savedKpi.endDateTime || today);
+    const [selectedKpi, setSelectedKpi] = useState(initKpi);
     const [kpiRanges, setKpiRanges] = useState(
-        deepCopyRanges(KPI_RANGE_DEFAULTS[kpiThematicOptions[0]])
+        savedKpi.ranges?.length
+            ? savedKpi.ranges.map(r => ({ ...r }))
+            : deepCopyRanges(KPI_RANGE_DEFAULTS[initKpi])
     );
-    const [kpiMode, setKpiMode] = useState("Default");
+    const [kpiMode, setKpiMode] = useState(savedKpi.mode || "Default");
     const [techMode, setTechMode] = useState("Preview");
     const [bandMode, setBandMode] = useState("Preview");
     const [regionMode, setRegionMode] = useState("Preview");
@@ -269,6 +273,12 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
     useEffect(() => {
         if (hasInitialized.current) return;
         if (!Object.keys(defaultColors.Band).length) return;
+
+        // Skip auto-init when a real thematic is already saved
+        if (type && type !== "Default") {
+            hasInitialized.current = true;
+            return;
+        }
 
         hasInitialized.current = true;
         setTempType("Band");
@@ -707,31 +717,33 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
             {tempType === "KPIs" && (
                 <div className="pt-3 space-y-4">
 
-                    {/* Date/Time */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Date */}
+                    <div className="grid grid-cols-2 gap-2">
                     <div className="flex flex-col">
                         <label className="text-xs font-semibold text-gray-500 mb-1">
-                        Start: Date/Time
+                        Start: Date
                         </label>
 
                         <input
-                        type="datetime-local"
+                        type="date"
                         value={kpiStartDateTime}
                         onChange={(e) => setKpiStartDateTime(e.target.value)}
-                        className="border rounded px-2 py-1 text-xs w-full"
+                        className="border rounded px-1 py-1 text-[10px] w-full [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                        style={{ backgroundColor: "#091428", color: "white" }}
                         />
                     </div>
 
                     <div className="flex flex-col">
                         <label className="text-xs font-semibold text-gray-500 mb-1">
-                        End: Date/Time
+                        End: Date
                         </label>
 
                         <input
-                        type="datetime-local"
+                        type="date"
                         value={kpiEndDateTime}
                         onChange={(e) => setKpiEndDateTime(e.target.value)}
-                        className="border rounded px-2 py-1 text-xs w-full"
+                        className="border rounded px-1 py-1 text-[10px] w-full [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                        style={{ backgroundColor: "#091428", color: "white" }}
                         />
                     </div>
                     </div>

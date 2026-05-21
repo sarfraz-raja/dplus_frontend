@@ -34,7 +34,7 @@ export function meMenuToSidebarItems(menu, { resolveTopIcon }) {
   const walk = (nodes, isTop) => {
     const sorted = sortMenuBySequence(nodes || []);
     if (isTop) {
-      console.log("[Sidebar] API menu order after sort:", sorted.map((n) => ({ title: n.title, sequence: n.sequence })));
+      // console.log("[Sidebar] API menu order after sort:", sorted.map((n) => ({ title: n.title, sequence: n.sequence })));
     }
     return sorted
       .filter((n) => n && n.is_active !== false)
@@ -55,6 +55,6 @@ export function meMenuToSidebarItems(menu, { resolveTopIcon }) {
   };
 
   if (!Array.isArray(menu) || !menu.length) return [];
-  console.log("[Sidebar] Raw API menu from Redux:", menu.map((n) => ({ title: n.title, sequence: n.sequence })));
+  // console.log("[Sidebar] Raw API menu from Redux:", menu.map((n) => ({ title: n.title, sequence: n.sequence })));
   return walk(menu, true);
 }

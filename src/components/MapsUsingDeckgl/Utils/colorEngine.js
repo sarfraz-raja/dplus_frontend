@@ -122,6 +122,24 @@ export const TECHNOLOGY_SCHEMES = {
  * - Drive Test layer (AddMapLayersPanel)
  * - Cell KPI thematics (CellThematicsPanel)
  */
+// Maps the parenthetical category suffix from DB range_label (e.g. "-100 to -95 dBm (Poor)") to hex color.
+// Used as fallback when rfColorConfig API doesn't return entries for a given parameter.
+export const RF_CATEGORY_COLORS = {
+    "Excellent": "#16a34a",
+    "Very Good": "#22c55e",
+    "Good":      "#4ade80",
+    "Fair":      "#eab308",
+    "Weak":      "#f97316",
+    "Poor":      "#ef4444",
+    "Bad":       "#991b1b",
+    "No Cov.":   "#6b7280",
+};
+
+// Ordered list of RF categories for display in legend/panel when API has no config for a parameter.
+export const RF_CATEGORY_ORDER = [
+    "Excellent", "Very Good", "Good", "Fair", "Weak", "Poor", "Bad", "No Cov."
+];
+
 export const KPI_RANGE_DEFAULTS = {
     RSSI: [
         { min: -75,  max: 0,    color: "#22c55e", label: "Strong" },
@@ -134,11 +152,6 @@ export const KPI_RANGE_DEFAULTS = {
         { min: -95,  max: -80,  color: "#eab308", label: "Good" },
         { min: -110, max: -95,  color: "#f97316", label: "Weak" },
         { min: -140, max: -110, color: "#ef4444", label: "Very Weak" }
-    ],
-    CSSR: [
-      { min: 98, max: 100, color: "#22c55e", label: "Strong" },
-      { min: 95, max: 98,  color: "#eab308", label: "Good" },
-      { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
     ],
     CDR: [
         { min: 0, max: 1, color: "#22c55e", label: "Strong" },
@@ -156,6 +169,40 @@ export const KPI_RANGE_DEFAULTS = {
         { min: 1000, max: 2500, color: "#eab308", label: "Mid" },
         { min: 700,  max: 1000, color: "#f97316", label: "Low" },
         { min: 0,    max: 700,  color: "#ef4444", label: "Very Low" }
+    ],
+
+    // API KPI keys — both capitalized (dropdown display names) and lowercase (fallback)
+    // Capitalized keys match what gisCells API returns in kpis[]
+    CSSR: [
+      { min: 98, max: 100, color: "#22c55e", label: "Strong" },
+      { min: 95, max: 98,  color: "#eab308", label: "Good" },
+      { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
+    ],
+    Data_SR: [
+        { min: 98, max: 100, color: "#22c55e", label: "Strong" },
+        { min: 95, max: 98,  color: "#eab308", label: "Good" },
+        { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
+    ],
+    Availability: [
+        { min: 99, max: 100, color: "#22c55e", label: "Strong" },
+        { min: 95, max: 99,  color: "#eab308", label: "Good" },
+        { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
+    ],
+    // lowercase aliases kept for backward compatibility
+    cssr: [
+        { min: 98, max: 100, color: "#22c55e", label: "Strong" },
+        { min: 95, max: 98,  color: "#eab308", label: "Good" },
+        { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
+    ],
+    data_sr: [
+        { min: 98, max: 100, color: "#22c55e", label: "Strong" },
+        { min: 95, max: 98,  color: "#eab308", label: "Good" },
+        { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
+    ],
+    availability: [
+        { min: 99, max: 100, color: "#22c55e", label: "Strong" },
+        { min: 95, max: 99,  color: "#eab308", label: "Good" },
+        { min: 0,  max: 95,  color: "#ef4444", label: "Weak" }
     ],
 };
 

@@ -5,7 +5,7 @@ import ColorPicker from "./ColorPicker";
 import RangeFilter from "./RangeFilter";
 import OpacitySlider from "./OpacitySlider";
 import SiteThematicsPanel from "./SiteThematicsPanel";
-import { KPI_RANGE_DEFAULTS, deepCopyRanges } from "./Utils/colorEngine";
+import { KPI_RANGE_DEFAULTS, deepCopyRanges, RF_CATEGORY_COLORS, RF_CATEGORY_ORDER } from "./Utils/colorEngine";
 
 const dy3LayerCb =
   "h-3 w-3 shrink-0 appearance-none rounded-[3px] border border-white/30 bg-transparent checked:border-[#F26522] checked:bg-[#F26522]";
@@ -574,21 +574,37 @@ const AddMapLayersPanelFloatingLayout = ({
                   <div className="mt-2">
                     <div className="mb-1 text-xs font-semibold text-gray-500">Range & colors</div>
                     <div className="space-y-2">
-                      {rfColorConfig
-                        .filter((c) => c.parameter_name === rfParameter)
-                        .sort((a, b) => a.display_order - b.display_order)
-                        .map((entry) => (
+                      {(() => {
+                        const apiEntries = rfColorConfig
+                          .filter((c) => c.parameter_name === rfParameter)
+                          .sort((a, b) => a.display_order - b.display_order);
+                        if (apiEntries.length > 0) {
+                          return apiEntries.map((entry) => (
+                            <div
+                              key={entry.range_label}
+                              className="flex items-center justify-between rounded border border-white/10 px-2 py-1"
+                            >
+                              <span className="text-sm">{entry.range_label}</span>
+                              <div
+                                className="h-5 w-5 flex-shrink-0 rounded border border-white/20"
+                                style={{ backgroundColor: entry.color_hex }}
+                              />
+                            </div>
+                          ));
+                        }
+                        return RF_CATEGORY_ORDER.map((category) => (
                           <div
-                            key={entry.range_label}
+                            key={category}
                             className="flex items-center justify-between rounded border border-white/10 px-2 py-1"
                           >
-                            <span className="text-sm">{entry.range_label}</span>
+                            <span className="text-sm">{category}</span>
                             <div
                               className="h-5 w-5 flex-shrink-0 rounded border border-white/20"
-                              style={{ backgroundColor: entry.color_hex }}
+                              style={{ backgroundColor: RF_CATEGORY_COLORS[category] }}
                             />
                           </div>
-                        ))}
+                        ));
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -640,18 +656,27 @@ const AddMapLayersPanelFloatingLayout = ({
                     ))}
                   </div>
                   <div className="mt-2 space-y-2">
-                    <span className="text-xs font-semibold text-gray-500">Start / end</span>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <input
-                        type="datetime-local"
-                        value={startDateTime}
-                        onChange={(e) => { setStartDateTime(e.target.value); markDirty(); }}
-                      />
-                      <input
-                        type="datetime-local"
-                        value={endDateTime}
-                        onChange={(e) => { setEndDateTime(e.target.value); markDirty(); }}
-                      />
+                      <div className="flex flex-col">
+                        <label className="text-xs font-semibold text-gray-500 mb-1">Start: Date</label>
+                        <input
+                          type="date"
+                          value={startDateTime ? startDateTime.slice(0, 10) : ""}
+                          onChange={(e) => { setStartDateTime(e.target.value); markDirty(); }}
+                          className="border rounded px-1 py-1 text-[10px] w-full [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                          style={{ backgroundColor: "#091428", color: "white" }}
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-xs font-semibold text-gray-500 mb-1">End: Date</label>
+                        <input
+                          type="date"
+                          value={endDateTime ? endDateTime.slice(0, 10) : ""}
+                          onChange={(e) => { setEndDateTime(e.target.value); markDirty(); }}
+                          className="border rounded px-1 py-1 text-[10px] w-full [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                          style={{ backgroundColor: "#091428", color: "white" }}
+                        />
+                      </div>
                     </div>
                     <div>
                       <span className="mb-1 block text-xs font-semibold text-gray-500">Thematic</span>

@@ -22,7 +22,13 @@ const LegendBoxV2 = ({
   onSendBackward,
   initialPosition,
 }) => {
-  const [position, setPosition] = useState(initialPosition ?? { x: 100, y: 100 });
+  const [position, setPosition] = useState(() => {
+    const p = initialPosition ?? { x: 100, y: 100 };
+    return {
+      x: Math.max(0, Math.min(p.x, window.innerWidth - DEFAULT_WIDTH)),
+      y: Math.max(0, Math.min(p.y, window.innerHeight - 100)),
+    };
+  });
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   /** null = height follows content (default); number = user-resized */
   const [height, setHeight] = useState(null);
@@ -71,9 +77,13 @@ const LegendBoxV2 = ({
 
   const onMouseMove = useCallback((e) => {
     if (dragging.current) {
+      const el = rootRef.current;
+      const elH = el ? el.getBoundingClientRect().height : 200;
+      const newX = e.clientX - offset.current.x;
+      const newY = e.clientY - offset.current.y;
       setPosition({
-        x: e.clientX - offset.current.x,
-        y: e.clientY - offset.current.y,
+        x: Math.max(0, Math.min(newX, window.innerWidth - width)),
+        y: Math.max(0, Math.min(newY, window.innerHeight - elH)),
       });
       return;
     }
@@ -257,13 +267,34 @@ const LegendBoxV2 = ({
                 </span>
               </div>
             ))}
+            <div
+              className="flex items-center justify-between gap-2"
+              style={{ fontSize: sz(12) }}
+            >
+              <div className="flex min-w-0 items-center" style={{ gap: sz(8) }}>
+                <div
+                  className="shrink-0 rounded border border-gray-300"
+                  style={{
+                    width: sz(14),
+                    height: sz(14),
+                    background: "#888888",
+                  }}
+                />
+                <span className="truncate" style={{ color: LEGEND_TEXT_MUTED, fontWeight: 500 }}>
+                  No Data
+                </span>
+              </div>
+              <span className="shrink-0 tabular-nums" style={{ fontSize: sz(11), color: LEGEND_TEXT_MUTED }}>
+                null
+              </span>
+            </div>
           </div>
         )}
 
         {type !== "KPIs" && (
           <div className="flex flex-col" style={{ gap: sz(6) }}>
             {Object.entries(colors || {})
-              .filter(([key]) => typeCount && Object.prototype.hasOwnProperty.call(typeCount, key))
+              .filter(([key]) => !typeCount || Object.prototype.hasOwnProperty.call(typeCount, key))
               .map(([key, color]) => (
               <div
                 key={key}
