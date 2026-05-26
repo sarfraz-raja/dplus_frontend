@@ -1,18 +1,19 @@
 import React from "react";
+import { toast } from "react-hot-toast";
 import { ChevronDown, X, Settings } from "lucide-react";
 import CellThematicsPanel from "./CellThematicsPanel";
 import ColorPicker from "./ColorPicker";
 import RangeFilter from "./RangeFilter";
 import OpacitySlider from "./OpacitySlider";
 import SiteThematicsPanel from "./SiteThematicsPanel";
-import { KPI_RANGE_DEFAULTS, deepCopyRanges, RF_CATEGORY_COLORS, RF_CATEGORY_ORDER } from "./Utils/colorEngine";
+import { KPI_RANGE_DEFAULTS, deepCopyRanges, RF_CATEGORY_COLORS, RF_CATEGORY_ORDER, getNeighbourOperationColor, parseNeighbourOperation } from "./Utils/colorEngine";
 
 const dy3LayerCb =
   "h-3 w-3 shrink-0 appearance-none rounded-[3px] border border-white/30 bg-transparent checked:border-[#F26522] checked:bg-[#F26522]";
 
 /** Dark-theme overrides for legacy light panels inside the floating shell */
 const floatingInner =
-  "sidebar-scroll flex-1 overflow-y-auto px-2 py-1.5" +
+  "sidebar-scroll flex-1 overflow-y-auto px-2 pt-[18px] pb-2" +
   // checkboxes — orange accent, no bg change (native look)
   " [&_input[type=checkbox]]:accent-[#F26522] [&_input[type=checkbox]]:border-white/30" +
   // range sliders
@@ -39,6 +40,7 @@ const SECTION_TITLE = {
   BOUNDARY: "Boundaries",
   RF: "RF predictions",
   DRIVE_TEST: "Drive test",
+  NEIGHBOURS: "Plan Neighbors",
 };
 
 /**
@@ -99,6 +101,17 @@ const AddMapLayersPanelFloatingLayout = ({
   driveThematicOptions,
   driveTestScale,
   setDriveTestScale,
+  neighbourPlanName,
+  neighbourPlanOptions,
+  handleNeighbourPlanChange,
+  neighbourSources,
+  selectedNeighbourSources,
+  toggleNeighbourSource,
+  neighbourOperationTypes,
+  neighbourApplied,
+  pendingNeighboursEnabled,
+  setPendingNeighboursEnabled,
+  layerVisibility,
 }) => {
   // RF / Drive Test selection status (computed locally from props)
   const anyRfSelected = pendingRfRegions.length > 0;
@@ -190,6 +203,7 @@ const AddMapLayersPanelFloatingLayout = ({
                       const next = !pendingVisibility.CELLS;
                       setPendingVisibility((prev) => ({ ...prev, CELLS: next }));
                       if (next) setActiveLayerSection("CELL");
+                      if (!next && selectedNeighbourSources.length > 0) toggleNeighbourSource([]);
                       markDirty();
                     }}
                     className={`${dy3LayerCb} m-0 align-middle`}
@@ -242,7 +256,7 @@ const AddMapLayersPanelFloatingLayout = ({
                     className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors self-center"
                     style={{
                       borderColor: anyBoundarySelected ? '#F26522' : 'rgba(255,255,255,0.3)',
-                      backgroundColor: allBoundariesSelected ? '#F26522' : anyBoundarySelected ? 'rgba(242,101,34,0.22)' : 'transparent',
+                      backgroundColor: allBoundariesSelected ? '#F26522' : anyBoundarySelected ? 'rgba(242,101,34,0.22)' : 'rgba(255,255,255,0.1)',
                     }}
                   >
                     {allBoundariesSelected && (
@@ -298,7 +312,7 @@ const AddMapLayersPanelFloatingLayout = ({
                     className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors self-center"
                     style={{
                       borderColor: anyRfSelected ? '#F26522' : 'rgba(255,255,255,0.3)',
-                      backgroundColor: allRfSelected ? '#F26522' : anyRfSelected ? 'rgba(242,101,34,0.22)' : 'transparent',
+                      backgroundColor: allRfSelected ? '#F26522' : anyRfSelected ? 'rgba(242,101,34,0.22)' : 'rgba(255,255,255,0.1)',
                     }}
                   >
                     {allRfSelected && (
@@ -353,7 +367,7 @@ const AddMapLayersPanelFloatingLayout = ({
                     className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors self-center"
                     style={{
                       borderColor: anyDriveSelected ? '#F26522' : 'rgba(255,255,255,0.3)',
-                      backgroundColor: allDriveSelected ? '#F26522' : anyDriveSelected ? 'rgba(242,101,34,0.22)' : 'transparent',
+                      backgroundColor: allDriveSelected ? '#F26522' : anyDriveSelected ? 'rgba(242,101,34,0.22)' : 'rgba(255,255,255,0.1)',
                     }}
                   >
                     {allDriveSelected && (
@@ -387,6 +401,62 @@ const AddMapLayersPanelFloatingLayout = ({
                 <ChevronDown
                   className={`h-3 w-3 shrink-0 rotate-[-90deg] transition-all duration-300 ${
                     activeLayerSection === "DRIVE_TEST" ? "text-[#F26522]" : "text-inherit"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* ── Tier 2: Neighbours ── */}
+          <div className={railCard}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!selectedNeighbourSources.length) return;
+                    toggleNeighbourSource([]);
+                    markDirty();
+                  }}
+                  className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors self-center"
+                  style={{
+                    borderColor: selectedNeighbourSources.length > 0 ? '#F26522' : 'rgba(255,255,255,0.3)',
+                    backgroundColor: selectedNeighbourSources.length === neighbourSources.length && neighbourSources.length > 0 ? '#F26522' : selectedNeighbourSources.length > 0 ? 'rgba(242,101,34,0.22)' : 'rgba(255,255,255,0.1)',
+                    cursor: selectedNeighbourSources.length > 0 ? 'pointer' : 'default',
+                  }}
+                >
+                  {selectedNeighbourSources.length === neighbourSources.length && neighbourSources.length > 0 && (
+                    <svg viewBox="0 0 8 8" className="h-2 w-2 text-white" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polyline points="1,4 3,6.5 7,1.5" /></svg>
+                  )}
+                  {selectedNeighbourSources.length > 0 && selectedNeighbourSources.length < neighbourSources.length && (
+                    <span className="block h-px w-1.5 bg-[#F26522]" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleFloatingSection("NEIGHBOURS")}
+                  title="Plan Neighbors"
+                  className="flex min-w-0 flex-1 items-center gap-1 py-0 text-left"
+                >
+                  <span
+                    className={`truncate text-[9px] font-bold uppercase leading-[1.1] tracking-[0.12em] ${
+                      activeLayerSection === "NEIGHBOURS" ? "text-[#F26522]" : "text-white"
+                    }`}
+                  >
+                    Plan Neighbors
+                  </span>
+                  <Settings className="h-2 w-2 shrink-0 text-white" aria-hidden />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleFloatingSection("NEIGHBOURS")}
+                aria-label={activeLayerSection === "NEIGHBOURS" ? "Collapse neighbours" : "Expand neighbours"}
+                className={chevronBtn(activeLayerSection === "NEIGHBOURS")}
+              >
+                <ChevronDown
+                  className={`h-3 w-3 shrink-0 rotate-[-90deg] transition-all duration-300 ${
+                    activeLayerSection === "NEIGHBOURS" ? "text-[#F26522]" : "text-inherit"
                   }`}
                 />
               </button>
@@ -462,149 +532,161 @@ const AddMapLayersPanelFloatingLayout = ({
 
               {activeLayerSection === "BOUNDARY" ? (
                 <div className={floatingInner}>
-                  <div className="flex items-center justify-between border-b border-white/10 pb-2 pt-1">
-                    <span className="text-xs font-semibold text-gray-500">Show legend</span>
-                    <input
-                      type="checkbox"
-                      checked={!!pendingLegends.BOUNDARY}
-                      onChange={(e) => {
-                        setPendingLegends((prev) => ({ ...prev, BOUNDARY: e.target.checked }));
-                        markDirty();
-                      }}
-                    />
-                  </div>
-                  <OpacitySlider
-                    value={pendingOpacity.BOUNDARY}
-                    onChange={(val) => { setPendingOpacity((prev) => ({ ...prev, BOUNDARY: val })); markDirty(); }}
-                  />
-                  {boundaryGroups.map((group, index) => (
-                    <div key={index} className="mb-2 rounded border border-white/10 bg-white/[0.06] p-2">
-                      <div className="flex items-center gap-2 rounded p-1 hover:bg-white/[0.04]">
-                        <input
-                          type="checkbox"
-                          checked={pendingVisibility[group.shapegroup] || false}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={() => { toggleParentLayerSelection(group.shapegroup); markDirty(); }}
-                        />
-                        <span className="flex-1 text-sm font-medium">{group.shapegroup}</span>
-                        <ColorPicker
-                          value={boundaryColors[group.shapegroup] || "#000000"}
-                          onChange={(color) => {
-                            setBoundaryColors((prev) => ({ ...prev, [group.shapegroup]: color }));
-                            markDirty();
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedBoundaryGroup(
-                              expandedBoundaryGroup === group.shapegroup ? null : group.shapegroup
-                            )
-                          }
-                          className="text-white/70"
-                        >
-                          <ChevronDown
-                            className={`h-4 w-4 transition-transform ${
-                              expandedBoundaryGroup === group.shapegroup ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-                      </div>
-                      {expandedBoundaryGroup === group.shapegroup ? (
-                        <div className="mt-2 max-h-[160px] overflow-y-auto rounded border border-white/10 p-2">
-                          {group.shapenames.map((name, idx) => (
-                            <label key={idx} className="mb-1 flex cursor-pointer items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={pendingBoundarySelections[group.shapegroup]?.includes(name) || false}
-                                onChange={() => { toggleBoundaryChild(group.shapegroup, name); markDirty(); }}
-                              />
-                              {name}
-                            </label>
-                          ))}
-                        </div>
-                      ) : null}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white/60">Show legend</span>
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 cursor-pointer"
+                        checked={!!pendingLegends.BOUNDARY}
+                        onChange={(e) => {
+                          setPendingLegends((prev) => ({ ...prev, BOUNDARY: e.target.checked }));
+                          markDirty();
+                        }}
+                      />
                     </div>
-                  ))}
+                    <OpacitySlider
+                      value={pendingOpacity.BOUNDARY}
+                      onChange={(val) => { setPendingOpacity((prev) => ({ ...prev, BOUNDARY: val })); markDirty(); }}
+                    />
+                    <div>
+                      <span className="mb-1 block text-xs font-semibold text-white/60">Select layers</span>
+                      {boundaryGroups.map((group, index) => (
+                        <div key={index} className="mb-1.5 rounded border border-white/10 bg-white/[0.06]">
+                          <div className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-white/[0.04]">
+                            <input
+                              type="checkbox"
+                              checked={pendingVisibility[group.shapegroup] || false}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={() => { toggleParentLayerSelection(group.shapegroup); markDirty(); }}
+                            />
+                            <span className="flex-1 text-xs font-medium">{group.shapegroup}</span>
+                            <ColorPicker
+                              value={boundaryColors[group.shapegroup] || "#000000"}
+                              onChange={(color) => {
+                                setBoundaryColors((prev) => ({ ...prev, [group.shapegroup]: color }));
+                                markDirty();
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedBoundaryGroup(
+                                  expandedBoundaryGroup === group.shapegroup ? null : group.shapegroup
+                                )
+                              }
+                              className="text-white/70"
+                            >
+                              <ChevronDown
+                                className={`h-3.5 w-3.5 transition-transform ${
+                                  expandedBoundaryGroup === group.shapegroup ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          {expandedBoundaryGroup === group.shapegroup ? (
+                            <div className="max-h-[160px] overflow-y-auto rounded border-t border-white/10 p-2">
+                              {group.shapenames.map((name, idx) => (
+                                <label key={idx} className="mb-0.5 flex cursor-pointer items-center gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={pendingBoundarySelections[group.shapegroup]?.includes(name) || false}
+                                    onChange={() => { toggleBoundaryChild(group.shapegroup, name); markDirty(); }}
+                                  />
+                                  {name}
+                                </label>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
               {activeLayerSection === "RF" ? (
                 <div className={floatingInner}>
-                  <div className="flex items-center justify-between border-b border-white/10 pb-2 pt-1">
-                    <span className="text-xs font-semibold text-gray-500">Show legend</span>
-                    <input
-                      type="checkbox"
-                      checked={!!pendingLegends.RF}
-                      onChange={(e) => {
-                        setPendingLegends((prev) => ({ ...prev, RF: e.target.checked }));
-                        markDirty();
-                      }}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white/60">Show legend</span>
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 cursor-pointer"
+                        checked={!!pendingLegends.RF}
+                        onChange={(e) => {
+                          setPendingLegends((prev) => ({ ...prev, RF: e.target.checked }));
+                          markDirty();
+                        }}
+                      />
+                    </div>
+                    <OpacitySlider
+                      value={pendingOpacity.RF}
+                      onChange={(val) => { setPendingOpacity((prev) => ({ ...prev, RF: val })); markDirty(); }}
                     />
-                  </div>
-                  <OpacitySlider
-                    value={pendingOpacity.RF}
-                    onChange={(val) => { setPendingOpacity((prev) => ({ ...prev, RF: val })); markDirty(); }}
-                  />
-                  <span className="text-xs font-semibold text-gray-500">Select layers</span>
-                  <div className="mt-2 max-h-[140px] overflow-y-auto rounded border border-white/10 p-2">
-                    {rfRegions.map((name, idx) => (
-                      <label key={idx} className="mb-1 flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={pendingRfRegions.includes(name)}
-                          onChange={() => { toggleRfRegion(name); markDirty(); }}
-                        />
-                        {name}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="mt-2">
-                    <div className="mb-1 text-xs font-semibold text-gray-500">Apply thematic by</div>
-                    <select
-                      value={rfParameter}
-                      onChange={(e) => { setRfParameter(e.target.value); markDirty(); }}
-                      className="w-full rounded border px-2 py-1 text-sm"
-                    >
-                      {rfParameterOptions.map((opt) => (
-                        <option key={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="mt-2">
-                    <div className="mb-1 text-xs font-semibold text-gray-500">Range & colors</div>
-                    <div className="space-y-2">
-                      {(() => {
-                        const apiEntries = rfColorConfig
-                          .filter((c) => c.parameter_name === rfParameter)
-                          .sort((a, b) => a.display_order - b.display_order);
-                        if (apiEntries.length > 0) {
-                          return apiEntries.map((entry) => (
+                    <div>
+                      <span className="mb-1 block text-xs font-semibold text-white/60">Select layers</span>
+                      <div className="max-h-[140px] overflow-y-auto rounded border border-white/10 p-2">
+                        {rfRegions.map((name, idx) => (
+                          <label key={idx} className="mb-1 flex cursor-pointer items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={pendingRfRegions.includes(name)}
+                              onChange={() => { toggleRfRegion(name); markDirty(); }}
+                            />
+                            {name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <hr className="border-t border-white/10" />
+                    <div>
+                      <span className="mb-1 block text-xs font-semibold text-white/60">Apply Thematic by</span>
+                      <select
+                        value={rfParameter}
+                        onChange={(e) => { setRfParameter(e.target.value); markDirty(); }}
+                        className="w-full rounded border px-2 py-1 text-sm"
+                      >
+                        {rfParameterOptions.map((opt) => (
+                          <option key={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-xs font-semibold text-white/60">Preview</span>
+                      <div className="space-y-2">
+                        {(() => {
+                          const apiEntries = rfColorConfig
+                            .filter((c) => c.parameter_name === rfParameter)
+                            .sort((a, b) => a.display_order - b.display_order);
+                          if (apiEntries.length > 0) {
+                            return apiEntries.map((entry) => (
+                              <div
+                                key={entry.range_label}
+                                className="flex items-center justify-between rounded border border-white/10 px-2 py-1"
+                              >
+                                <span className="text-xs">{entry.range_label}</span>
+                                <div
+                                  className="h-5 w-5 flex-shrink-0 rounded border border-white/20"
+                                  style={{ backgroundColor: entry.color_hex }}
+                                />
+                              </div>
+                            ));
+                          }
+                          return RF_CATEGORY_ORDER.map((category) => (
                             <div
-                              key={entry.range_label}
+                              key={category}
                               className="flex items-center justify-between rounded border border-white/10 px-2 py-1"
                             >
-                              <span className="text-sm">{entry.range_label}</span>
+                              <span className="text-xs">{category}</span>
                               <div
                                 className="h-5 w-5 flex-shrink-0 rounded border border-white/20"
-                                style={{ backgroundColor: entry.color_hex }}
+                                style={{ backgroundColor: RF_CATEGORY_COLORS[category] }}
                               />
                             </div>
                           ));
-                        }
-                        return RF_CATEGORY_ORDER.map((category) => (
-                          <div
-                            key={category}
-                            className="flex items-center justify-between rounded border border-white/10 px-2 py-1"
-                          >
-                            <span className="text-sm">{category}</span>
-                            <div
-                              className="h-5 w-5 flex-shrink-0 rounded border border-white/20"
-                              style={{ backgroundColor: RF_CATEGORY_COLORS[category] }}
-                            />
-                          </div>
-                        ));
-                      })()}
+                        })()}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -612,53 +694,56 @@ const AddMapLayersPanelFloatingLayout = ({
 
               {activeLayerSection === "DRIVE_TEST" ? (
                 <div className={floatingInner}>
-                  <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-2 pt-1">
-                    <span className="text-xs font-semibold text-gray-500">Show legend</span>
-                    <input
-                      type="checkbox"
-                      checked={!!pendingLegends.DRIVE_TEST}
-                      onChange={(e) => {
-                        setPendingLegends((prev) => ({ ...prev, DRIVE_TEST: e.target.checked }));
-                        markDirty();
-                      }}
-                    />
-                  </div>
-                  <OpacitySlider
-                    value={pendingOpacity.DRIVE_TEST}
-                    onChange={(val) => { setPendingOpacity((prev) => ({ ...prev, DRIVE_TEST: val })); markDirty(); }}
-                  />
-                  <div className="pb-2 pt-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-gray-500">Dot Scale</span>
-                      <span className="text-xs text-gray-600">{driveTestScale}x</span>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white/60">Show legend</span>
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 cursor-pointer"
+                        checked={!!pendingLegends.DRIVE_TEST}
+                        onChange={(e) => {
+                          setPendingLegends((prev) => ({ ...prev, DRIVE_TEST: e.target.checked }));
+                          markDirty();
+                        }}
+                      />
                     </div>
-                    <input
-                      type="range"
-                      min={0.1}
-                      max={10}
-                      step={0.1}
-                      value={driveTestScale}
-                      onChange={(e) => { setDriveTestScale(parseFloat(e.target.value)); markDirty(); }}
-                      className="w-full"
+                    <OpacitySlider
+                      value={pendingOpacity.DRIVE_TEST}
+                      onChange={(val) => { setPendingOpacity((prev) => ({ ...prev, DRIVE_TEST: val })); markDirty(); }}
                     />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-500">Select layers</span>
-                  <div className="max-h-[120px] overflow-y-auto rounded border border-white/10 p-2">
-                    {sessionIds.map((session) => (
-                      <label key={session} className="mb-1 flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={selectedDriveSessions.includes(session)}
-                          onChange={() => { toggleDriveSession(session); markDirty(); }}
-                        />
-                        {session}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="mt-2 space-y-2">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-white/60">Dot Scale</span>
+                        <span className="text-xs text-white/50">{driveTestScale}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={10}
+                        step={0.1}
+                        value={driveTestScale}
+                        onChange={(e) => { setDriveTestScale(parseFloat(e.target.value)); markDirty(); }}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-xs font-semibold text-white/60">Select layers</span>
+                      <div className="max-h-[120px] overflow-y-auto rounded border border-white/10 p-2">
+                        {sessionIds.map((session) => (
+                          <label key={session} className="mb-1 flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={selectedDriveSessions.includes(session)}
+                              onChange={() => { toggleDriveSession(session); markDirty(); }}
+                            />
+                            {session}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                       <div className="flex flex-col">
-                        <label className="text-xs font-semibold text-gray-500 mb-1">Start: Date</label>
+                        <label className="mb-1 text-xs font-semibold text-white/60">Start: Date</label>
                         <input
                           type="date"
                           value={startDateTime ? startDateTime.slice(0, 10) : ""}
@@ -668,7 +753,7 @@ const AddMapLayersPanelFloatingLayout = ({
                         />
                       </div>
                       <div className="flex flex-col">
-                        <label className="text-xs font-semibold text-gray-500 mb-1">End: Date</label>
+                        <label className="mb-1 text-xs font-semibold text-white/60">End: Date</label>
                         <input
                           type="date"
                           value={endDateTime ? endDateTime.slice(0, 10) : ""}
@@ -678,8 +763,9 @@ const AddMapLayersPanelFloatingLayout = ({
                         />
                       </div>
                     </div>
+                    <hr className="border-t border-white/10" />
                     <div>
-                      <span className="mb-1 block text-xs font-semibold text-gray-500">Thematic</span>
+                      <span className="mb-1 block text-xs font-semibold text-white/60">Apply Thematic by</span>
                       <select
                         value={selectedThematic}
                         onChange={(e) => {
@@ -697,43 +783,40 @@ const AddMapLayersPanelFloatingLayout = ({
                         ))}
                       </select>
                     </div>
-                    <div className="text-xs font-semibold text-gray-500">Mode</div>
-                    <div className="mb-2 flex gap-2">
-                      {["Default", "Custom"].map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => {
-                            setThematicMode(m);
-                            if (m === "Default") {
-                              setRanges(deepCopyRanges(KPI_RANGE_DEFAULTS[selectedThematic]));
-                            }
-                            markDirty();
-                          }}
-                          className={`flex-1 rounded border px-3 py-1 text-sm ${
-                            thematicMode === m
-                              ? "border-[#F26522] bg-[#F26522] text-white"
-                              : "border-white/25 bg-white/[0.04] text-white/80"
-                          }`}
-                        >
-                          {m}
-                        </button>
-                      ))}
+                    <div>
+                      <span className="mb-1 block text-xs font-semibold text-white/60">Mode</span>
+                      <div className="flex gap-2">
+                        {["Default", "Custom"].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => {
+                              setThematicMode(m);
+                              if (m === "Default") {
+                                setRanges(deepCopyRanges(KPI_RANGE_DEFAULTS[selectedThematic]));
+                              }
+                              markDirty();
+                            }}
+                            className={`flex-1 rounded border px-3 py-1 text-sm ${
+                              thematicMode === m
+                                ? "border-[#F26522] bg-[#F26522] text-white"
+                                : "border-white/25 bg-white/[0.04] text-white/80"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     {thematicMode === "Default" ? (
-                      <div className="mb-2 rounded border border-white/10 p-2">
-                        <div className="mb-2 text-xs font-semibold text-gray-500">Preview</div>
+                      <div className="rounded border border-white/10 p-2">
+                        <span className="mb-2 block text-xs font-semibold text-white/60">Preview</span>
                         <div className="space-y-1">
                           {(KPI_RANGE_DEFAULTS[selectedThematic] || []).map((range, i) => (
                             <div key={i} className="flex items-center gap-2 text-xs">
-                              <div
-                                className="h-3 w-3 flex-shrink-0 rounded-sm"
-                                style={{ backgroundColor: range.color }}
-                              />
+                              <div className="h-3 w-3 flex-shrink-0 rounded-sm" style={{ backgroundColor: range.color }} />
                               <span className="text-gray-600">{range.label}</span>
-                              <span className="ml-auto text-gray-400">
-                                {range.max} to {range.min}
-                              </span>
+                              <span className="ml-auto text-gray-400">{range.max} to {range.min}</span>
                             </div>
                           ))}
                         </div>
@@ -742,6 +825,117 @@ const AddMapLayersPanelFloatingLayout = ({
                     {thematicMode === "Custom" ? <RangeFilter value={ranges} onChange={(v) => { setRanges(v); markDirty(); }} /> : null}
                   </div>
                 </div>
+              ) : null}
+
+              {activeLayerSection === "NEIGHBOURS" ? (
+                <>
+                  {!(pendingVisibility.CELLS || (layerVisibility && layerVisibility.CELLS)) && (
+                    <div className="mx-2 mt-2 mb-1 flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/15 px-3 py-2.5">
+                      <span className="text-xs font-medium leading-snug text-amber-300">Enable Cells layer first to configure Plan Neighbors</span>
+                    </div>
+                  )}
+                  <div className={floatingInner + " neighbours-panel" + (!(pendingVisibility.CELLS || (layerVisibility && layerVisibility.CELLS)) ? " pointer-events-none opacity-50" : "")}>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white/60">Show legend</span>
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 cursor-pointer"
+                        checked={!!pendingLegends.NEIGHBOURS}
+                        onChange={(e) => { setPendingLegends(prev => ({ ...prev, NEIGHBOURS: e.target.checked })); markDirty(); }}
+                      />
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-xs font-semibold text-white/60">Plan Name</span>
+                      {neighbourPlanOptions.length === 0 ? (
+                        <p className="text-xs text-white/40 italic">No plan available to select</p>
+                      ) : (
+                        <select
+                          value={neighbourPlanName}
+                          onChange={(e) => { handleNeighbourPlanChange(e.target.value); markDirty(); }}
+                          className="w-full rounded border px-2 py-1 text-sm"
+                        >
+                          {neighbourPlanOptions.map(name => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    {neighbourPlanName && (
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-white/60">Sources</span>
+                          <div className="flex items-center gap-1.5">
+                            {neighbourSources.length > 0 && <span className="text-xs font-normal text-white/40">({selectedNeighbourSources.length}/{neighbourSources.length})</span>}
+                            {neighbourSources.length > 0 && (
+                              <input
+                                type="checkbox"
+                                className="accent-[#F26522] cursor-pointer"
+                                checked={selectedNeighbourSources.length === neighbourSources.length}
+                                ref={el => { if (el) el.indeterminate = selectedNeighbourSources.length > 0 && selectedNeighbourSources.length < neighbourSources.length; }}
+                                onChange={() => {
+                                  const next = selectedNeighbourSources.length === neighbourSources.length ? [] : [...neighbourSources];
+                                  toggleNeighbourSource(next);
+                                  markDirty();
+                                }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                        {neighbourSources.length === 0 ? (
+                          <p className="text-xs text-white/40 italic">No sources available</p>
+                        ) : (
+                          <div className="overflow-y-auto rounded border border-white/10 bg-white/[0.02] p-1.5 space-y-1 max-h-[160px]">
+                            {neighbourSources.map(src => (
+                              <label key={src} className="flex items-center gap-1.5 text-xs cursor-pointer text-white/70">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedNeighbourSources.includes(src)}
+                                  onChange={() => { toggleNeighbourSource(src); markDirty(); }}
+                                  className="accent-[#F26522]"
+                                />
+                                <span>{src}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {neighbourOperationTypes.length > 0 && (
+                      <>
+                        <hr className="border-t border-white/10" />
+                        <div>
+                          <span className="mb-1 block text-xs font-semibold text-white/60">Preview</span>
+                          <div className="rounded border border-white/10 p-2 space-y-3 max-h-[220px] overflow-y-auto">
+                            {(() => {
+                              const groups = {};
+                              neighbourOperationTypes.forEach(opType => {
+                                const parsed = parseNeighbourOperation(opType);
+                                if (!parsed) return;
+                                if (!groups[parsed.planType]) groups[parsed.planType] = [];
+                                groups[parsed.planType].push(opType);
+                              });
+                              return Object.entries(groups).map(([planType, opTypes]) => (
+                                <div key={planType}>
+                                  <div className="mb-1 text-[10px] font-semibold text-white/40 uppercase tracking-wide">{planType}</div>
+                                  <div className="space-y-1 pl-2">
+                                    {opTypes.map((opType) => (
+                                      <div key={opType} className="flex items-center gap-2 text-xs">
+                                        <div className="h-3 w-3 flex-shrink-0 rounded-sm" style={{ backgroundColor: getNeighbourOperationColor(opType) }} />
+                                        <span className="text-white/60">{opType}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                </>
               ) : null}
             </div>
           </div>

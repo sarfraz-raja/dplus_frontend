@@ -54,6 +54,7 @@ const ScriptingPatternList = lazy(() => import('../pages/CX_IXSupport/ScriptingP
 const AuditPatternList = lazy(() => import('../pages/CX_IXSupport/AuditPatternList'));
 const AuditPattern = lazy(() => import('../pages/CX_IXSupport/AuditPattern'));
 const InsightsDashboardManager = lazy(() => import('../pages/Admin/InsightsDashboardManager'));
+const ArcSettingManager = lazy(() => import('../pages/Admin/ArcSettingManager/ArcSettingManager'));
 const DynamicInsightsDashboard = lazy(() => import('../pages/InsightsEngine/DynamicInsightsDashboard'));
 const TelecomMapsPage = lazy(() => import('../pages/TelecomMapsPage'));
 const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsPage'));
@@ -380,6 +381,11 @@ export const Sidebar_content = {
                 link: "/admin/insights-dashboard-manager",
                 subMenu: [],
                 component: <InsightsDashboardManager />,
+            }, {
+                name: "Arc Setting Manager",
+                link: "/admin/arc-setting-manager",
+                subMenu: [],
+                component: <ArcSettingManager />,
             }],
         },
     ]

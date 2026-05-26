@@ -11,6 +11,7 @@ import TopBar from './components/TopBar'
 import WebSocketClient from './components/WebSocketClient'
 import AuthActions from './store/actions/auth-actions'
 import InsightsEngineActions from './store/actions/insightsEngine-actions'
+import { Toaster } from 'react-hot-toast'
 
 class ErrorBoundary extends Component {
     constructor(props) {
@@ -182,6 +183,45 @@ function App() {
                 )}
 
                 <SweetAlerts />
+                <Toaster
+                    position="bottom-center"
+                    toastOptions={{
+                        duration: 3000,
+                        style: {
+                            background: '#09090b',
+                            color: '#fafafa',
+                            border: '1px solid #27272a',
+                            borderRadius: '8px',
+                            padding: '12px 16px',
+                            fontSize: '13px',
+                            fontWeight: '500',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                            maxWidth: '360px',
+                        },
+                        error: {
+                            style: {
+                                background: '#09090b',
+                                color: '#fafafa',
+                                border: '1px solid #7f1d1d',
+                            },
+                            iconTheme: {
+                                primary: '#ef4444',
+                                secondary: '#09090b',
+                            },
+                        },
+                        success: {
+                            style: {
+                                background: '#09090b',
+                                color: '#fafafa',
+                                border: '1px solid #14532d',
+                            },
+                            iconTheme: {
+                                primary: '#22c55e',
+                                secondary: '#09090b',
+                            },
+                        },
+                    }}
+                />
             </main>
         </ErrorBoundary>
     )

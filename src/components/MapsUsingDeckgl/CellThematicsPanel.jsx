@@ -69,9 +69,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
             : deepCopyRanges(KPI_RANGE_DEFAULTS[initKpi])
     );
     const [kpiMode, setKpiMode] = useState(savedKpi.mode || "Default");
-    const [techMode, setTechMode] = useState("Preview");
-    const [bandMode, setBandMode] = useState("Preview");
-    const [regionMode, setRegionMode] = useState("Preview");
+    const [techMode, setTechMode] = useState("Default");
+    const [bandMode, setBandMode] = useState("Default");
+    const [regionMode, setRegionMode] = useState("Default");
 
     const layerOpacity = useSelector(state => state.map.layerOpacity);
     const [cellOpacity, setCellOpacity] = useState(layerOpacity?.CELLS ?? 1);
@@ -940,7 +940,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     {/* Mode Toggle */}
                     <div className="text-xs font-semibold text-gray-500 mb-2">Mode</div>
                     <div className="flex gap-2 mb-3">
-                        {["Preview", "Customize"].map(mode => (
+                        {["Default", "Custom"].map(mode => (
                             <button
                                 key={mode}
                                 type="button"
@@ -957,9 +957,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     </div>
 
                     {/* Preview */}
-                    {techMode === "Preview" && (
+                    {techMode === "Default" && (
                         <div className="border rounded p-2 mb-3">
-                            <div className="text-xs font-semibold text-gray-500 mb-2">Currently Selected Colors</div>
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Preview</div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                                 {["2G", "3G", "4G", "5G"]
                                     .filter(tech => !typeCount || Object.prototype.hasOwnProperty.call(typeCount, tech))
@@ -982,9 +982,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     )}
 
                     {/* Customize — per-tech color pickers in table layout */}
-                    {techMode === "Customize" && (
+                    {techMode === "Custom" && (
                         <div className="border rounded p-2 mb-3">
-                            <div className="text-xs font-semibold text-gray-500 mb-2">Customize Colors</div>
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Preview</div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                                 {Object.keys(techGrouped).map((tech) => (
                                     <div key={tech} className="flex items-center gap-2">
@@ -1030,7 +1030,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     {/* Mode Toggle */}
                     <div className="text-xs font-semibold text-gray-500 mb-2">Mode</div>
                     <div className="flex gap-2 mb-3">
-                        {["Preview", "Customize"].map(mode => (
+                        {["Default", "Custom"].map(mode => (
                             <button
                                 key={mode}
                                 type="button"
@@ -1047,9 +1047,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     </div>
 
                     {/* Preview */}
-                    {bandMode === "Preview" && (
+                    {bandMode === "Default" && (
                         <div className="border rounded p-2 mb-3">
-                            <div className="text-xs font-semibold text-gray-500 mb-2">Currently Selected Colors</div>
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Preview</div>
                             <div className="max-h-[150px] overflow-y-auto grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                                 {Object.entries(defaultColors.Band).map(([band, color]) => (
                                     <div key={band} className="flex items-center gap-2">
@@ -1065,9 +1065,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     )}
 
                     {/* Customize — per-band color pickers in table layout */}
-                    {bandMode === "Customize" && (
+                    {bandMode === "Custom" && (
                         <div className="border rounded p-2 mb-3">
-                            <div className="text-xs font-semibold text-gray-500 mb-2">Customize Colors</div>
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Preview</div>
                             <div className="max-h-[200px] overflow-y-auto">
                                 {Object.entries(techGrouped).map(([tech, bands]) => (
                                     <div key={tech} className="mb-3">
@@ -1120,7 +1120,7 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     {/* Mode Toggle */}
                     <div className="text-xs font-semibold text-gray-500 mb-2">Mode</div>
                     <div className="flex gap-2 mb-3">
-                        {["Preview", "Customize"].map(mode => (
+                        {["Default", "Custom"].map(mode => (
                             <button
                                 key={mode}
                                 type="button"
@@ -1137,9 +1137,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     </div>
 
                     {/* Preview */}
-                    {regionMode === "Preview" && (
+                    {regionMode === "Default" && (
                         <div className="border rounded p-2 mb-3">
-                            <div className="text-xs font-semibold text-gray-500 mb-2">Currently Selected Colors</div>
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Preview</div>
                             <div className="max-h-[150px] overflow-y-auto grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                                 {regions.map((region) => (
                                     <div key={region.name} className="flex items-center gap-2">
@@ -1159,9 +1159,9 @@ const CellThematicsPanel = ({ setCellThematicsConfig,
                     )}
 
                     {/* Customize — per-region color pickers in table layout */}
-                    {regionMode === "Customize" && (
+                    {regionMode === "Custom" && (
                         <div className="border rounded p-2 mb-3">
-                            <div className="text-xs font-semibold text-gray-500 mb-2">Customize Colors</div>
+                            <div className="text-xs font-semibold text-gray-500 mb-2">Preview</div>
                             <div className="max-h-[200px] overflow-y-auto grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                                 {regions.map((region) => (
                                     <div key={region.indexi} className="flex items-center gap-2">

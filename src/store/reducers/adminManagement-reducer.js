@@ -2,7 +2,8 @@ import { createSlice } from "@reduxjs/toolkit";
 
 const initialState = {
     roleList: [],
-    usersList: []
+    usersList: [],
+    arcSettingList: [],
 }
 
 const adminManagement = createSlice({
@@ -29,6 +30,10 @@ const adminManagement = createSlice({
             state.usersList = state.usersList.filter((u) => u.id !== payload);
         },
 
+        ARC_SETTING_LIST: (state, { payload }) => {
+            state.arcSettingList = payload;
+        },
+
         RESET_STATE: (state) => {
             state.roleList = [];
             state.usersList = {};
@@ -37,5 +42,5 @@ const adminManagement = createSlice({
     }
 })
 
-export const { ROLE_LIST, USERS_LIST, REMOVE_USER, RESET_STATE } = adminManagement.actions
+export const { ROLE_LIST, USERS_LIST, REMOVE_USER, ARC_SETTING_LIST, RESET_STATE } = adminManagement.actions
 export default adminManagement.reducer

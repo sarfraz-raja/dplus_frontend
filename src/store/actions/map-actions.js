@@ -920,6 +920,8 @@ import {
     SET_BOUNDARY_COLORS,
     SET_TA_SECTOR_DATA,
     SET_NEIGHBOUR_RELATIONS,
+    SET_NEIGHBORS_PLAN_DATA,
+    SET_PLAN_NEIGHBOUR_LINES,
 
 } from "../reducers/map-reducer"
 
@@ -1051,6 +1053,10 @@ const MapActions = {
             });
             const apiData = res?.data?.data || [];
             const apiKpis = res?.data?.kpis || [];
+            const neighborsPlanData = res?.data?.neighborsPlanData || [];
+            if (neighborsPlanData.length > 0) {
+                dispatch(SET_NEIGHBORS_PLAN_DATA(neighborsPlanData));
+            }
             const adapted = apiData.map(item => ({
                 cell_id: item.cell_name,
                 site_name: item.site_name,
@@ -1176,10 +1182,6 @@ const MapActions = {
     getSites: () => async (dispatch) => {
         try {
             const res = await Api.get({ url: Urls.towers, inst: 0 });
-
-            console.log("GET sites raw res.data:", res.data);
-console.log("res.data.data:", res.data.data);
-console.log("res.data.data length:", res.data.data?.length);
 
             if (res?.status !== 200) return;
             const adapted = (res.data.data || []).map(item => ({
@@ -1673,6 +1675,10 @@ console.log("res.data.data length:", res.data.data?.length);
 
     clearNeighbourRelations: () => (dispatch) => {
         dispatch(SET_NEIGHBOUR_RELATIONS(null));
+    },
+
+    setPlanNeighbourLines: (lines) => (dispatch) => {
+        dispatch(SET_PLAN_NEIGHBOUR_LINES(lines));
     },
 
     fetchTaSectors: (cellId, cellName, cellCoords, onError) => async (dispatch) => {

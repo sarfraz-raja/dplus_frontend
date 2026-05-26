@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import ReactDOM from "react-dom";
 import FormModal from "../../components/FormModal";
 import Api from "../../utils/api";
 import { toast } from "react-hot-toast";
 
 function EnterpriseTagInput({
-  options = [], // [{id, label}]
-  value = [],   // [id, id]
+  options = [],
+  value = [],
   onChange,
   placeholder = "Type to search...",
   loading = false,
@@ -16,24 +17,43 @@ function EnterpriseTagInput({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [dropdownStyle, setDropdownStyle] = useState({});
   const containerRef = useRef(null);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
 
-  // 🔥 FILTER (label based)
   const filteredOptions = useMemo(() => {
     if (!searchTerm.trim()) return options;
     return options.filter(opt =>
-      (opt.label || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase())
+      (opt.label || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [options, searchTerm]);
 
-  // click outside
+  // Position the portal dropdown — flip upward if not enough space below
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const dropdownHeight = 240; // max-h-60 = 15rem ≈ 240px
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < dropdownHeight + 8 && rect.top > dropdownHeight;
+      setDropdownStyle({
+        position: "fixed",
+        ...(openUpward
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+      });
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
+      if (
+        containerRef.current && !containerRef.current.contains(event.target) &&
+        dropdownRef.current && !dropdownRef.current.contains(event.target)
+      ) {
         setIsOpen(false);
         setSearchTerm("");
       }
@@ -42,49 +62,34 @@ function EnterpriseTagInput({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // keyboard nav
   const handleKeyDown = (e) => {
     if (!isOpen) {
-      if (["ArrowDown", "Enter", " "].includes(e.key)) {
-        setIsOpen(true);
-      }
+      if (["ArrowDown", "Enter", " "].includes(e.key)) { setIsOpen(true); }
       return;
     }
-
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
-        setFocusedIndex(prev =>
-          prev < filteredOptions.length - 1 ? prev + 1 : prev
-        );
+        setFocusedIndex(prev => prev < filteredOptions.length - 1 ? prev + 1 : prev);
         break;
-
       case "ArrowUp":
         e.preventDefault();
-        setFocusedIndex(prev => (prev > 0 ? prev - 1 : -1));
+        setFocusedIndex(prev => prev > 0 ? prev - 1 : -1);
         break;
-
       case "Enter":
         e.preventDefault();
-        if (focusedIndex >= 0 && filteredOptions[focusedIndex]) {
-          toggleOption(filteredOptions[focusedIndex]);
-        }
+        if (focusedIndex >= 0 && filteredOptions[focusedIndex]) toggleOption(filteredOptions[focusedIndex]);
         break;
-
       case "Escape":
         setIsOpen(false);
         setSearchTerm("");
         break;
-
       case "Backspace":
-        if (searchTerm === "" && value.length > 0) {
-          removeOption(value[value.length - 1]);
-        }
+        if (searchTerm === "" && value.length > 0) removeOption(value[value.length - 1]);
         break;
     }
   };
 
-  // 🔥 TOGGLE (store id only)
   const toggleOption = (option) => {
     if (!value.includes(option.id) && value.length < maxTags) {
       onChange([...value, option.id]);
@@ -99,117 +104,93 @@ function EnterpriseTagInput({
     onChange(value.filter(v => v !== idToRemove));
   };
 
-  // scroll
   useEffect(() => {
     if (focusedIndex >= 0 && dropdownRef.current) {
-      const el = dropdownRef.current.children[focusedIndex];
-      el?.scrollIntoView({ block: "nearest" });
+      dropdownRef.current.children[focusedIndex]?.scrollIntoView({ block: "nearest" });
     }
   }, [focusedIndex]);
 
+  const dropdown = isOpen && !disabled && (
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto"
+    >
+      {loading ? (
+        <div className="p-3 text-sm text-gray-500 text-center">Loading...</div>
+      ) : filteredOptions.length === 0 ? (
+        <div className="p-3 text-sm text-gray-500 text-center">No results</div>
+      ) : (
+        filteredOptions.map((option, index) => (
+          <div
+            key={option.id}
+            className={`px-3 py-2 cursor-pointer text-sm transition-colors
+              ${focusedIndex === index ? "bg-orange-50" : "hover:bg-gray-50"}
+              ${value.includes(option.id) ? "bg-orange-100 text-orange-700" : "text-gray-700"}
+            `}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => toggleOption(option)}
+            onMouseEnter={() => setFocusedIndex(index)}
+          >
+            {option.label}
+          </div>
+        ))
+      )}
+    </div>
+  );
+
   return (
     <div className="relative" ref={containerRef}>
-      
-      {/* INPUT BOX */}
       <div
-        className={`
-          relative w-full min-h-[48px] bg-white rounded-lg border
-          ${isOpen ? "border-orange-400 ring-2 ring-orange-200" : "border-gray-300"}
-          ${disabled ? "bg-gray-100" : ""}
+        className={`relative w-full min-h-[42px] bg-white rounded-md border px-3 py-2 cursor-text
+          ${isOpen ? "border-orange-400 ring-2 ring-orange-200" : "border-gray-300 hover:border-gray-400"}
+          ${disabled ? "bg-gray-100 cursor-not-allowed opacity-60" : ""}
         `}
         onClick={() => !disabled && inputRef.current?.focus()}
       >
-        <div className="flex flex-wrap items-center gap-1.5 p-2 max-h-[100px] overflow-y-auto">
-          
-          {/* TAGS */}
+        <div className="flex flex-wrap items-center gap-1.5 pr-6">
           {value.map(id => {
             const user = options.find(o => o.id === id);
-
             return (
-              <span
-                key={id}
-                className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded"
-              >
-                <span className="truncate max-w-[150px]">
-                  {user?.label || id}
-                </span>
-
+              <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full border border-orange-200">
+                <span className="truncate max-w-[140px]">{user?.label || id}</span>
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeOption(id);
-                  }}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => { e.stopPropagation(); removeOption(id); }}
+                  className="ml-0.5 w-3.5 h-3.5 flex items-center justify-center rounded-full hover:bg-orange-300 text-orange-500 hover:text-orange-800 transition-colors leading-none"
+                  aria-label={`Remove ${user?.label || id}`}
                 >
-                  ✕
+                  ×
                 </button>
               </span>
             );
           })}
-
-          {/* INPUT */}
           <input
             ref={inputRef}
             type="text"
-            className="flex-1 min-w-[120px] h-7 px-1 text-sm bg-transparent outline-none"
+            className="flex-1 min-w-[100px] h-6 text-sm bg-transparent outline-none placeholder:text-gray-400"
             placeholder={value.length === 0 ? placeholder : ""}
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setIsOpen(true);
-              setFocusedIndex(-1);
-            }}
+            onChange={(e) => { setSearchTerm(e.target.value); setIsOpen(true); setFocusedIndex(-1); }}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
             disabled={disabled || loading}
           />
         </div>
-
-        {/* ICON */}
-        <div className="absolute right-2 top-1/2 -translate-y-1/2">
-          <button onClick={() => setIsOpen(!isOpen)}>
-            ⌄
-          </button>
-        </div>
-      </div>
-
-      {/* ERROR */}
-      {error && (
-        <p className="text-xs text-red-500 mt-1">{error}</p>
-      )}
-
-      {/* DROPDOWN */}
-      {isOpen && !disabled && (
-        <div
-          ref={dropdownRef}
-          className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow max-h-60 overflow-y-auto"
+        <button
+          type="button"
+          tabIndex={-1}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          onClick={(e) => { e.stopPropagation(); setIsOpen(p => !p); }}
         >
-          {loading ? (
-            <div className="p-3 text-sm text-gray-500 text-center">
-              Loading...
-            </div>
-          ) : filteredOptions.length === 0 ? (
-            <div className="p-3 text-sm text-gray-500 text-center">
-              No data
-            </div>
-          ) : (
-            filteredOptions.map((option, index) => (
-              <div
-                key={option.id}
-                className={`
-                  px-3 py-2 cursor-pointer
-                  ${focusedIndex === index ? "bg-orange-50" : "hover:bg-gray-50"}
-                  ${value.includes(option.id) ? "bg-orange-100" : ""}
-                `}
-                onClick={() => toggleOption(option)}
-                onMouseEnter={() => setFocusedIndex(index)}
-              >
-                {option.label}
-              </div>
-            ))
-          )}
-        </div>
-      )}
+          <svg className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      {typeof document !== "undefined" && ReactDOM.createPortal(dropdown, document.body)}
     </div>
   );
 }
@@ -225,11 +206,34 @@ function EnterpriseSelect({
   disabled = false
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState({});
   const containerRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const dropdownHeight = 240;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < dropdownHeight + 8 && rect.top > dropdownHeight;
+      setDropdownStyle({
+        position: "fixed",
+        ...(openUpward
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+      });
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
+      if (
+        containerRef.current && !containerRef.current.contains(event.target) &&
+        dropdownRef.current && !dropdownRef.current.contains(event.target)
+      ) {
         setIsOpen(false);
       }
     };
@@ -237,76 +241,58 @@ function EnterpriseSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedOption = options.find(opt => opt === value);
+  const dropdown = isOpen && !disabled && (
+    <div
+      ref={dropdownRef}
+      style={dropdownStyle}
+      className="bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto"
+    >
+      {loading ? (
+        <div className="p-3 text-sm text-gray-500 text-center">Loading...</div>
+      ) : options.length === 0 ? (
+        <div className="p-3 text-sm text-gray-500 text-center">No options available</div>
+      ) : (
+        options.map((option) => (
+          <div
+            key={option}
+            className={`px-3 py-2 cursor-pointer text-sm transition-colors border-b border-gray-100 last:border-0
+              ${value === option ? "bg-orange-50 text-orange-700" : "text-gray-700 hover:bg-gray-50"}
+            `}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { onChange(option); setIsOpen(false); }}
+          >
+            {option}
+          </div>
+        ))
+      )}
+    </div>
+  );
 
   return (
     <div className="relative" ref={containerRef}>
       <div
-        className={`
-          relative w-full min-h-[42px] bg-white rounded-lg border px-3 py-2
-          transition-all duration-200 cursor-pointer
-          ${isOpen
-            ? "border-orange-400 ring-2 ring-orange-200"
-            : "border-gray-300 hover:border-gray-400"
-          }
-          ${disabled ? "bg-gray-100 cursor-not-allowed" : ""}
+        className={`relative w-full min-h-[42px] bg-white rounded-md border px-3 py-2
+          flex items-center justify-between cursor-pointer transition-all
+          ${isOpen ? "border-orange-400 ring-2 ring-orange-200" : "border-gray-300 hover:border-gray-400"}
+          ${disabled ? "bg-gray-100 cursor-not-allowed opacity-60" : ""}
         `}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={() => !disabled && setIsOpen(p => !p)}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            {selectedOption ? (
-              <span className="text-sm text-gray-900">{selectedOption}</span>
-            ) : (
-              <span className="text-sm text-gray-400">{placeholder}</span>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600"></div>
-          ) : (
-            <svg
-              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          )}
-        </div>
+        {value ? (
+          <span className="text-sm text-gray-900">{value}</span>
+        ) : (
+          <span className="text-sm text-gray-400">{placeholder}</span>
+        )}
+        {loading ? (
+          <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-orange-500" />
+        ) : (
+          <svg className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
       </div>
-
-      {error && (
-        <p className="text-xs text-red-500 mt-1 ml-1">{error}</p>
-      )}
-
-      {isOpen && !disabled && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {loading ? (
-            <div className="p-3 text-sm text-gray-500 text-center">Loading...</div>
-          ) : options.length === 0 ? (
-            <div className="p-3 text-sm text-gray-500 text-center">No options available</div>
-          ) : (
-            options.map((option) => (
-              <div
-                key={option}
-                className={`
-                  px-3 py-2 cursor-pointer hover:bg-gray-50 transition-colors duration-150
-                  border-b border-gray-100 last:border-0
-                  ${value === option ? "bg-orange-50 text-orange-700" : "text-gray-700"}
-                `}
-                onClick={() => {
-                  onChange(option);
-                  setIsOpen(false);
-                }}
-              >
-                <span className="text-sm">{option}</span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      {typeof document !== "undefined" && ReactDOM.createPortal(dropdown, document.body)}
     </div>
   );
 }
@@ -774,10 +760,10 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
                 <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Team</label>
                 <input
                   type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
+                  placeholder="e.g. RF Team"
                   value={formData.assignedteam}
-                  readOnly
-                  disabled
+                  onChange={(e) => handleChange("assignedteam", e.target.value)}
                 />
               </div>
             </div>

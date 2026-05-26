@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import FormModal from '../../components/FormModal';
-import Table from '../../components/Table';
+import DataTable from '../../components/DataTable';
 import Button from '../../components/Button';
 import AlertConfigurationActions from '../../store/actions/alertConfiguration-actions';
 import CommonActions from '../../store/actions/common-actions';
 import { Urls } from '../../utils/url';
 import XAlertConfigureForm from './XAlertConfigureForm';
+import XReportSchedulerForm from './XReportSchedulerForm';
 
 const COLUMNS = [
     { label: 'Frequency',       key: 'frequency' },
@@ -41,11 +42,6 @@ const XAlertConfigure = () => {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
-    const [hiddenCols, setHiddenCols] = useState([]);
-    const [showColToggle, setShowColToggle] = useState(false);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [rpp, setRpp] = useState(15);
-    const [search, setSearch] = useState('');
 
     const rawList = useSelector((state) => state?.alertConfiguration?.configureAlertList ?? []);
 
@@ -53,10 +49,13 @@ const XAlertConfigure = () => {
         dispatch(AlertConfigurationActions.alertConfigurationList());
     }, []);
 
-    const toggleCol = (key) => setHiddenCols(prev =>
-        prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
-    const visibleCols = COLUMNS.filter(col => !hiddenCols.includes(col.key));
+    const openReportScheduler = () => {
+        formSubmitRef.current = null;
+        setModalResetting(true);
+        setModalTitle('Report Scheduler');
+        setModalBody(<XReportSchedulerForm setIsOpen={setModalOpen} submitRef={formSubmitRef} />);
+        setModalOpen(true);
+    };
 
     const openAdd = () => {
         formSubmitRef.current = null;
@@ -113,19 +112,7 @@ const XAlertConfigure = () => {
         endat: itm.endat || itm.endAt,
     });
 
-    const filtered = search.trim()
-        ? rawList.map(norm).filter(itm =>
-            Object.values(itm).some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase()))
-        )
-        : rawList.map(norm);
-
-    const total = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(total / rpp));
-    const startIdx = (currentPage - 1) * rpp;
-    const endIdx = Math.min(startIdx + rpp, total);
-    const pageRows = filtered.slice(startIdx, endIdx);
-
-    const goToPage = (p) => setCurrentPage(Math.max(1, Math.min(p, totalPages)));
+    const tableData = rawList.map(norm);
 
     const renderCell = (itm, col) => {
         if (col.key === '_status') return (
@@ -185,110 +172,24 @@ const XAlertConfigure = () => {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 relative">
-                        <Button
-                            onClick={() => setShowColToggle(prev => !prev)}
-                            variant="secondary"
-                            className="flex items-center gap-2"
-                        >
-                            <span>⊞</span> Columns
+                    <div className="flex items-center gap-2">
+                        <Button onClick={openReportScheduler} variant="secondary" className="flex items-center gap-2">
+                            + Report Scheduler
                         </Button>
-                        {showColToggle && (
-                            <div className="absolute right-36 top-11 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-3 min-w-[180px]">
-                                {COLUMNS.map(col => (
-                                    <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm text-slate-700">
-                                        <input type="checkbox" checked={!hiddenCols.includes(col.key)} onChange={() => toggleCol(col.key)} />
-                                        {col.label}
-                                    </label>
-                                ))}
-                            </div>
-                        )}
-                        <Button
-                            onClick={openAdd}
-                            variant="primary"
-                            className="flex items-center gap-2"
-                        >
+                        <Button onClick={openAdd} variant="primary" className="flex items-center gap-2">
                             + Add Alert
                         </Button>
                     </div>
                 </div>
 
-                {/* Search + count */}
-                <div className="flex items-center justify-between shrink-0">
-                    <input type="text" value={search}
-                        onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                        placeholder="Search alerts..."
-                        className="w-72 px-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 shadow-sm" />
-                    <span className="text-sm text-slate-500 font-medium">{total} alert{total !== 1 ? 's' : ''}</span>
-                </div>
-
-                {/* Table */}
-                <div className="flex-1 overflow-auto rounded-xl min-h-0 backdrop-blur-md border border-white/60 shadow-lg"
-                    style={{ background: 'rgba(255,255,255,0.55)' }}>
-                    <Table headers={visibleCols.map(col => col.label)} className="w-full min-w-max text-left text-sm">
-                        <tbody>
-                            {pageRows.length === 0 ? (
-                                <tr>
-                                    <td colSpan={visibleCols.length} className="text-center text-slate-400 py-12 text-sm">
-                                        No alerts configured.
-                                    </td>
-                                </tr>
-                            ) : (
-                                pageRows.map((itm, idx) => (
-                                    <tr key={idx}
-                                        className="border-b border-white/40 transition-colors"
-                                        style={{ background: idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)' }}
-                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.6)'}
-                                        onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
-                                    >
-                                        {visibleCols.map(col => (
-                                            <td key={col.key} className="px-4 py-3 text-slate-700">
-                                                {renderCell(itm, col)}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </Table>
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between shrink-0 text-xs text-slate-500">
-                    <span>
-                        {total === 0 ? 'No alerts' : `Showing ${Math.min(startIdx + 1, total)}–${endIdx} of ${total}`}
-                    </span>
-                    <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-1">
-                            Rows per page:
-                            <select value={rpp} onChange={(e) => { setRpp(Number(e.target.value)); setCurrentPage(1); }}
-                                className="ml-1 border border-slate-300 rounded px-1 py-0.5 text-xs">
-                                {[15, 30, 45, 100].map(n => <option key={n} value={n}>{n}</option>)}
-                            </select>
-                        </label>
-                        <div className="flex items-center gap-1">
-                            <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1}
-                                className="px-2 py-0.5 border border-slate-300 rounded disabled:opacity-40 hover:bg-slate-100">‹</button>
-                            {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                                .reduce((acc, p, i, arr) => {
-                                    if (i > 0 && p - arr[i - 1] > 1) acc.push('…');
-                                    acc.push(p);
-                                    return acc;
-                                }, [])
-                                .map((p, i) =>
-                                    p === '…'
-                                        ? <span key={`e-${i}`} className="px-1">…</span>
-                                        : <button key={p} onClick={() => goToPage(p)}
-                                            className={`px-2 py-0.5 border rounded ${currentPage === p ? 'bg-[#EC7D09] text-white border-[#EC7D09]' : 'border-slate-300 hover:bg-slate-100'}`}>
-                                            {p}
-                                        </button>
-                                )}
-                            <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages}
-                                className="px-2 py-0.5 border border-slate-300 rounded disabled:opacity-40 hover:bg-slate-100">›</button>
-                        </div>
-                    </div>
-                </div>
+                <DataTable
+                    columns={COLUMNS}
+                    data={tableData}
+                    renderCell={renderCell}
+                    emptyMessage="No alerts configured."
+                    searchPlaceholder="Search alerts..."
+                    countLabel="alert"
+                />
             </div>
 
             <FormModal

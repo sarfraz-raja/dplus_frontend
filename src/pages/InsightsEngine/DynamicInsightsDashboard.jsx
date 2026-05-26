@@ -36,7 +36,7 @@ const DynamicInsightsDashboard = () => {
             <div className="w-full h-full flex flex-col">
                 <div className="flex-1">
                     {/* <GrafanaDashboard  dashboard_name={menuItem.dashboard_id} dashboard_uid={menuItem.dashboard_uuid} /> */}
-                    <GrafanaDashboard access_token={menuItem.dashboard_id} />
+                    <GrafanaDashboard access_token={menuItem.dashboard_id || menuItem.dashboard_uuid} />
                 </div>
             </div>
         );

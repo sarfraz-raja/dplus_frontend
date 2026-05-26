@@ -1428,8 +1428,9 @@ import ColorPicker from "./ColorPicker";
 import RangeFilter from "./RangeFilter";
 import OpacitySlider from "./OpacitySlider";
 import SiteThematicsPanel from "./SiteThematicsPanel";
-import { KPI_RANGE_DEFAULTS, deepCopyRanges, RF_CATEGORY_COLORS, RF_CATEGORY_ORDER } from "./Utils/colorEngine";
+import { KPI_RANGE_DEFAULTS, deepCopyRanges, RF_CATEGORY_COLORS, RF_CATEGORY_ORDER, NEIGHBOUR_COLOR_CONFIG, NEIGHBOUR_RELATION_TYPES, NEIGHBOUR_PLAN_TYPES, getNeighbourOperationColor, parseNeighbourOperation } from "./Utils/colorEngine";
 import AddMapLayersPanelFloatingLayout from "./AddMapLayersPanelFloatingLayout";
+import { toast } from "react-hot-toast";
 
 const AddMapLayersPanel = ({ onClose, mode }) => {
 
@@ -1472,6 +1473,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         DRIVE_TEST: layerOpacity?.DRIVE_TEST ?? 1,
     });
     const layerLegends = useSelector(state => state.map.layerLegends);
+    const neighborsPlanData = useSelector(state => state.map.neighborsPlanData || []);
     
 
     // ── RF ────────────────────────────────────────────────────────
@@ -1512,6 +1514,7 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         BOUNDARY: layerLegends?.BOUNDARY || false,
         RF: layerLegends?.RF || false,
         DRIVE_TEST: layerLegends?.DRIVE_TEST || false,
+        NEIGHBOURS: layerLegends?.NEIGHBOURS || (() => { try { return JSON.parse(localStorage.getItem("planNeighbours_config"))?.showLegend || false; } catch { return false; } })(),
     }));
     
     // computed — true if ANY boundary group has children selected
@@ -1547,6 +1550,100 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
 
     const [expandedLayer, setExpandedLayer]         = useState(null);
 
+    // ── PLAN NEIGHBORS ────────────────────────────────────────
+    // ── PLAN NEIGHBORS — API-driven ───────────────────────────
+    const LS_KEY = "planNeighbours_config";
+
+    const extractSources = (plan) =>
+        (plan?.source_target_map || []).map(item => item.source);
+
+    const readLS = () => {
+        try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch { return null; }
+    };
+
+    const [neighbourPlanName, setNeighbourPlanName] = useState(() => readLS()?.planName || "");
+    const [selectedNeighbourSources, setSelectedNeighbourSources] = useState(() => readLS()?.selectedSources || []);
+
+    // On first data load: restore from localStorage, else auto-select first plan + all sources
+    useEffect(() => {
+        if (neighborsPlanData.length === 0 || neighbourPlanName) return;
+        const saved = readLS();
+        const plan = saved?.planName
+            ? neighborsPlanData.find(p => p.plan_name === saved.planName)
+            : neighborsPlanData[0];
+        if (!plan) return;
+        setNeighbourPlanName(plan.plan_name);
+        const allSources = extractSources(plan);
+        const restored = saved?.selectedSources?.filter(s => allSources.includes(s));
+        setSelectedNeighbourSources(restored?.length ? restored : []);
+    }, [neighborsPlanData]);
+
+    // Derive plan options and sources from Redux
+    const neighbourPlanOptions = neighborsPlanData.map(p => p.plan_name);
+    const selectedPlanData = neighborsPlanData.find(p => p.plan_name === neighbourPlanName) || null;
+    const neighbourSources = extractSources(selectedPlanData);
+    const neighbourOperationTypes = selectedPlanData?.operation_type_list || [];
+
+    // Auto-restore plan neighbour lines after page reload.
+    // Reads sources directly from localStorage — no extra render cycle wait.
+    const autoRestoredRef = useRef(false);
+    useEffect(() => {
+        if (autoRestoredRef.current) return;
+        if (!rawCells.length || !selectedPlanData) return;
+        const saved = readLS();
+        if (!saved?.enabled || !saved?.selectedSources?.length) return;
+        autoRestoredRef.current = true;
+
+        const allSources = extractSources(selectedPlanData);
+        const sourcesToUse = saved.selectedSources.filter(s => allSources.includes(s));
+        if (!sourcesToUse.length) return;
+
+        const cellCoords = {};
+        rawCells.forEach(c => {
+            if (c.cell_id) cellCoords[c.cell_id] = { latitude: c.latitude, longitude: c.longitude, azimuth: c.azimuth, radius_m: c.radius_m };
+        });
+        const lines = [];
+        (selectedPlanData.source_target_map || []).forEach(({ source, targets }) => {
+            if (!sourcesToUse.includes(source)) return;
+            const src = cellCoords[source];
+            if (!src) return;
+            (targets || []).forEach(({ operation_type, target }) => {
+                const tgt = cellCoords[target];
+                if (!tgt) return;
+                lines.push({
+                    source, target, operation_type,
+                    s_latitude: src.latitude, s_longitude: src.longitude, s_azimuth: src.azimuth, srcRadius: src.radius_m,
+                    t_latitude: tgt.latitude, t_longitude: tgt.longitude, t_azimuth: tgt.azimuth, tgtRadius: tgt.radius_m,
+                });
+            });
+        });
+        if (lines.length) {
+            dispatch(MapActions.setPlanNeighbourLines(lines));
+            dispatch(MapActions.setLayerVisibility("NEIGHBOURS", true));
+        }
+    }, [rawCells, selectedPlanData]);
+
+    const handleNeighbourPlanChange = (planName) => {
+        setNeighbourPlanName(planName);
+        const plan = neighborsPlanData.find(p => p.plan_name === planName);
+        setSelectedNeighbourSources(extractSources(plan));
+    };
+
+    const toggleNeighbourSource = (source) => {
+        // If array passed → set directly (used by select all / deselect all)
+        if (Array.isArray(source)) {
+            setSelectedNeighbourSources(source);
+            return;
+        }
+        setSelectedNeighbourSources(prev =>
+            prev.includes(source) ? prev.filter(s => s !== source) : [...prev, source]
+        );
+    };
+
+    const anyNeighbourSelected = !!neighbourPlanName && neighbourOperationTypes.length > 0;
+    // Explicit user opt-in — does NOT auto-enable when data loads
+    const [pendingNeighboursEnabled, setPendingNeighboursEnabled] = useState(() => layerVisibility.NEIGHBOURS || readLS()?.enabled || false);
+
     // Add a combined setter
     const setExpanded = (layer) => {
         setExpandedLayer(layer);
@@ -1573,7 +1670,8 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
 
     const hasAppliedLayers = !!(
         layerVisibility.CELLS || layerVisibility.SITES || layerVisibility.BOUNDARY ||
-        layerVisibility.RF || layerVisibility.DRIVE_TEST
+        layerVisibility.RF || layerVisibility.DRIVE_TEST || layerVisibility.NEIGHBOURS ||
+        selectedNeighbourSources.length > 0
     );
 
     // ── SYNC PENDING FROM REDUX ───────────────────────────────────
@@ -1794,13 +1892,62 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
     // ── CELLS / SITES / BOUNDARIES/ DRIVE TEST /────────────────────────────
     dispatch(MapActions.setLayerVisibility("CELLS", pendingVisibility.CELLS || false));
     dispatch(MapActions.setLayerVisibility("SITES", pendingVisibility.SITES || false));
+
+    // ── AUTO-REMOVE PLAN NEIGHBORS if Cells is being turned off ───────
+    if (!pendingVisibility.CELLS && layerVisibility.NEIGHBOURS) {
+        dispatch(MapActions.setLayerVisibility("NEIGHBOURS", false));
+        dispatch(MapActions.setLayerLegend("NEIGHBOURS", false));
+        dispatch(MapActions.setPlanNeighbourLines([]));
+        setSelectedNeighbourSources([]);
+    }
     dispatch(MapActions.setLayerVisibility("DRIVE_TEST", selectedDriveSessions.length > 0));
-    
+
     dispatch(MapActions.setLayerLegend("SITES", pendingLegends.SITES));
     dispatch(MapActions.setLayerLegend("CELLS", pendingLegends.CELLS));
     dispatch(MapActions.setLayerLegend("BOUNDARY", pendingLegends.BOUNDARY));
     dispatch(MapActions.setLayerLegend("RF", pendingLegends.RF));
     dispatch(MapActions.setLayerLegend("DRIVE_TEST", pendingLegends.DRIVE_TEST));
+    dispatch(MapActions.setLayerLegend("NEIGHBOURS", pendingLegends.NEIGHBOURS));
+    const neighboursEffectivelyOn = selectedNeighbourSources.length > 0 && pendingVisibility.CELLS;
+    dispatch(MapActions.setLayerVisibility("NEIGHBOURS", neighboursEffectivelyOn));
+
+    // ── BUILD PLAN NEIGHBOUR LINES ─────────────────────────────────────
+    if (neighboursEffectivelyOn) {
+        const cellCoords = {};
+        rawCells.forEach(c => {
+            if (c.cell_id) cellCoords[c.cell_id] = { latitude: c.latitude, longitude: c.longitude, azimuth: c.azimuth, radius_m: c.radius_m };
+        });
+        const lines = [];
+        (selectedPlanData?.source_target_map || []).forEach(({ source, targets }) => {
+            if (selectedNeighbourSources.length === 0 || !selectedNeighbourSources.includes(source)) return;
+            const src = cellCoords[source];
+            if (!src) return;
+            (targets || []).forEach(({ operation_type, target }) => {
+                const tgt = cellCoords[target];
+                if (!tgt) return;
+                lines.push({
+                    source, target, operation_type,
+                    s_latitude: src.latitude, s_longitude: src.longitude, s_azimuth: src.azimuth, srcRadius: src.radius_m,
+                    t_latitude: tgt.latitude, t_longitude: tgt.longitude, t_azimuth: tgt.azimuth, tgtRadius: tgt.radius_m,
+                });
+            });
+        });
+        dispatch(MapActions.setPlanNeighbourLines(lines));
+        localStorage.setItem(LS_KEY, JSON.stringify({
+            planName: neighbourPlanName,
+            selectedSources: selectedNeighbourSources,
+            enabled: true,
+            showLegend: pendingLegends.NEIGHBOURS,
+        }));
+    } else {
+        dispatch(MapActions.setPlanNeighbourLines([]));
+        localStorage.setItem(LS_KEY, JSON.stringify({
+            planName: neighbourPlanName,
+            selectedSources: selectedNeighbourSources,
+            enabled: false,
+            showLegend: pendingLegends.NEIGHBOURS,
+        }));
+    }
 
     // ── DRIVE TEST ────────────────────────────────────────────
     if (selectedDriveSessions.length > 0) {
@@ -1955,6 +2102,11 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
         setBoundaryColors({});
         dispatch(MapActions.setBoundaryColors({}));
 
+        setSelectedNeighbourSources([]);
+        dispatch(MapActions.setPlanNeighbourLines([]));
+        dispatch(MapActions.setLayerVisibility("NEIGHBOURS", false));
+        localStorage.removeItem(LS_KEY);
+
         dispatch(AuthActions.setupConf(true, {
             saveLayerVisibility: JSON.stringify({
                 CELLS: false, BOUNDARY: false, RF: false, DRIVE_TEST: false
@@ -2065,6 +2217,17 @@ const AddMapLayersPanel = ({ onClose, mode }) => {
                 driveThematicOptions={driveThematicOptions}
                 driveTestScale={driveTestScale}
                 setDriveTestScale={setDriveTestScale}
+                neighbourPlanName={neighbourPlanName}
+                neighbourPlanOptions={neighbourPlanOptions}
+                handleNeighbourPlanChange={handleNeighbourPlanChange}
+                neighbourSources={neighbourSources}
+                selectedNeighbourSources={selectedNeighbourSources}
+                toggleNeighbourSource={toggleNeighbourSource}
+                neighbourOperationTypes={neighbourOperationTypes}
+                neighbourApplied={layerVisibility.NEIGHBOURS || false}
+                pendingNeighboursEnabled={pendingNeighboursEnabled}
+                setPendingNeighboursEnabled={setPendingNeighboursEnabled}
+                layerVisibility={layerVisibility}
             />
         );
     }
@@ -2431,6 +2594,137 @@ onChange={() => toggleRfRegion(name)}
                                 })()}
                             </div>
                         </div>
+                    </div>
+                )}
+            </div>
+
+            {/* NEIGHBOURS */}
+            <div className="border rounded p-2 mb-2">
+                <div
+                    onClick={() => setExpanded(expandedLayer === "NEIGHBOURS" ? null : "NEIGHBOURS")}
+                    className="flex items-center justify-between cursor-pointer hover:bg-gray-100 rounded p-1"
+                >
+                    <div className="flex items-center gap-2">
+                        <div className="relative group" onClick={(e) => e.stopPropagation()}>
+                            <input
+                                type="checkbox"
+                                checked={selectedNeighbourSources.length > 0}
+                                onChange={() => {
+                                    if (!selectedNeighbourSources.length) return;
+                                    setSelectedNeighbourSources([]);
+                                }}
+                                className="cursor-pointer"
+                            />
+                            <span className="absolute bottom-7 left-0 bg-gray-900 text-white text-[11px] px-2.5 py-1.5 rounded-md shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-[9999] transition-opacity duration-150">
+                                {selectedNeighbourSources.length > 0 ? "Click to deselect all sources" : "Open panel to select sources"}
+                            </span>
+                        </div>
+                        <span className="font-medium">Plan Neighbors</span>
+                    </div>
+                    <span className="text-xl select-none">
+                        {expandedLayer === "NEIGHBOURS" ? <UilAngleUp size={22}/> : <UilAngleDown size={22}/>}
+                    </span>
+                </div>
+
+                {expandedLayer === "NEIGHBOURS" && (
+                    <div className="mt-2 border rounded p-2 space-y-3">
+
+                        {/* Plan Name */}
+                        <div>
+                            <span className="text-xs font-semibold text-gray-500 block mb-1">Plan Name</span>
+                            {neighbourPlanOptions.length === 0 ? (
+                                <p className="text-xs text-gray-400 italic">No plan available to select</p>
+                            ) : (
+                                <select
+                                    value={neighbourPlanName}
+                                    onChange={(e) => handleNeighbourPlanChange(e.target.value)}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                >
+                                    {neighbourPlanOptions.map(name => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+
+                        {/* Sources — shown only when plan is selected */}
+                        {neighbourPlanName && (
+                            <div>
+                                <div className="mb-1 flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-gray-500">Sources</span>
+                                    <div className="flex items-center gap-1.5">
+                                        {neighbourSources.length > 0 && <span className="text-xs font-normal text-gray-400">({selectedNeighbourSources.length}/{neighbourSources.length})</span>}
+                                        {neighbourSources.length > 0 && (
+                                            <input
+                                                type="checkbox"
+                                                className="cursor-pointer"
+                                                checked={selectedNeighbourSources.length === neighbourSources.length}
+                                                ref={el => { if (el) el.indeterminate = selectedNeighbourSources.length > 0 && selectedNeighbourSources.length < neighbourSources.length; }}
+                                                onChange={() => toggleNeighbourSource(selectedNeighbourSources.length === neighbourSources.length ? [] : [...neighbourSources])}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                                {neighbourSources.length === 0 ? (
+                                    <p className="text-xs text-gray-400 italic">No sources available</p>
+                                ) : (
+                                    <div className="border rounded p-1.5 space-y-1 max-h-[160px] overflow-y-auto">
+                                        {neighbourSources.map(src => (
+                                            <label key={src} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedNeighbourSources.includes(src)}
+                                                    onChange={() => toggleNeighbourSource(src)}
+                                                />
+                                                <span>{src}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Show legend toggle */}
+                        <label className="flex items-center gap-2 text-xs cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={pendingLegends.NEIGHBOURS}
+                                onChange={(e) => setPendingLegends(prev => ({ ...prev, NEIGHBOURS: e.target.checked }))}
+                            />
+                            <span className="text-gray-600 font-medium">Show legend</span>
+                        </label>
+
+                        {/* Preview — grouped by relation type */}
+                        {neighbourOperationTypes.length > 0 && (
+                            <div>
+                                <div className="text-xs font-semibold text-gray-500 mb-1">Preview</div>
+                                <div className="border rounded p-2 space-y-3 max-h-[220px] overflow-y-auto">
+                                    {(() => {
+                                        const groups = {};
+                                        neighbourOperationTypes.forEach(opType => {
+                                            const parsed = parseNeighbourOperation(opType);
+                                            if (!parsed) return;
+                                            if (!groups[parsed.planType]) groups[parsed.planType] = [];
+                                            groups[parsed.planType].push(opType);
+                                        });
+                                        return Object.entries(groups).map(([planType, opTypes]) => (
+                                            <div key={planType}>
+                                                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{planType}</div>
+                                                <div className="space-y-1 pl-2">
+                                                    {opTypes.map((opType) => (
+                                                        <div key={opType} className="flex items-center gap-2 text-xs">
+                                                            <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: getNeighbourOperationColor(opType) }} />
+                                                            <span className="text-gray-600">{opType}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+                            </div>
+                        )}
+
                     </div>
                 )}
             </div>

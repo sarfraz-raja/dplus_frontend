@@ -27,6 +27,20 @@ const store = configureStore({
         cxix,
         insightsEngine,
     },
+    middleware: (getDefaultMiddleware) =>
+        getDefaultMiddleware({
+            serializableCheck: {
+                ignoredPaths: [
+                    "map.rawCells",
+                    "map.rawSites",
+                    "map.rawCellsPerMap",
+                    "map.planNeighbourLines",
+                    "map.driveTestData",
+                    "map.rfPredictionGeoJson",
+                    "map.boundaryGeoJson",
+                ],
+            },
+        }),
     devTools: true
 })
 

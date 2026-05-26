@@ -350,7 +350,7 @@ const AuthActions = {
 
             localStorage.setItem("config", JSON.stringify(res?.data?.data))
             dispatch(SET_COMMON_CONFIG(res?.data?.data))
-            cb()
+            if (typeof cb === 'function') cb()
         } catch (error) {
             if (import.meta.env.DEV) console.warn("[auth] setupConf", error?.message)
         }

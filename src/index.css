@@ -4,6 +4,18 @@
   border-radius: 0 !important;
 }
 
+/* Thin scrollbar for all scrollbars inside Planned Neighbors panel — width only, colors from theme */
+.neighbours-panel *::-webkit-scrollbar,
+.neighbours-panel::-webkit-scrollbar {
+  width: 2px !important;
+  height: 2px !important;
+}
+.neighbours-panel *:hover::-webkit-scrollbar,
+.neighbours-panel:hover::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
 @font-face {
   font-family: "DatayogQuantico";
   src: url("/Quantico-Bold.ttf") format("truetype");
@@ -25,6 +37,7 @@
   --mainsec: #EC7D09;
   --topbar: linear-gradient(to right, #101c4c, #1b0027);
   background-color: #ffffff;
+
 }
 
 body {
@@ -219,6 +232,20 @@ html[data-theme="dark"] ::-webkit-scrollbar-track:hover {
 .react-datepicker__calendar-icon {
   width: 0.8rem !important;
   padding: 0.3rem !important;
+}
+
+/*
+ * Dark mode: force all native form controls to render with light/white backgrounds.
+ * The sidebar/topbar go dark via explicit classes; the content area stays white.
+ * Inline styles (e.g. map panel date inputs with style={{ backgroundColor:"#091428" }})
+ * keep higher specificity and are unaffected.
+ */
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  color-scheme: light;
 }
 
 /* ── Dark mode: native date/time inputs — force light color-scheme so browser popup is white ── */

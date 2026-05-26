@@ -108,6 +108,7 @@ export const Urls={
     cxix_audit_getdata:"/cxix_audit/getdata",
 
     insights_engine_dashboard_manager: "/sidebar-menu",
+    arc_setting: "/map/arc-setting",
 
 }
 

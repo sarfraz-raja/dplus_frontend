@@ -50,11 +50,11 @@ const FormModal = ({
             <div
                 onMouseDown={(e) => { e.stopPropagation(); backdropRef.current = false; }}
                 onClick={(e) => e.stopPropagation()}
-                className={`flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden border border-white/10 ${sizeClass}`}
+                className={`flex flex-col bg-white rounded-2xl shadow-2xl border border-white/10 ${sizeClass}`}
             >
                 {/* ── Sticky header ── */}
                 <div
-                    className="flex items-center gap-3 px-5 py-4 shrink-0"
+                    className="flex items-center gap-3 px-5 py-4 shrink-0 rounded-t-2xl overflow-hidden"
                     style={{ background: headerColor }}
                 >
                     {/* Optional icon */}
@@ -87,7 +87,7 @@ const FormModal = ({
                 </div>
 
                 {/* ── Scrollable content ── */}
-                <div className="flex-1 overflow-y-auto p-5 min-h-0">
+                <div className="flex-1 overflow-y-auto p-5 min-h-0 text-slate-900">
                     {children}
                 </div>
 

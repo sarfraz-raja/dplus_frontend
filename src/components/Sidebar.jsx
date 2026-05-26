@@ -129,6 +129,7 @@ const TOP_LEVEL_ICON_MAP = {
   'Work Force Management': Wrench,
   'Change Management': GitBranch,
   Admin: Settings2,
+  'Arc Setting Manager': Sliders,
 };
 
 /**
@@ -261,6 +262,7 @@ const SIDEBAR_CHILD_ICON_MAP = {
   'User Management': Settings,
   'Role Management': ShieldCheck,
   'Insights Dashboard Manager': LayoutDashboard,
+  'Arc Setting Manager': Sliders,
   'Resource Utilization': Gauge,
   'Auto TT Dispatch': Play,
   'Plan Work Order': ClipboardCheck,
@@ -637,7 +639,6 @@ export default function Sidebar({ sidebarOpen, isMobileViewport, mobileVisible, 
           LayoutDashboard,
       }));
       apiItems = applyDynamicInsightsMenu(apiItems, dynamicInsightsRoot);
-      console.log("[Sidebar] Final rendered menu order:", apiItems.map((i) => i.title));
       // Admin always gets the Admin panel appended — but only if the API didn't already include it.
       if (rolename?.toLowerCase() === 'admin') {
         const apiTitles = new Set(apiItems.map((i) => i.title.toLowerCase()));

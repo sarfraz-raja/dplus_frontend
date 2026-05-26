@@ -140,6 +140,84 @@ export const RF_CATEGORY_ORDER = [
     "Excellent", "Very Good", "Good", "Fair", "Weak", "Poor", "Bad", "No Cov."
 ];
 
+// ── NEIGHBOURS layer color config ────────────────────────────────────────────
+export const NEIGHBOUR_RELATION_TYPES = ["2G-2G", "2G-3G", "3G-2G", "3G-3G_Intra", "3G-3G_Inter"];
+
+export const NEIGHBOUR_COLOR_CONFIG = {
+    "Planned Type 1": {
+        "2G-2G":        "#1B5E20",
+        "2G-3G":        "#388E3C",
+        "3G-2G":        "#66BB6A",
+        "3G-3G_Intra":  "#A5D6A7",
+        "3G-3G_Inter":  "#C8E6C9",
+    },
+    "Planned Type 2": {
+        "2G-2G":        "#0D47A1",
+        "2G-3G":        "#1565C0",
+        "3G-2G":        "#1976D2",
+        "3G-3G_Intra":  "#64B5F6",
+        "3G-3G_Inter":  "#BBDEFB",
+    },
+    "Deletion": {
+        "2G-2G":        "#B71C1C",
+        "2G-3G":        "#E53935",
+        "3G-2G":        "#EF5350",
+        "3G-3G_Intra":  "#EF9A9A",
+        "3G-3G_Inter":  "#FFCDD2",
+    },
+};
+
+export const NEIGHBOUR_PLAN_TYPES = Object.keys(NEIGHBOUR_COLOR_CONFIG);
+
+/**
+ * Splits an operation_type_list entry into relation + planType.
+ * "2G-2G-Planned Type 1" → { relation: "2G-2G", planType: "Planned Type 1" }
+ * "3G-3G_Intra-Deletion"  → { relation: "3G-3G_Intra", planType: "Deletion" }
+ */
+export function parseNeighbourOperation(opType = "") {
+    // First try known plan types (longest suffix first to avoid partial matches)
+    const sorted = [...NEIGHBOUR_PLAN_TYPES].sort((a, b) => b.length - a.length);
+    for (const planType of sorted) {
+        const suffix = `-${planType}`;
+        if (opType.endsWith(suffix)) {
+            return { relation: opType.slice(0, opType.length - suffix.length), planType };
+        }
+    }
+    // Fallback: treat last dash-separated word(s) as planType dynamically
+    const lastDash = opType.lastIndexOf("-");
+    if (lastDash > 0) {
+        return { relation: opType.slice(0, lastDash), planType: opType.slice(lastDash + 1) };
+    }
+    return null;
+}
+
+function _hashHex(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    const h = Math.abs(hash) % 360;
+    // Convert HSL to hex
+    const s = 0.6, l = 0.5;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => { const k = (n + h / 30) % 12; const color = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return Math.round(255 * color).toString(16).padStart(2, "0"); };
+    return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+export function getNeighbourOperationColor(opType = "") {
+    const parsed = parseNeighbourOperation(opType);
+    if (!parsed) return "#6b7280";
+    const { relation, planType } = parsed;
+    // Deletion always → red family
+    if (planType.toLowerCase().includes("deletion")) {
+        return NEIGHBOUR_COLOR_CONFIG["Deletion"]?.[relation] || "#B71C1C";
+    }
+    // Known plan type → lookup
+    if (NEIGHBOUR_COLOR_CONFIG[planType]) {
+        return NEIGHBOUR_COLOR_CONFIG[planType][relation] || "#6b7280";
+    }
+    // Unknown plan type → stable hash color
+    return _hashHex(planType);
+}
+
 export const KPI_RANGE_DEFAULTS = {
     RSSI: [
         { min: -75,  max: 0,    color: "#22c55e", label: "Strong" },

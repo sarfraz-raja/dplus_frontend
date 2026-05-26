@@ -27,6 +27,8 @@ const initialState = {
     rawSites: [],
     selectedTaCells: [], // array of {cellId, cellName, taData: [...]}
     neighbourRelations: null, // { cellId, data: [...] } | null
+    neighborsPlanData: [],   // [{plan_name, source_target_map, operation_type_list, type}] from gisCells API
+    planNeighbourLines: [], // built client-side on Apply: [{source,target,operation_type,s_lat,...,t_lat,...}]
 
     // 🔹 UI Filters (shared across all maps)
     filters: {
@@ -105,10 +107,11 @@ const initialState = {
 
     layerVisibility: {
         CELLS: false,
-        SITES: false, 
+        SITES: false,
         BOUNDARY: false,
         RF: false,
-        DRIVE_TEST: false
+        DRIVE_TEST: false,
+        NEIGHBOURS: false,
     },
 
     layerLegends: {
@@ -117,7 +120,7 @@ const initialState = {
         BOUNDARY: false,
         RF: false,
         DRIVE_TEST: false,
-        NEIGHBORS: false,
+        NEIGHBOURS: false,
     },
 
     rulerPoints: [],      // [] | [[lng,lat]] | [[lng,lat],[lng,lat]]
@@ -300,8 +303,6 @@ const mapQuery = createSlice({
         // RF test Drive layer plotting
         SET_DRIVE_TEST_DATA: (state, { payload }) => {
             state.driveTestData = payload;
-
-            console.log("Set state drive test data",  state.driveTestData)
         },
 
         SET_ACTIVE_DRIVE_SESSIONS: (state, { payload }) => {
@@ -390,8 +391,10 @@ const mapQuery = createSlice({
                 SITES: false,
                 BOUNDARY: false,
                 RF: false,
-                DRIVE_TEST: false
+                DRIVE_TEST: false,
+                NEIGHBOURS: false,
             };
+            state.planNeighbourLines = [];
         },
 
         SET_RAW_CELLS_PER_MAP: (state, { payload }) => {
@@ -416,6 +419,14 @@ const mapQuery = createSlice({
 
         SET_NEIGHBOUR_RELATIONS: (state, { payload }) => {
             state.neighbourRelations = payload; // null clears it
+        },
+
+        SET_NEIGHBORS_PLAN_DATA: (state, { payload }) => {
+            state.neighborsPlanData = payload || [];
+        },
+
+        SET_PLAN_NEIGHBOUR_LINES: (state, { payload }) => {
+            state.planNeighbourLines = payload || [];
         },
 
         SET_ACTIVE_SITE_THEMATIC: (state, { payload }) => {
@@ -514,6 +525,8 @@ export const {
     SET_BOUNDARY_COLORS,
     SET_TA_SECTOR_DATA,
     SET_NEIGHBOUR_RELATIONS,
+    SET_NEIGHBORS_PLAN_DATA,
+    SET_PLAN_NEIGHBOUR_LINES,
 
 } = mapQuery.actions
 

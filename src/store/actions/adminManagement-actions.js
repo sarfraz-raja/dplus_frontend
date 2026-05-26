@@ -1,8 +1,8 @@
-
+is 
 import Button from "../../components/Button"
 import Api from "../../utils/api"
 import { Urls } from "../../utils/url"
-import { ROLE_LIST, USERS_LIST } from "../reducers/adminManagement-reducer"
+import { ROLE_LIST, USERS_LIST, ARC_SETTING_LIST } from "../reducers/adminManagement-reducer"
 import { SET_SIDEBAR_MENU } from "../reducers/auth-reducer"
 import CommonActions from "./common-actions"
 import AuthActions from "./auth-actions"
@@ -97,6 +97,58 @@ const AdminManagementActions = {
             console.log(error, 'saveRoleMenu error');
         }
     },
+    getArcSettingList: () => async (dispatch) => {
+        try {
+            const res = await Api.get({ url: Urls.arc_setting });
+            if (res?.status !== 200) return;
+            dispatch(ARC_SETTING_LIST(res.data.data ?? []));
+        } catch (error) {
+            console.log(error, "getArcSettingList error");
+        }
+    },
+
+    postArcSetting: (data, cb, errorCb) => async () => {
+        try {
+            const res = await Api.post({ data, url: Urls.arc_setting });
+            if (res?.status !== 200 && res?.status !== 201) {
+                errorCb?.(res?.data || res);
+                return;
+            }
+            cb?.();
+        } catch (error) {
+            console.log(error, "postArcSetting error");
+            errorCb?.({ msg: 'Something went wrong. Please try again.' });
+        }
+    },
+
+    updateArcSetting: (data, cb, errorCb) => async () => {
+        try {
+            const res = await Api.patch({ data, url: Urls.arc_setting });
+            if (res?.status !== 200 && res?.status !== 201) {
+                errorCb?.(res?.data || res);
+                return;
+            }
+            cb?.();
+        } catch (error) {
+            console.log(error, "updateArcSetting error");
+            errorCb?.({ msg: 'Something went wrong. Please try again.' });
+        }
+    },
+
+    deleteArcSetting: (band, technology, cb, errorCb) => async () => {
+        try {
+            const res = await Api.delete({ data: { band, technology }, url: Urls.arc_setting });
+            if (res?.status !== 200 && res?.status !== 201) {
+                errorCb?.(res?.data || res);
+                return;
+            }
+            cb?.();
+        } catch (error) {
+            console.log(error, "deleteArcSetting error");
+            errorCb?.({ msg: 'Something went wrong. Please try again.' });
+        }
+    },
+
     postRole: (reset, data, cb, uniqueId) => async (dispatch, _) => {
         try {
             console.log("AuthActions.signin", uniqueId)

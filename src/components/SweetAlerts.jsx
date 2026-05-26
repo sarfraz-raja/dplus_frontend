@@ -116,7 +116,7 @@
 
 // export default SweetAlerts;
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import SweetAlert2 from 'react-sweetalert2';
 import Modal from './Modal';
@@ -128,19 +128,11 @@ import swal from 'sweetalert';
 export const SweetAlerts = () => {
 
     const dispatch = useDispatch()
-    let swAlerts = useSelector((state) => {
-        // console.log(state, "statedsadsadsadsadasdsada")
-        let interdata = state?.component?.alerts
-        interdata = {
-            ...interdata,
-            buttons: interdata?.buttons?.length > 0 ? interdata?.buttons : [
-                <Button classes='w-15 bg-green-500' onClick={() => {
-                    dispatch(ALERTS({ show: false }))
-                }} name={"OK"} />]
-        }
-        // console.log(interdata.buttons, "interdatainterdatadsadassadsadas")
-        return interdata
-    })
+    const alertsData = useSelector((state) => state?.component?.alerts)
+    const defaultButtons = useMemo(() => [
+        <Button key="ok" classes='w-15 bg-green-500' onClick={() => dispatch(ALERTS({ show: false }))} name={"OK"} />
+    ], [dispatch])
+    const swAlerts = { ...alertsData, buttons: alertsData?.buttons?.length > 0 ? alertsData.buttons : defaultButtons }
 
     
     const [swalProps, setSwalProps] = useState({
@@ -190,9 +182,9 @@ export const SweetAlerts = () => {
                     {icons[swAlerts?.icon]}
                     <h1>{swAlerts?.text}</h1>
                     <div className='mt-2  flex justify-evenly w-48'>
-                        {swAlerts?.buttons?.map((itms) => {
-                            return itms
-                        })}
+                        {swAlerts?.buttons?.map((btn, i) => (
+                            <React.Fragment key={i}>{btn}</React.Fragment>
+                        ))}
                     </div>
                 </div>} />
             </>

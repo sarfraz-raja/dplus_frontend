@@ -23,7 +23,7 @@ import generateSectorPolygon from "./Utils/GenerateSectorPolygon";
 import { useNavigate } from 'react-router-dom';
 import CommonActions from '../../store/actions/common-actions';
 import { ALERTS } from '../../store/reducers/component-reducer';
-import { FIXED_COLORS, getDriveTestColor, KPI_RANGE_DEFAULTS, RF_CATEGORY_COLORS } from "./Utils/colorEngine";
+import { FIXED_COLORS, getDriveTestColor, KPI_RANGE_DEFAULTS, RF_CATEGORY_COLORS, getNeighbourOperationColor } from "./Utils/colorEngine";
 import LegendBox from "./LegendBox";
 import LegendBoxV2 from "./LegendBoxV2";
 import { Check, ChevronDown, ChevronUp, Compass, Copy, MapPin, Maximize, Minus, Plus, Ruler, Settings, X } from "lucide-react";
@@ -377,6 +377,7 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
   const activeSiteThematic = useSelector(state => state.map.activeSiteThematic);
   const selectedTaCells = useSelector(state => state.map.selectedTaCells || []);
   const neighbourRelationsRaw = useSelector(state => state.map.neighbourRelations);
+  const planNeighbourLines = useSelector(state => state.map.planNeighbourLines || []);
   // Attach a pre-built Set of target cell_ids so getFillColor can do O(1) lookups
   const neighbourRelations = useMemo(() => {
     if (!neighbourRelationsRaw) return null;
@@ -393,6 +394,7 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
   const [contextMenu, setContextMenu] = useState(null); // { x, y, cell }
   const [taError, setTaError] = useState(null); // { cellId, message }
   const [nrTooltip, setNrTooltip] = useState(null); // { x, y, source, target, type }
+  const [planNrTooltip, setPlanNrTooltip] = useState(null); // { x, y, source, target, operation_type, distance }
   const [rfTooltip, setRfTooltip] = useState(null); // { x, y, range, color_hex, parameter }
   const [nrSkippedDismissed, setNrSkippedDismissed] = useState(false);
   const [nrPanelCollapsed, setNrPanelCollapsed] = useState(false);
@@ -583,6 +585,24 @@ const boundaryLegendThematic = useMemo(() => {
 
 // }, [neighbourRelations]);
 
+const planNeighboursLegendThematic = useMemo(() => {
+    if (!planNeighbourLines.length) return null;
+    const uniqueOps = [...new Set(planNeighbourLines.map(l => l.operation_type).filter(Boolean))];
+    // Group by plan type so same color family appears together vertically
+    const groups = {};
+    uniqueOps.forEach(op => {
+      const dashIdx = op.lastIndexOf("-");
+      const planType = dashIdx > 0 ? op.slice(dashIdx + 1) : op;
+      if (!groups[planType]) groups[planType] = [];
+      groups[planType].push(op);
+    });
+    const sorted = Object.values(groups).flat();
+    return {
+      type: "Plan Neighbors",
+      colors: Object.fromEntries(sorted.map(op => [op, getNeighbourOperationColor(op)])),
+    };
+  }, [planNeighbourLines]);
+
 const neighborsLegendThematic = useMemo(() => {
 
   if (!neighbourRelations?.data?.length) return null;
@@ -618,6 +638,7 @@ const neighborsLegendThematic = useMemo(() => {
     if (layerLegends.RF && rfLegendThematic) a.push("RF");
     
     if (layerLegends.NEIGHBORS && neighborsLegendThematic) a.push("NEIGHBORS");
+    if (layerLegends.NEIGHBOURS && planNeighboursLegendThematic) a.push("NEIGHBOURS");
     return a;
   }, [
     layerLegends.SITES,
@@ -625,9 +646,11 @@ const neighborsLegendThematic = useMemo(() => {
     layerLegends.DRIVE_TEST,
     layerLegends.BOUNDARY,
     layerLegends.RF,
+    layerLegends.NEIGHBOURS,
     driveTestThematic,
     boundaryLegendThematic,
     rfLegendThematic,
+    planNeighboursLegendThematic,
   ]);
 
   const activeLegendKeysSig = activeLegendKeys.join("|");
@@ -737,17 +760,6 @@ const neighborsLegendThematic = useMemo(() => {
     Band: "band",
     Region: "region"
   };
-
-  useEffect(() => {
-  if (!activeThematic?.colors || Object.keys(activeThematic.colors).length === 0) {
-    dispatch(MapActions.setActiveThematic({
-      type: "Technology",
-      colors: FIXED_COLORS.Technology,
-      opacity: 0.9
-    }));
-  }
-}, []); // ← run only once on mount, not on every activeThematic change
-
 
   /* ============================================================
      🔹 LOCAL VIEW STATE (used only if sync disabled)
@@ -1500,14 +1512,18 @@ const siteLayer = useMemo(() => {
     if (!highlightedCell || !operatorFiltered) return null;
     if (selectedCell) return null; // cell sector highlight takes over
 
+    const siteHighlightData = operatorFiltered.filter(
+      d => d.cell_id === highlightedCell?.cell_id &&
+        d.longitude != null && d.latitude != null &&
+        !isNaN(Number(d.longitude)) && !isNaN(Number(d.latitude)) &&
+        Number(d.longitude) !== 0 && Number(d.latitude) !== 0
+    );
+    if (!siteHighlightData.length) return null;
+
     return new ScatterplotLayer({
       id: "site-highlight",
 
-      data: operatorFiltered.filter(
-        d => d.cell_id === highlightedCell?.cell_id &&
-          !isNaN(Number(d.longitude)) &&
-          !isNaN(Number(d.latitude))
-      ),
+      data: siteHighlightData,
 
       pickable: false,
 
@@ -2481,6 +2497,40 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
     });
   }, [nrPositions, currentZoom, config.mapScale]);
 
+  const planNeighbourLinesLayer = useMemo(() => {
+    if (!layerVisibility.NEIGHBOURS || !planNeighbourLines.length) return null;
+    const mapScale  = config.mapScale || 1;
+    const zoomBoost = computeZoomBoost(currentZoom);
+    return new LineLayer({
+      id: "plan-nr-lines-layer",
+      data: planNeighbourLines,
+      pickable: true,
+      getSourcePosition: d => getSectorTip(d.s_latitude, d.s_longitude, d.s_azimuth, d.srcRadius || 500, mapScale, zoomBoost),
+      getTargetPosition: d => getSectorTip(d.t_latitude, d.t_longitude, d.t_azimuth, d.tgtRadius || 500, mapScale, zoomBoost),
+      getColor: d => {
+        const hex = getNeighbourOperationColor(d.operation_type);
+        return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16), 200];
+      },
+      getWidth: 2,
+      widthUnits: "pixels",
+      updateTriggers: {
+        getSourcePosition: [currentZoom, config.mapScale],
+        getTargetPosition: [currentZoom, config.mapScale],
+      },
+      onHover: info => {
+        if (info.object) {
+          const distance = haversineKm(
+            [info.object.s_longitude, info.object.s_latitude],
+            [info.object.t_longitude, info.object.t_latitude]
+          );
+          setPlanNrTooltip({ x: info.x, y: info.y, source: info.object.source, target: info.object.target, operation_type: info.object.operation_type, distance });
+        } else {
+          setPlanNrTooltip(null);
+        }
+      },
+    });
+  }, [planNeighbourLines, layerVisibility.NEIGHBOURS, currentZoom, config.mapScale]);
+
   /* ============================================================
      🔹 ALL LAyers Dispatching logic
   ============================================================ */
@@ -2502,6 +2552,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
     // NR lines visible at zoom ≥ 9 (same as sectorLayer). zoomBoost is baked into the layer
     // accessors so tips always land on the visible sector arc edge at every zoom level.
     if (currentZoom >= 9 && neighbourLinesLayer) baseLayers.push(neighbourLinesLayer);
+    if (currentZoom >= 9 && planNeighbourLinesLayer) baseLayers.push(planNeighbourLinesLayer);
 
     if (siteLayer) baseLayers.push(siteLayer);
 
@@ -2526,6 +2577,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
     taSectorLayer,
     nrPositions,
     neighbourLinesLayer,
+    planNeighbourLinesLayer,
     customGeoJsonLayer,
     rfPredictionLayer,
     rfCentroidLayer,
@@ -3204,11 +3256,18 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
               onFocus={() => bringLegendToFront("NEIGHBORS")}
               onSendBackward={() => sendLegendBackward("NEIGHBORS")}
               initialPosition={{ x: Math.max(10, (mapBox?.w ?? window.innerWidth) - 260), y: 100 }}
-              onClose={() =>
-                dispatch(
-                  MapActions.setLayerLegend("NEIGHBORS", false)
-                )
-              }
+              onClose={() => dispatch(MapActions.setLayerLegend("NEIGHBORS", false))}
+            />
+          )}
+          {layerLegends.NEIGHBOURS && planNeighboursLegendThematic && (
+            <LegendBoxV2
+              layer="NEIGHBOURS"
+              thematic={planNeighboursLegendThematic}
+              zIndex={legendZIndex("NEIGHBOURS")}
+              onFocus={() => bringLegendToFront("NEIGHBOURS")}
+              onSendBackward={() => sendLegendBackward("NEIGHBOURS")}
+              initialPosition={{ x: Math.max(10, (mapBox?.w ?? window.innerWidth) - 260), y: 200 }}
+              onClose={() => dispatch(MapActions.setLayerLegend("NEIGHBOURS", false))}
             />
           )}
 
@@ -3410,6 +3469,20 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
                     <div><span className="text-gray-400">Distance:</span> {nrTooltip.distance?.toFixed(2)} km</div>
                 </div>
             </div>
+        )}
+
+        {planNrTooltip && (
+          <div
+            className="absolute z-[25] pointer-events-none bg-[#162a52] text-white text-xs px-3 py-2 rounded-lg shadow-lg border border-orange-500/30"
+            style={{ left: planNrTooltip.x + 12, top: planNrTooltip.y - 10 }}
+          >
+            <div className="font-semibold text-orange-300 mb-1.5">{planNrTooltip.operation_type}</div>
+            <div className="space-y-1 text-gray-200">
+              <div><span className="text-gray-400">Source:</span> {planNrTooltip.source}</div>
+              <div><span className="text-gray-400">Target:</span> {planNrTooltip.target}</div>
+              <div><span className="text-gray-400">Distance:</span> {planNrTooltip.distance?.toFixed(2)} km</div>
+            </div>
+          </div>
         )}
 
       {rfTooltip && (
