@@ -313,18 +313,198 @@ import { useForm } from 'react-hook-form';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserCircle2 } from 'lucide-react';
+import { useMsal } from '@azure/msal-react';
+import { loginRequest } from '../authConfig';
 import AuthActions from '../store/actions/auth-actions';
 import { useTheme } from '../context/ThemeContext.jsx';
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { instance } = useMsal();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // const handleMicrosoftSSO = async () => {
+  //   setSsoLoading(true);
+  //   setError('');
+  //   console.log('[SSO] Button clicked — calling loginPopup()')
+  //   try {
+  //     const authResult = await instance.loginPopup(loginRequest);
+  //     console.log('[SSO] loginPopup resolved ✓')
+  //     console.log('[SSO] account:', authResult?.account?.username)
+  //     console.log('[SSO] accessToken (first 40 chars):', authResult?.accessToken?.slice(0, 40))
+  //     console.log('[SSO] Sending accessToken to backend POST /login ...')
+  //     const result = await dispatch(
+  //       AuthActions.ssoSignIn(authResult.accessToken, () => navigate('/home'))
+  //     );
+  //     console.log('[SSO] ssoSignIn result:', result)
+  //     if (result?.ok === false && result.message) {
+  //       setError(result.message);
+  //     }
+  //   } catch (err) {
+  //     console.error('[SSO] loginPopup ERROR — errorCode:', err?.errorCode, '| message:', err?.message)
+  //     console.error('[SSO] full error object:', err)
+  //     if (err?.errorCode !== 'user_cancelled') {
+  //       setError('Microsoft sign-in failed. Please try again.');
+  //     }
+  //   } finally {
+  //     setSsoLoading(false);
+  //   }
+  // };
+
+const handleMicrosoftSSO = async () => {
+
+  setSsoLoading(true);
+  setError('');
+
+  try {
+
+    console.log('[SSO] Starting Microsoft login...');
+
+    // =========================================
+    // MICROSOFT LOGIN POPUP
+    // =========================================
+    const authResult = await instance.loginPopup({
+      scopes: [
+        "openid",
+        "profile",
+        "email",
+        "User.Read"
+      ],
+      prompt: "select_account",
+      redirectUri: `${window.location.origin}/auth-callback.html`,
+    });
+
+    console.log('[SSO] loginPopup success ✓');
+
+    // =========================================
+    // SET ACTIVE ACCOUNT
+    // =========================================
+    if (authResult?.account) {
+
+      instance.setActiveAccount(
+        authResult.account
+      );
+
+      console.log(
+        '[SSO] Active account set:',
+        authResult.account.username
+      );
+    }
+
+    // =========================================
+    // ACCESS TOKEN
+    // =========================================
+    const accessToken =
+      authResult?.accessToken;
+
+    console.log(
+      '[SSO] ACCESS TOKEN =>',
+      accessToken
+    );
+
+    // =========================================
+    // VALIDATE TOKEN
+    // =========================================
+    if (!accessToken) {
+
+      throw new Error(
+        'Microsoft access token not received'
+      );
+    }
+
+    // =========================================
+    // SEND TOKEN TO BACKEND
+    // =========================================
+    console.log(
+      '[SSO] Sending token to backend /login ...'
+    );
+
+    const result = await dispatch(
+      AuthActions.ssoSignIn(
+        accessToken,
+        () => navigate('/home')
+      )
+    );
+
+    console.log(
+      '[SSO] Backend login response =>',
+      result
+    );
+
+    // =========================================
+    // BACKEND ERROR
+    // =========================================
+    if (
+      result &&
+      result.ok === false
+    ) {
+
+      setError(
+        result.message ||
+        'Microsoft login failed'
+      );
+
+      return;
+    }
+
+    console.log(
+      '[SSO] Login completed successfully ✓'
+    );
+
+  } catch (err) {
+
+    console.error(
+      '[SSO] FULL LOGIN ERROR =>',
+      err
+    );
+
+    // =========================================
+    // HANDLE COMMON ERRORS
+    // =========================================
+    if (
+      err?.errorCode === 'user_cancelled'
+    ) {
+
+      setError(
+        'Microsoft login cancelled'
+      );
+
+    } else if (
+      err?.errorCode === 'popup_window_error'
+    ) {
+
+      setError(
+        'Popup blocked by browser'
+      );
+
+    } else if (
+      err?.errorCode === 'monitor_window_timeout'
+    ) {
+
+      setError(
+        'Microsoft login timeout'
+      );
+
+    } else {
+
+      setError(
+        err?.message ||
+        'Microsoft login failed'
+      );
+    }
+
+  } finally {
+
+    setSsoLoading(false);
+  }
+};
+  
   const {
     register,
     handleSubmit,
@@ -470,7 +650,7 @@ const Login = () => {
               <div className="mt-4 flex items-center gap-3">
                 <div className={`h-px w-8 ${isDark ? 'bg-white/20' : 'bg-gray-300'}`} />
                 <h2 className={`text-[11px] font-bold uppercase tracking-[0.25em] sm:text-xs ${isDark ? 'text-white/60' : 'text-gray-400'}`}>
-                  Portal Access
+                  Portal Access 14
                 </h2>
                 <div className={`h-px w-8 ${isDark ? 'bg-white/20' : 'bg-gray-300'}`} />
               </div>
@@ -536,6 +716,31 @@ const Login = () => {
                 {loading ? 'Signing In...' : 'Login'}
               </button>
             </form>
+
+            <div className="flex items-center gap-3 mt-4">
+              <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-gray-200'}`} />
+              <span className={`text-[11px] uppercase tracking-[0.2em] ${isDark ? 'text-white/30' : 'text-gray-400'}`}>or</span>
+              <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-gray-200'}`} />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleMicrosoftSSO}
+              disabled={ssoLoading}
+              className={`mt-4 w-full flex items-center justify-center gap-3 rounded-2xl border px-4 py-3.5 text-sm font-semibold tracking-wide transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70 ${
+                isDark
+                  ? 'border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-white/20'
+                  : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300'
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+                <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+              </svg>
+              {ssoLoading ? 'Signing in...' : 'Sign in with Microsoft'}
+            </button>
           </div>
         </div>
       </div>

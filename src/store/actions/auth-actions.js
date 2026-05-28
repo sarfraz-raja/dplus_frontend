@@ -287,6 +287,41 @@ const AuthActions = {
     uploadAvatar,
     saveProfile,
     /** @returns {Promise<{ ok: boolean, message?: string }>} */
+    ssoSignIn: (accessToken, cb) => async (dispatch) => {
+        try {
+            const res = await Api.post({ url: Urls.login, data: { login_type: "Microsoft", access_token: accessToken }, inst: 0 })
+            if (!res || res.status !== 200) {
+                return { ok: false, message: loginErrorMessage(res) }
+            }
+            const user = res.data
+            if (!user?.idToken) {
+                return { ok: false, message: "Invalid response from server. Please contact support." }
+            }
+            let dataFiw = user.confdata ?? {}
+            if (dataFiw.mapScale == null) dataFiw = { ...dataFiw, mapScale: "10" }
+            if (dataFiw.mapView == null) dataFiw = { ...dataFiw, mapView: "mapbox://styles/mapbox/standard" }
+            const serializedPermission = typeof user.permission === "string"
+                ? user.permission
+                : JSON.stringify(user.permission ?? null)
+            localStorage.setItem("user", JSON.stringify(user))
+            localStorage.setItem("token", user.idToken)
+            localStorage.setItem("permission", serializedPermission)
+            localStorage.setItem("auth", true)
+            localStorage.setItem("config", JSON.stringify(dataFiw))
+            dispatch(SET_TOKEN(user.idToken))
+            dispatch(SET_PERMISSION(serializedPermission))
+            dispatch(SET_USER(user))
+            dispatch(SET_AUTHENTICATED(true))
+            dispatch(SET_COMMON_CONFIG(dataFiw))
+            dispatch(CommonActions.setLastName(true, ""))
+            dispatch(fetchMe())
+            cb()
+            return { ok: true }
+        } catch {
+            return { ok: false, message: "Microsoft sign-in failed. Please try again." }
+        }
+    },
+    /** @returns {Promise<{ ok: boolean, message?: string }>} */
     signIn: (data, cb) => async (dispatch, _) => {
         try {
             /* inst:0 — avoid global full-screen loader; Login page has its own loading state */

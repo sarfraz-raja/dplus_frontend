@@ -1,4 +1,3 @@
-is 
 import Button from "../../components/Button"
 import Api from "../../utils/api"
 import { Urls } from "../../utils/url"
