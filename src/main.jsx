@@ -194,53 +194,57 @@ const root = ReactDOM.createRoot(
 );
 
 // =============================================
-// LAZY MSAL — only load if returning from a
-// Microsoft redirect (URL contains OAuth params)
+// LAZY MSAL — always handle redirect on load
+// Mirrors the working pattern from a6e5988 but
+// with lazy imports instead of global init
 // =============================================
-const hasMsalRedirect = /[?&](code|error|error_description)=/.test(
-  window.location.search + window.location.hash
-);
+const _msalRedirectUrlCheck = () =>
+  /[?&](code|error|error_description)=/.test(window.location.search + window.location.hash);
 
-if (hasMsalRedirect) {
-  (async () => {
-    try {
-      const [{ PublicClientApplication }, { msalConfig }, { default: AuthActions }] =
-        await Promise.all([
-          import('@azure/msal-browser'),
-          import('./authConfig'),
-          import('./store/actions/auth-actions'),
-        ]);
+(async () => {
+  try {
+    const [{ PublicClientApplication }, { msalConfig }, { default: AuthActions }] =
+      await Promise.all([
+        import('@azure/msal-browser'),
+        import('./authConfig'),
+        import('./store/actions/auth-actions'),
+      ]);
 
-      const msalInstance = new PublicClientApplication(msalConfig);
-      await msalInstance.initialize();
-      const redirectResult = await msalInstance.handleRedirectPromise();
+    const msalInstance = new PublicClientApplication(msalConfig);
+    await msalInstance.initialize();
+    const redirectResult = await msalInstance.handleRedirectPromise();
 
-      if (redirectResult?.accessToken) {
-        console.log('[MSAL] SSO redirect result received — calling backend');
-        const result = await store.dispatch(
-          AuthActions.ssoSignIn(redirectResult.accessToken, () => {})
-        );
-        if (result?.ok !== false) {
-          window.location.replace('/home');
-          return; // navigating away — skip render
-        }
-        console.error('[MSAL] SSO backend call failed:', result?.message);
-        sessionStorage.setItem('sso_error', result?.message || 'Microsoft sign-in failed.');
+    if (redirectResult?.accessToken) {
+      console.log('[MSAL] SSO redirect result received — calling backend');
+      const result = await store.dispatch(
+        AuthActions.ssoSignIn(redirectResult.accessToken, () => {})
+      );
+      if (result?.ok !== false) {
+        window.location.replace('/home');
+        return; // navigating away — skip render
       }
-    } catch (err) {
-      console.error('[MSAL REDIRECT ERROR] =>', err);
-      if (err?.errorCode === 'crypto_nonexistent' || err?.name === 'BrowserAuthError') {
-        sessionStorage.setItem('sso_error', 'Microsoft sign-in requires a secure (HTTPS) connection.');
-      } else {
-        sessionStorage.setItem('sso_error', 'Microsoft sign-in failed. Please try again.');
-      }
+      console.error('[MSAL] SSO backend call failed:', result?.message);
+      sessionStorage.setItem('sso_error', result?.message || 'Microsoft sign-in failed.');
     }
+    // null = normal page load — no error needed
+  } catch (err) {
+    console.error('[MSAL REDIRECT ERROR] =>', err);
+    const msg = err?.errorMessage || err?.message || '';
+    const isOAuthRedirect = _msalRedirectUrlCheck();
+    if (err?.errorCode === 'crypto_nonexistent') {
+      if (isOAuthRedirect) {
+        sessionStorage.setItem('sso_error', 'Microsoft sign-in requires a secure (HTTPS) connection. Please contact your administrator.');
+      }
+    } else if (msg.includes('AADSTS50020') || msg.includes('personal') || err?.errorCode === 'access_denied') {
+      sessionStorage.setItem('sso_error', 'Personal Microsoft accounts are not allowed. Please sign in with your work or school account.');
+    } else if (isOAuthRedirect) {
+      sessionStorage.setItem('sso_error', 'Microsoft sign-in failed. Please try again.');
+    }
+    // On normal page loads, MSAL errors are silently ignored
+  }
 
-    renderApp();
-  })();
-} else {
   renderApp();
-}
+})();
 
 function renderApp() {
   root.render(

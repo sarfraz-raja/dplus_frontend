@@ -372,6 +372,11 @@ const handleMicrosoftSSO = async () => {
       import('../authConfig'),
     ]);
 
+    // Clear any stale MSAL interaction lock left by a previous redirect attempt
+    Object.keys(sessionStorage)
+      .filter((k) => k.includes('msal') && k.includes('interaction'))
+      .forEach((k) => sessionStorage.removeItem(k));
+
     const msalInstance = new PublicClientApplication(msalConfig);
     await msalInstance.initialize();
 
@@ -385,9 +390,12 @@ const handleMicrosoftSSO = async () => {
   } catch (err) {
     setSsoLoading(false);
 
-    if (err?.errorCode === 'crypto_nonexistent' || err?.name === 'BrowserAuthError') {
+    const msg = err?.errorMessage || err?.message || '';
+    if (err?.errorCode === 'crypto_nonexistent') {
       setError('Microsoft sign-in requires a secure (HTTPS) connection. Please contact your administrator.');
-    } else if (err?.errorCode !== 'user_cancelled') {
+    } else if (msg.includes('AADSTS50020') || msg.includes('personal') || err?.errorCode === 'access_denied') {
+      setError('Personal Microsoft accounts are not allowed. Please sign in with your work or school account.');
+    } else if (err?.errorCode !== 'user_cancelled' && err?.errorCode !== 'interaction_in_progress') {
       setError('Microsoft sign-in failed. Please try again.');
     }
   }
