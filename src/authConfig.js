@@ -12,6 +12,7 @@
 	  }
 	};
 
+	
 	// Scopes define what data you want from the user
 	export const loginRequest = {
 	  scopes: ["openid", "profile", "email", "User.Read"],
