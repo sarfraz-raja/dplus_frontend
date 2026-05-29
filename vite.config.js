@@ -27,10 +27,6 @@ export default defineConfig({
     cssCodeSplit: true,
     sourcemap: false,
     rollupOptions: {
-      input: {
-        main: './index.html',
-        'auth-callback': './auth-callback.html',
-      },
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom', 'react-redux', '@reduxjs/toolkit'],

@@ -308,7 +308,7 @@
 
 //version 2
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -328,6 +328,14 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const ssoError = sessionStorage.getItem('sso_error');
+    if (ssoError) {
+      setError(ssoError);
+      sessionStorage.removeItem('sso_error');
+    }
+  }, []);
 
   // const handleMicrosoftSSO = async () => {
   //   setSsoLoading(true);
@@ -364,144 +372,21 @@ const handleMicrosoftSSO = async () => {
 
   try {
 
-    console.log('[SSO] Starting Microsoft login...');
-
-    // =========================================
-    // MICROSOFT LOGIN POPUP
-    // =========================================
-    const authResult = await instance.loginPopup({
-      scopes: [
-        "openid",
-        "profile",
-        "email",
-        "User.Read"
-      ],
+    await instance.loginRedirect({
+      scopes: ["openid", "profile", "email", "User.Read"],
       prompt: "select_account",
-      redirectUri: `${window.location.origin}/auth-callback.html`,
+      redirectUri: window.location.origin,
     });
 
-    console.log('[SSO] loginPopup success ✓');
-
-    // =========================================
-    // SET ACTIVE ACCOUNT
-    // =========================================
-    if (authResult?.account) {
-
-      instance.setActiveAccount(
-        authResult.account
-      );
-
-      console.log(
-        '[SSO] Active account set:',
-        authResult.account.username
-      );
-    }
-
-    // =========================================
-    // ACCESS TOKEN
-    // =========================================
-    const accessToken =
-      authResult?.accessToken;
-
-    console.log(
-      '[SSO] ACCESS TOKEN =>',
-      accessToken
-    );
-
-    // =========================================
-    // VALIDATE TOKEN
-    // =========================================
-    if (!accessToken) {
-
-      throw new Error(
-        'Microsoft access token not received'
-      );
-    }
-
-    // =========================================
-    // SEND TOKEN TO BACKEND
-    // =========================================
-    console.log(
-      '[SSO] Sending token to backend /login ...'
-    );
-
-    const result = await dispatch(
-      AuthActions.ssoSignIn(
-        accessToken,
-        () => navigate('/home')
-      )
-    );
-
-    console.log(
-      '[SSO] Backend login response =>',
-      result
-    );
-
-    // =========================================
-    // BACKEND ERROR
-    // =========================================
-    if (
-      result &&
-      result.ok === false
-    ) {
-
-      setError(
-        result.message ||
-        'Microsoft login failed'
-      );
-
-      return;
-    }
-
-    console.log(
-      '[SSO] Login completed successfully ✓'
-    );
+    // page navigates away — nothing below runs
 
   } catch (err) {
 
-    console.error(
-      '[SSO] FULL LOGIN ERROR =>',
-      err
-    );
-
-    // =========================================
-    // HANDLE COMMON ERRORS
-    // =========================================
-    if (
-      err?.errorCode === 'user_cancelled'
-    ) {
-
-      setError(
-        'Microsoft login cancelled'
-      );
-
-    } else if (
-      err?.errorCode === 'popup_window_error'
-    ) {
-
-      setError(
-        'Popup blocked by browser'
-      );
-
-    } else if (
-      err?.errorCode === 'monitor_window_timeout'
-    ) {
-
-      setError(
-        'Microsoft login timeout'
-      );
-
-    } else {
-
-      setError(
-        err?.message ||
-        'Microsoft login failed'
-      );
-    }
-
-  } finally {
-
     setSsoLoading(false);
+
+    if (err?.errorCode !== 'user_cancelled') {
+      setError('Microsoft sign-in failed. Please try again.');
+    }
   }
 };
   
@@ -546,7 +431,7 @@ const handleMicrosoftSSO = async () => {
 
   return (
     <main
-      className={`login-shell relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-5 ${isDark ? 'bg-[#02030a] text-white' : 'bg-gray-50 text-gray-900'}`}
+      className={`login-shell relative flex h-screen items-center justify-center overflow-hidden px-4 py-3 ${isDark ? 'bg-[#02030a] text-white' : 'bg-gray-50 text-gray-900'}`}
       style={{ fontFamily: '"Aptos", "Aptos Display", "Segoe UI", Arial, sans-serif' }}
     >
       <style
@@ -602,7 +487,7 @@ const handleMicrosoftSSO = async () => {
 
       {/* Card */}
       <div className="relative z-10 mx-auto flex w-full max-w-[1180px] items-center justify-center">
-        <div className={`relative my-auto w-full max-w-[540px] overflow-hidden rounded-[34px] border p-5 backdrop-blur-sm sm:p-8 ${
+        <div className={`relative my-auto w-full max-w-[540px] overflow-hidden rounded-[34px] border p-5 backdrop-blur-sm sm:p-7 ${
           isDark
             ? 'border-white/6 bg-[#0a1021] shadow-[0_24px_72px_rgba(0,0,0,0.58)]'
             : 'border-gray-200 bg-white shadow-[0_8px_40px_rgba(0,0,0,0.10)]'
@@ -615,7 +500,7 @@ const handleMicrosoftSSO = async () => {
           )}
 
           <div className="relative z-10">
-            <div className="mb-6 flex flex-col items-center text-center sm:mb-8">
+            <div className="mb-4 flex flex-col items-center text-center sm:mb-5">
               <div className="mb-2 flex items-center justify-center gap-0 opacity-90">
                 <img
                   src="/dy-globe-only.png"
@@ -642,21 +527,21 @@ const handleMicrosoftSSO = async () => {
                 )}
               </div>
 
-              <h1 className="mt-1 text-[1.50rem] font-black tracking-[0.28em] sm:text-[3.5rem]">
+              <h1 className="mt-1 text-[1.50rem] font-black tracking-[0.28em] sm:text-[2.5rem]">
                 <span className={isDark ? 'text-white' : 'text-[#0A1240]'}>DATA</span>
                 <span className="text-[#F26522] drop-shadow-[0_0_15px_rgba(242,101,34,0.28)]">PLUS</span>
               </h1>
 
-              <div className="mt-4 flex items-center gap-3">
+              <div className="mt-2 flex items-center gap-3">
                 <div className={`h-px w-8 ${isDark ? 'bg-white/20' : 'bg-gray-300'}`} />
                 <h2 className={`text-[11px] font-bold uppercase tracking-[0.25em] sm:text-xs ${isDark ? 'text-white/60' : 'text-gray-400'}`}>
-                  Portal Access 14
+                  Portal Access
                 </h2>
                 <div className={`h-px w-8 ${isDark ? 'bg-white/20' : 'bg-gray-300'}`} />
               </div>
             </div>
 
-            <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit(onSubmit)}>
+            <form className="space-y-3 sm:space-y-4" onSubmit={handleSubmit(onSubmit)}>
               <label className="block">
                 <span className={`mb-2 flex items-center gap-2 text-[15px] uppercase tracking-[0.2em] ${isDark ? 'text-white/45' : 'text-gray-500'}`}>
                   <UserCircle2 className="h-4 w-4 text-[#F26522]" /> Username/Email
@@ -665,7 +550,7 @@ const handleMicrosoftSSO = async () => {
                   {...register('username', { required: 'Username is required.' })}
                   placeholder="Enter username/email"
                   autoComplete="username"
-                  className={`w-full rounded-2xl border px-4 py-3.5 text-md outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
+                  className={`w-full rounded-2xl border px-4 py-3 text-md outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
                     isDark
                       ? 'border-white/5 bg-[rgba(3,6,18,0.98)] focus:bg-[rgba(3,6,18,0.95)]'
                       : 'border-gray-200 bg-gray-50 focus:bg-white'
@@ -684,7 +569,7 @@ const handleMicrosoftSSO = async () => {
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Enter password"
                     autoComplete="current-password"
-                    className={`w-full rounded-2xl border px-4 py-3.5 pr-12 text-sm outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
+                    className={`w-full rounded-2xl border px-4 py-3 pr-12 text-sm outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
                       isDark
                         ? 'border-white/5 bg-[rgba(3,6,18,0.98)] focus:bg-[rgba(3,6,18,0.95)]'
                         : 'border-gray-200 bg-gray-50 focus:bg-white'
@@ -711,13 +596,13 @@ const handleMicrosoftSSO = async () => {
               <button
                 type="submit"
                 disabled={loading || !username?.trim() || !password}
-                className="w-full rounded-2xl bg-[linear-gradient(135deg,#F26522,#ff8a3d)] px-4 py-3.5 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-lg transition-all duration-200 hover:brightness-110 hover:shadow-[#F26522]/25 disabled:cursor-not-allowed disabled:opacity-70"
+                className="w-full rounded-2xl bg-[linear-gradient(135deg,#F26522,#ff8a3d)] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-lg transition-all duration-200 hover:brightness-110 hover:shadow-[#F26522]/25 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loading ? 'Signing In...' : 'Login'}
               </button>
             </form>
 
-            <div className="flex items-center gap-3 mt-4">
+            <div className="flex items-center gap-3 mt-3">
               <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-gray-200'}`} />
               <span className={`text-[11px] uppercase tracking-[0.2em] ${isDark ? 'text-white/30' : 'text-gray-400'}`}>or</span>
               <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-gray-200'}`} />
@@ -727,7 +612,7 @@ const handleMicrosoftSSO = async () => {
               type="button"
               onClick={handleMicrosoftSSO}
               disabled={ssoLoading}
-              className={`mt-4 w-full flex items-center justify-center gap-3 rounded-2xl border px-4 py-3.5 text-sm font-semibold tracking-wide transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70 ${
+              className={`mt-3 w-full flex items-center justify-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold tracking-wide transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70 ${
                 isDark
                   ? 'border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-white/20'
                   : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300'

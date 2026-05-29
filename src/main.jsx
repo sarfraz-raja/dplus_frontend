@@ -176,6 +176,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 
 import store from './store';
+import AuthActions from './store/actions/auth-actions';
 
 import { ThemeProvider } from './context/ThemeContext.jsx';
 
@@ -211,9 +212,32 @@ const root = ReactDOM.createRoot(
 // INITIALIZE MSAL
 // =============================================
 msalInstance.initialize()
-  .then(() => {
+  .then(async () => {
 
     console.log('[MSAL] initialized successfully');
+
+    // =========================================
+    // Handle Microsoft SSO redirect result
+    // =========================================
+    const redirectResult = await msalInstance.handleRedirectPromise();
+
+    if (redirectResult?.accessToken) {
+
+      console.log('[MSAL] SSO redirect result received — calling backend');
+
+      const result = await store.dispatch(
+        AuthActions.ssoSignIn(redirectResult.accessToken, () => {})
+      );
+
+      if (result?.ok !== false) {
+        window.location.replace('/home');
+        return;
+      }
+
+      console.error('[MSAL] SSO backend call failed:', result?.message);
+      sessionStorage.setItem('sso_error', result?.message || 'Microsoft sign-in failed.');
+      // fall through — render app, user will see login page with error
+    }
 
     // =========================================
     // Restore active account on refresh
