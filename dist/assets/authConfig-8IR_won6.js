@@ -1,0 +1,1 @@
+const o={auth:{clientId:"4331180f-965f-4e05-99b1-d70491451c65",authority:"https://login.microsoftonline.com/organizations",redirectUri:window.location.origin},cache:{cacheLocation:"sessionStorage",storeAuthStateInCookie:!1}},e={scopes:["openid","profile","email","User.Read"]};export{e as loginRequest,o as msalConfig};
