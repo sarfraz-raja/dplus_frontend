@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@azure/msal-browser": "^5.11.0",
-    "@azure/msal-react": "^5.4.2",
     "@deck.gl/core": "^9.2.11",
     "@deck.gl/extensions": "^9.2.11",
     "@deck.gl/layers": "^9.2.11",

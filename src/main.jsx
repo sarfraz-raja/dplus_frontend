@@ -176,18 +176,8 @@ import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 
 import store from './store';
-import AuthActions from './store/actions/auth-actions';
 
 import { ThemeProvider } from './context/ThemeContext.jsx';
-
-// =============================================
-// MSAL IMPORTS
-// =============================================
-import { PublicClientApplication } from "@azure/msal-browser";
-
-import { MsalProvider } from "@azure/msal-react";
-
-import { msalConfig } from "./authConfig";
 
 // =============================================
 // GLOBAL SWAL
@@ -197,11 +187,6 @@ if (typeof window !== 'undefined') {
 }
 
 // =============================================
-// CREATE MSAL INSTANCE
-// =============================================
-const msalInstance = new PublicClientApplication(msalConfig);
-
-// =============================================
 // ROOT
 // =============================================
 const root = ReactDOM.createRoot(
@@ -209,69 +194,62 @@ const root = ReactDOM.createRoot(
 );
 
 // =============================================
-// INITIALIZE MSAL
+// LAZY MSAL — only load if returning from a
+// Microsoft redirect (URL contains OAuth params)
 // =============================================
-msalInstance.initialize()
-  .then(async () => {
+const hasMsalRedirect = /[?&](code|error|error_description)=/.test(
+  window.location.search + window.location.hash
+);
 
-    console.log('[MSAL] initialized successfully');
+if (hasMsalRedirect) {
+  (async () => {
+    try {
+      const [{ PublicClientApplication }, { msalConfig }, { default: AuthActions }] =
+        await Promise.all([
+          import('@azure/msal-browser'),
+          import('./authConfig'),
+          import('./store/actions/auth-actions'),
+        ]);
 
-    // =========================================
-    // Handle Microsoft SSO redirect result
-    // =========================================
-    const redirectResult = await msalInstance.handleRedirectPromise();
+      const msalInstance = new PublicClientApplication(msalConfig);
+      await msalInstance.initialize();
+      const redirectResult = await msalInstance.handleRedirectPromise();
 
-    if (redirectResult?.accessToken) {
-
-      console.log('[MSAL] SSO redirect result received — calling backend');
-
-      const result = await store.dispatch(
-        AuthActions.ssoSignIn(redirectResult.accessToken, () => {})
-      );
-
-      if (result?.ok !== false) {
-        window.location.replace('/home');
-        return;
+      if (redirectResult?.accessToken) {
+        console.log('[MSAL] SSO redirect result received — calling backend');
+        const result = await store.dispatch(
+          AuthActions.ssoSignIn(redirectResult.accessToken, () => {})
+        );
+        if (result?.ok !== false) {
+          window.location.replace('/home');
+          return; // navigating away — skip render
+        }
+        console.error('[MSAL] SSO backend call failed:', result?.message);
+        sessionStorage.setItem('sso_error', result?.message || 'Microsoft sign-in failed.');
       }
-
-      console.error('[MSAL] SSO backend call failed:', result?.message);
-      sessionStorage.setItem('sso_error', result?.message || 'Microsoft sign-in failed.');
-      // fall through — render app, user will see login page with error
+    } catch (err) {
+      console.error('[MSAL REDIRECT ERROR] =>', err);
+      if (err?.errorCode === 'crypto_nonexistent' || err?.name === 'BrowserAuthError') {
+        sessionStorage.setItem('sso_error', 'Microsoft sign-in requires a secure (HTTPS) connection.');
+      } else {
+        sessionStorage.setItem('sso_error', 'Microsoft sign-in failed. Please try again.');
+      }
     }
 
-    // =========================================
-    // Restore active account on refresh
-    // =========================================
-    const accounts = msalInstance.getAllAccounts();
+    renderApp();
+  })();
+} else {
+  renderApp();
+}
 
-    if (
-      !msalInstance.getActiveAccount() &&
-      accounts.length > 0
-    ) {
-      msalInstance.setActiveAccount(accounts[0]);
-    }
-
-    // =========================================
-    // RENDER APP
-    // =========================================
-    root.render(
-      <Provider store={store}>
-        <BrowserRouter basename='/'>
-          <MsalProvider instance={msalInstance}>
-            <ThemeProvider>
-              <App />
-            </ThemeProvider>
-          </MsalProvider>
-        </BrowserRouter>
-      </Provider>
-    );
-
-  })
-  .catch((err) => {
-
-    console.error(
-      '[MSAL INIT ERROR] =>',
-      err
-    );
-
-  });
+function renderApp() {
+  root.render(
+    <Provider store={store}>
+      <BrowserRouter basename='/'>
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
+      </BrowserRouter>
+    </Provider>
+  );
+}

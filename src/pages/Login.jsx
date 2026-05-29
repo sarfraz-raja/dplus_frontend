@@ -313,15 +313,12 @@ import { useForm } from 'react-hook-form';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserCircle2 } from 'lucide-react';
-import { useMsal } from '@azure/msal-react';
-import { loginRequest } from '../authConfig';
 import AuthActions from '../store/actions/auth-actions';
 import { useTheme } from '../context/ThemeContext.jsx';
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { instance } = useMsal();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   const [showPassword, setShowPassword] = useState(false);
@@ -366,25 +363,31 @@ const Login = () => {
   // };
 
 const handleMicrosoftSSO = async () => {
-
   setSsoLoading(true);
   setError('');
 
   try {
+    const [{ PublicClientApplication }, { msalConfig }] = await Promise.all([
+      import('@azure/msal-browser'),
+      import('../authConfig'),
+    ]);
 
-    await instance.loginRedirect({
-      scopes: ["openid", "profile", "email", "User.Read"],
-      prompt: "select_account",
+    const msalInstance = new PublicClientApplication(msalConfig);
+    await msalInstance.initialize();
+
+    await msalInstance.loginRedirect({
+      scopes: ['openid', 'profile', 'email', 'User.Read'],
+      prompt: 'select_account',
       redirectUri: window.location.origin,
     });
-
     // page navigates away — nothing below runs
 
   } catch (err) {
-
     setSsoLoading(false);
 
-    if (err?.errorCode !== 'user_cancelled') {
+    if (err?.errorCode === 'crypto_nonexistent' || err?.name === 'BrowserAuthError') {
+      setError('Microsoft sign-in requires a secure (HTTPS) connection. Please contact your administrator.');
+    } else if (err?.errorCode !== 'user_cancelled') {
       setError('Microsoft sign-in failed. Please try again.');
     }
   }
