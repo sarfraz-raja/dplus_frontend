@@ -1,7 +1,7 @@
 import Button from "../../components/Button"
 import Api from "../../utils/api"
 import { Urls } from "../../utils/url"
-import { ROLE_LIST, USERS_LIST, ARC_SETTING_LIST } from "../reducers/adminManagement-reducer"
+import { ROLE_LIST, USERS_LIST, ARC_SETTING_LIST, SET_ZOOM_CONFIG, ZOOM_CONFIG_DEFAULTS } from "../reducers/adminManagement-reducer"
 import { SET_SIDEBAR_MENU } from "../reducers/auth-reducer"
 import CommonActions from "./common-actions"
 import AuthActions from "./auth-actions"
@@ -145,6 +145,34 @@ const AdminManagementActions = {
         } catch (error) {
             console.log(error, "deleteArcSetting error");
             errorCb?.({ msg: 'Something went wrong. Please try again.' });
+        }
+    },
+
+    getZoomConfig: () => async (dispatch) => {
+        try {
+            const res = await Api.get({ url: Urls.zoom_config });
+            if (res?.status === 200 && res.data?.data) {
+                dispatch(SET_ZOOM_CONFIG(res.data.data));
+            }
+            // if API doesn't exist yet, defaults from reducer stay in place
+        } catch {
+            // silently use defaults — backend not yet implemented
+        }
+    },
+
+    saveZoomConfig: (data, cb, errorCb) => async (dispatch) => {
+        try {
+            const res = await Api.post({ data, url: Urls.zoom_config });
+            const bodyStatus = res?.data?.status ?? res?.status;
+            if (bodyStatus !== 200 && bodyStatus !== 201) {
+                errorCb?.({ msg: res?.data?.msg || 'Failed to save zoom config. Please try again.' });
+                return;
+            }
+            dispatch(SET_ZOOM_CONFIG(data));
+            cb?.();
+        } catch (error) {
+            console.log(error, 'saveZoomConfig error');
+            errorCb?.({ msg: 'Failed to save zoom config. Please try again.' });
         }
     },
 

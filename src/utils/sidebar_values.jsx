@@ -28,6 +28,7 @@ const DBConfig = lazy(() => import('../pages/CustomQuery/DBConfig'));
 const QueryWorkbench = lazy(() => import('../pages/CustomQuery/QueryWorkbench'));
 const XAlertConfigure = lazy(() => import('../pages/AlertMonitoringSystem/XAlertConfigure'));
 const XAlertScheduler = lazy(() => import('../pages/AlertMonitoringSystem/XAlertScheduler'));
+const XReportSchedulerList = lazy(() => import('../pages/AlertMonitoringSystem/XReportSchedulerList'));
 const ISONForm = lazy(() => import('../pages/iSON/iSonForm'));
 const UserManagement = lazy(() => import('../pages/Admin/UserManagement/UserManagement'));
 const RoleManagement = lazy(() => import('../pages/Admin/RoleManagement/RoleManagement'));
@@ -55,6 +56,7 @@ const AuditPatternList = lazy(() => import('../pages/CX_IXSupport/AuditPatternLi
 const AuditPattern = lazy(() => import('../pages/CX_IXSupport/AuditPattern'));
 const InsightsDashboardManager = lazy(() => import('../pages/Admin/InsightsDashboardManager'));
 const ArcSettingManager = lazy(() => import('../pages/Admin/ArcSettingManager/ArcSettingManager'));
+const ZoomSettingsManager = lazy(() => import('../pages/Admin/ZoomSettingsManager/ZoomSettingsManager'));
 const DynamicInsightsDashboard = lazy(() => import('../pages/InsightsEngine/DynamicInsightsDashboard'));
 const TelecomMapsPage = lazy(() => import('../pages/TelecomMapsPage'));
 const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsPage'));
@@ -323,6 +325,11 @@ export const Sidebar_content = {
                 link: "/xalerts/alert-scheduler",
                 subMenu: [],
                 component: <XAlertScheduler />,
+            }, {
+                name: "Report Scheduler",
+                link: "/xalerts/report-scheduler",
+                subMenu: [],
+                component: <XReportSchedulerList />,
             }],
         },
         {
@@ -386,6 +393,11 @@ export const Sidebar_content = {
                 link: "/admin/arc-setting-manager",
                 subMenu: [],
                 component: <ArcSettingManager />,
+            }, {
+                name: "Zoom Settings",
+                link: "/admin/zoom-settings",
+                subMenu: [],
+                component: <ZoomSettingsManager />,
             }],
         },
     ]

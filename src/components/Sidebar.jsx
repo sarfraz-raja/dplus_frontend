@@ -71,6 +71,7 @@ import {
   Eye,
   RefreshCw,
   ChevronDown,
+  ZoomIn,
 } from 'lucide-react';
 import { Sidebar_content } from '../utils/sidebar_values';
 import { meMenuToSidebarItems } from '../utils/meMenuToSidebar';
@@ -236,6 +237,7 @@ const SIDEBAR_CHILD_ICON_MAP = {
   'Saved Query List': FolderOpen,
   'Configure Scheduler': CalendarCog,
   'Alert Scheduler': BellRing,
+  'Report Scheduler': ClipboardCheck,
   Scripting: Terminal,
   'DB Update': Database,
   'Site Database': Server,
@@ -263,6 +265,7 @@ const SIDEBAR_CHILD_ICON_MAP = {
   'Role Management': ShieldCheck,
   'Insights Dashboard Manager': LayoutDashboard,
   'Arc Setting Manager': Sliders,
+  'Zoom Settings': ZoomIn,
   'Resource Utilization': Gauge,
   'Auto TT Dispatch': Play,
   'Plan Work Order': ClipboardCheck,

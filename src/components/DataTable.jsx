@@ -193,7 +193,7 @@ const DataTable = ({
                         Columns
                     </button>
                     {showColToggle && (
-                        <div className="absolute right-0 top-9 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-3 min-w-[160px]">
+                        <div className="absolute left-0 top-9 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-3 min-w-[160px]">
                             {columns.map(col => (
                                 <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm text-slate-700">
                                     <input

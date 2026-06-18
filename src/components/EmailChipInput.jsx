@@ -52,7 +52,7 @@ const EmailChipInput = ({ value, onChange, placeholder }) => {
 
     return (
         <div
-            className="flex flex-wrap gap-1.5 items-center w-full border border-slate-300 rounded px-2 py-1.5 bg-white focus-within:ring-2 focus-within:ring-orange-400 cursor-text min-h-[38px]"
+            className="flex flex-wrap gap-1.5 items-center self-start w-full border border-slate-300 rounded px-2 py-1.5 bg-white focus-within:ring-2 focus-within:ring-orange-400 cursor-text min-h-[38px]"
             onClick={() => inputRef.current?.focus()}
         >
             {chips.map((chip, i) => (

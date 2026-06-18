@@ -6,6 +6,7 @@ import { buildInsightsRootTree, INSIGHTS_ROOT_ROUTE } from './utils/insightsMenu
 import { Route, Routes } from 'react-router-dom';
 import Layout from './pages/Layout';
 import Profile from './pages/Profile';
+import XReportSchedulerNew from './pages/AlertMonitoringSystem/XReportSchedulerFormPage';
 import DynamicInsightsDashboard from './pages/InsightsEngine/DynamicInsightsDashboard';
 
 // ─── Maps built once at module load from sidebar_values ──────────────────────
@@ -171,6 +172,28 @@ const Navigation = ({ sidebarOpen, sidebarPos, setSidebarPos }) => {
                     <Layout
                         sidebarOpen={sidebarOpen}
                         child={<Profile />}
+                        sidebarPos={sidebarPos}
+                        setSidebarPos={setSidebarPos}
+                    />
+                }
+            />
+            <Route
+                path="/xalerts/report-scheduler/new"
+                element={
+                    <Layout
+                        sidebarOpen={sidebarOpen}
+                        child={<XReportSchedulerNew />}
+                        sidebarPos={sidebarPos}
+                        setSidebarPos={setSidebarPos}
+                    />
+                }
+            />
+            <Route
+                path="/xalerts/report-scheduler/edit/:id"
+                element={
+                    <Layout
+                        sidebarOpen={sidebarOpen}
+                        child={<XReportSchedulerNew />}
                         sidebarPos={sidebarPos}
                         setSidebarPos={setSidebarPos}
                     />

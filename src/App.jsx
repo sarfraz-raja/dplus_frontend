@@ -12,6 +12,7 @@ import WebSocketClient from './components/WebSocketClient'
 import AuthActions from './store/actions/auth-actions'
 import InsightsEngineActions from './store/actions/insightsEngine-actions'
 import { Toaster } from 'react-hot-toast'
+import AiChatFab from './components/AiChatFab'
 
 class ErrorBoundary extends Component {
     constructor(props) {
@@ -161,7 +162,7 @@ function App() {
                                 !isFullscreen && sidebarOpen ? 'lg:pl-[202px]' : 'lg:pl-0'
                             }`}
                         >
-                            <div className="relative flex min-h-0 flex-1 flex-col">
+                            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                                 <Navigation sidebarOpen={sidebarOpen} />
                                 <Loaders />
                             </div>
@@ -182,6 +183,7 @@ function App() {
                     </button>
                 )}
 
+                {!isFullscreen && <AiChatFab />}
                 <SweetAlerts />
                 <Toaster
                     position="bottom-center"

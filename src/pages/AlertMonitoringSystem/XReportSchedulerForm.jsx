@@ -156,6 +156,7 @@ const XReportSchedulerForm = ({ setIsOpen, submitRef }) => {
                 <select className={inputCls} {...register('outputformat', { required: 'Required' })}>
                     <option value="">Select</option>
                     <option value="pdf">PDF</option>
+                    <option value="png">PNG</option>
                     <option value="excel">Excel</option>
                     <option value="csv">CSV</option>
                 </select>

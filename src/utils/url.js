@@ -54,6 +54,7 @@ export const Urls={
     powerBI_tokenCreator:"/powerBI/tokenCreator",
     alertConfiguration_configureAlert:"/alertConfiguration/configureAlert",
     alertConfiguration_schedulerAlert:"/alertConfiguration/schedulerAlert",
+    report_scheduler: "/xalerts/report-scheduler",
     mtandaoComplaints:"/mtandaoComplaints",
     isonForm:"/isonForm",
     nokiaprepost:"/nokiaprepost",
@@ -109,6 +110,7 @@ export const Urls={
 
     insights_engine_dashboard_manager: "/sidebar-menu",
     arc_setting: "/map/arc-setting",
+    zoom_config: "/api-for-nitika",
 
 }
 

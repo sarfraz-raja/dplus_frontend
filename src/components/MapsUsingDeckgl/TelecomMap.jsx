@@ -388,6 +388,9 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
   }, [neighbourRelationsRaw]);
 
   const rulerMode = useSelector(state => state.map.rulerMode);
+  const zoomConfig = useSelector(state => state.adminManagement?.zoomConfig ?? { sectorVisibilityZoom: 9, markerHideZoom: 12 });
+  const sectorVisibilityZoom = zoomConfig.sectorVisibilityZoom;
+  const markerHideZoom = zoomConfig.markerHideZoom;
 
   const [localViewState, setLocalViewState] = useState(viewState);
   const [rulerHover, setRulerHover] = useState(null);
@@ -1123,7 +1126,7 @@ const generateAnnularSector = (lng, lat, azimuth, beamWidthDeg, innerMeters, out
           cellKpiData,
         ]
       },
-      visible: layerVisibility.CELLS && currentZoom < 12, // markers visible below zoom 12
+      visible: layerVisibility.CELLS && currentZoom < markerHideZoom, // markers visible below markerHideZoom
       // visible: currentZoom < 9 || selectedCell !== null, // show markers only at low zooms
       onClick: info => {
         if (blockMapDataPick) return;
@@ -2542,8 +2545,8 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
     if (gisDraftPathLayer) baseLayers.push(gisDraftPathLayer);
 
     if (layerVisibility.CELLS) {
-      if (currentZoom < 9 && markerLayer) baseLayers.push(markerLayer); // site aggregated blobs
-      if (currentZoom >= 9 && sectorLayer) baseLayers.push(sectorLayer); // cell sectors
+      if (currentZoom < sectorVisibilityZoom && markerLayer) baseLayers.push(markerLayer); // site aggregated blobs
+      if (currentZoom >= sectorVisibilityZoom && sectorLayer) baseLayers.push(sectorLayer); // cell sectors
 
       if (siteHighlightLayer) baseLayers.push(siteHighlightLayer);
       if (taSectorLayer) baseLayers.push(...taSectorLayer);
@@ -2551,8 +2554,8 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
 
     // NR lines visible at zoom ≥ 9 (same as sectorLayer). zoomBoost is baked into the layer
     // accessors so tips always land on the visible sector arc edge at every zoom level.
-    if (currentZoom >= 9 && neighbourLinesLayer) baseLayers.push(neighbourLinesLayer);
-    if (currentZoom >= 9 && planNeighbourLinesLayer) baseLayers.push(planNeighbourLinesLayer);
+    if (currentZoom >= sectorVisibilityZoom && neighbourLinesLayer) baseLayers.push(neighbourLinesLayer);
+    if (currentZoom >= sectorVisibilityZoom && planNeighbourLinesLayer) baseLayers.push(planNeighbourLinesLayer);
 
     if (siteLayer) baseLayers.push(siteLayer);
 

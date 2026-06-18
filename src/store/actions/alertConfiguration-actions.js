@@ -267,7 +267,56 @@ const AlertConfigurationActions = {
     },
     resetTablesList: () => async (dispatch, _) => {
         dispatch(TABLES_LIST({}))
-    }
+    },
+    postReportScheduler: (data, cb, onError) => async (dispatch, _) => {
+        try {
+            const res = await Api.post({ data, url: Urls.report_scheduler });
+            if (res?.status === 400) { onError && onError(res.data?.msg); return; }
+            if (res?.status !== 201 && res?.status !== 200) { onError && onError('Something went wrong.'); return; }
+            cb && cb();
+        } catch (error) {
+            console.log(error, "postReportScheduler error");
+            onError && onError('Something went wrong.');
+        }
+    },
+    getReportSchedulerById: (id, cb) => async (dispatch, _) => {
+        try {
+            const res = await Api.get({ url: `${Urls.report_scheduler}/${id}` });
+            if (res?.status !== 200) return;
+            cb && cb(res.data.data);
+        } catch (error) {
+            console.log(error, "getReportSchedulerById error");
+        }
+    },
+    putReportScheduler: (id, data, cb, onError) => async (dispatch, _) => {
+        try {
+            const res = await Api.put({ data, url: `${Urls.report_scheduler}/${id}` });
+            if (res?.status === 400) { onError && onError(res.data?.msg); return; }
+            if (res?.status !== 200) { onError && onError('Something went wrong.'); return; }
+            cb && cb();
+        } catch (error) {
+            console.log(error, "putReportScheduler error");
+            onError && onError('Something went wrong.');
+        }
+    },
+    getReportSchedulerList: (cb) => async (dispatch, _) => {
+        try {
+            const res = await Api.get({ url: Urls.report_scheduler });
+            if (res?.status !== 200) return;
+            cb && cb(res.data.data ?? []);
+        } catch (error) {
+            console.log(error, "getReportSchedulerList error");
+        }
+    },
+    deleteReportScheduler: (id, cb) => async (dispatch, _) => {
+        try {
+            const res = await Api.delete({ url: `${Urls.report_scheduler}/${id}` });
+            if (res?.status !== 200) return;
+            cb && cb();
+        } catch (error) {
+            console.log(error, "deleteReportScheduler error");
+        }
+    },
 }
 
 
