@@ -1,3 +1,6 @@
+// Offline-safe Chart.js import — no CDN, no network required.
+// chart.js is bundled via npm (package.json: "chart.js": "^4.5.1").
+import Chart from 'chart.js/auto';
 import React, { useEffect } from 'react';
 
 const COLORS = {
@@ -131,20 +134,21 @@ function update(){
   destroyCharts();
 
   const issueKeys=Object.keys(ISSUE_LABELS);
-  c1inst=new window.Chart(document.getElementById('c1'),{
+  // Chart is imported from npm — no window.Chart needed.
+  c1inst=new Chart(document.getElementById('c1'),{
     type:'doughnut',
     data:{labels:issueKeys.map(k=>ISSUE_LABELS[k]),datasets:[{data:issueKeys.map(k=>data.byType[k]||0),backgroundColor:issueKeys.map(k=>COLORS[k]),borderWidth:0,hoverOffset:4}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+ctx.label+': '+ctx.parsed.toLocaleString('en-IN')}}}}
   });
 
-  c2inst=new window.Chart(document.getElementById('c2'),{
+  c2inst=new Chart(document.getElementById('c2'),{
     type:'line',
     data:{labels:trend.labels,datasets:[{data:trend.values,borderColor:'#378ADD',borderWidth:2,pointRadius:0,tension:0.4,fill:true,backgroundColor:'rgba(55,138,221,0.08)'}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxTicksLimit:6,font:{size:10}},grid:{display:false}},y:{ticks:{font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}}}}
   });
 
   const netData=[rand(8,15),rand(12,20),rand(45,60),rand(18,30)];
-  c3inst=new window.Chart(document.getElementById('c3'),{
+  c3inst=new Chart(document.getElementById('c3'),{
     type:'bar',
     data:{labels:['2G','3G','4G','5G'],datasets:[{data:netData,backgroundColor:['#888780','#EF9F27','#378ADD','#1D9E75'],borderWidth:0,borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:11}},grid:{display:false}},y:{ticks:{font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}}}}
@@ -153,15 +157,24 @@ function update(){
 
 const NetworkComplaintsDashboard = () => {
   useEffect(() => {
-    const loadChartJS = () => new Promise((resolve) => {
-      if (window.Chart) { resolve(); return; }
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
-      script.onload = resolve;
-      document.head.appendChild(script);
-    });
+    // ─── OFFLINE DEPLOYMENT NOTE ───────────────────────────────────────────────
+    // The original implementation loaded Chart.js at runtime from Cloudflare CDN:
+    //
+    //   const loadChartJS = () => new Promise((resolve) => {
+    //     if (window.Chart) { resolve(); return; }
+    //     const script = document.createElement('script');
+    //     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+    //     script.onload = resolve;
+    //     document.head.appendChild(script);
+    //   });
+    //   loadChartJS().then(() => update());
+    //
+    // This has been replaced with a static npm import (top of file) to support
+    // fully offline environments (Airtel on-prem). Chart.js is now bundled at
+    // build time via Webpack/Vite — no network request is made at runtime.
+    // ───────────────────────────────────────────────────────────────────────────
 
-    loadChartJS().then(() => update());
+    update();
 
     return () => destroyCharts();
   }, []);

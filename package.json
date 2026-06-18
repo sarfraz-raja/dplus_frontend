@@ -21,6 +21,7 @@
     "@reduxjs/toolkit": "^2.0.0",
     "@superset-ui/embedded-sdk": "^0.3.0",
     "axios": "^1.6.2",
+    "chart.js": "^4.5.1",
     "clsx": "^2.1.0",
     "leaflet": "^1.9.4",
     "leaflet-routing-machine": "^3.2.12",
