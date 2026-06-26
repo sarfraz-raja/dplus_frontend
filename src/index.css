@@ -242,10 +242,17 @@ html[data-theme="dark"] ::-webkit-scrollbar-track:hover {
  */
 html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
 html[data-theme="dark"] select,
-html[data-theme="dark"] textarea {
+html[data-theme="dark"] textarea:not(.yogi-textarea) {
   background-color: #ffffff !important;
   color: #0f172a !important;
   color-scheme: light;
+}
+
+/* Yogi AI chat textarea — exempt from global dark mode white override */
+html[data-theme="dark"] textarea.yogi-textarea {
+  background-color: transparent !important;
+  color: #ffffff !important;
+  color-scheme: dark;
 }
 
 /* ── Dark mode: native date/time inputs — force light color-scheme so browser popup is white ── */

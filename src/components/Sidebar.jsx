@@ -112,6 +112,7 @@ const TOP_LEVEL_ICON_MAP = {
   iSON: Cpu,
   'CX/IX Support': Wrench,
   'Network Inventory': HardDrive,
+  'GPL Audit Ericsson': FileCode,
   'KPI Processing Engine': Gauge,
   Tickets: ListChecks,
   'Multi-Map View': Layers,
@@ -187,6 +188,7 @@ const REFERENCE_MENU = [
     name: 'Network Inventory',
     children: ['Site Database', 'Auto Discovery'],
   },
+  { name: 'GPL Audit Ericsson' },
   { name: 'Topology Layer' },
   {
     name: 'Layer View',

@@ -1,58 +1,181 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bot, X, Send, Loader2, Database, ChevronDown, ChevronUp } from 'lucide-react'
+import { Bot, X, Send, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 
 const CHAT_URL = 'https://banjo-fasting-snagged.ngrok-free.dev/chat/stream'
+const ORANGE = '#F26522'
 
-function TelecomDataBlock({ td }) {
+/* ── theme-aware token helper ── */
+function tok(isDark, light, dark) { return isDark ? dark : light }
+
+/* ── Bouncing dots typing indicator ── */
+const dotStyle = (delay) => ({
+    width: 6, height: 6, borderRadius: '50%',
+    background: ORANGE, display: 'inline-block',
+    animation: `yogi-bounce 1.1s ease-in-out infinite`,
+    animationDelay: delay,
+})
+
+/* ── Inject keyframes once ── */
+if (typeof document !== 'undefined' && !document.getElementById('yogi-styles')) {
+    const s = document.createElement('style')
+    s.id = 'yogi-styles'
+    s.textContent = `
+        @keyframes yogi-bounce {
+            0%,60%,100% { transform: translateY(0); opacity: .6; }
+            30% { transform: translateY(-5px); opacity: 1; }
+        }
+        @keyframes yogi-ping {
+            0% { transform: scale(1); opacity: .6; }
+            70%,100% { transform: scale(1.9); opacity: 0; }
+        }
+        .yogi-ping { animation: yogi-ping 1.8s ease-out infinite; }
+
+        @keyframes yogi-float {
+            0%,100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        @keyframes yogi-blink {
+            0%,90%,100% { transform: scaleY(1); }
+            95% { transform: scaleY(0.08); }
+        }
+        @keyframes yogi-glow-pulse {
+            0%,100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.12); }
+        }
+        @keyframes yogi-antenna-bob {
+            0%,100% { transform: rotate(-8deg); }
+            50% { transform: rotate(8deg); }
+        }
+        @keyframes yogi-eye-glow {
+            0%,100% { filter: drop-shadow(0 0 2px #F26522); }
+            50% { filter: drop-shadow(0 0 6px #F26522); }
+        }
+        .yogi-float { animation: yogi-float 3s ease-in-out infinite; }
+        .yogi-blink { animation: yogi-blink 3.5s ease-in-out infinite; transform-origin: center center; }
+        .yogi-glow-pulse { animation: yogi-glow-pulse 2s ease-in-out infinite; }
+        .yogi-antenna-bob { animation: yogi-antenna-bob 1.6s ease-in-out infinite; transform-origin: bottom center; }
+        .yogi-eye-glow { animation: yogi-eye-glow 2s ease-in-out infinite; }
+    `
+    document.head.appendChild(s)
+}
+
+/* ── Animated bot character for empty state ── */
+function BotCharacter({ isDark }) {
+    const headFill = isDark ? '#0f1c38' : '#ffffff'
+    const headStroke = '#F26522'
+    const eyeFill = '#F26522'
+    const cheekFill = isDark ? 'rgba(242,101,34,0.15)' : 'rgba(242,101,34,0.12)'
+    const smileStroke = isDark ? 'rgba(255,255,255,0.5)' : '#94a3b8'
+
+    return (
+        <div className="flex flex-col items-center gap-1">
+            {/* outer glow ring */}
+            <div className="relative flex items-center justify-center">
+                <div className="yogi-glow-pulse absolute rounded-full" style={{ width: 90, height: 90, background: 'radial-gradient(circle, rgba(242,101,34,0.2) 0%, transparent 70%)' }} />
+
+                {/* floating bot */}
+                <div className="yogi-float relative">
+                    <svg width="72" height="84" viewBox="0 0 72 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        {/* antenna base */}
+                        <rect x="34" y="6" width="4" height="14" rx="2" fill={headStroke} opacity="0.7" />
+                        {/* antenna tip — bobs */}
+                        <g className="yogi-antenna-bob">
+                            <circle cx="36" cy="5" r="5" fill={headStroke} />
+                            <circle cx="36" cy="5" r="2.5" fill="white" opacity="0.9" />
+                        </g>
+
+                        {/* head */}
+                        <rect x="8" y="18" width="56" height="48" rx="14" fill={headFill} stroke={headStroke} strokeWidth="2.5" />
+
+                        {/* cheeks */}
+                        <ellipse cx="18" cy="50" rx="6" ry="4" fill={cheekFill} />
+                        <ellipse cx="54" cy="50" rx="6" ry="4" fill={cheekFill} />
+
+                        {/* left eye */}
+                        <g className="yogi-blink yogi-eye-glow" style={{ transformOrigin: '25px 38px' }}>
+                            <circle cx="25" cy="38" r="7" fill={eyeFill} opacity="0.15" />
+                            <circle cx="25" cy="38" r="4.5" fill={eyeFill} />
+                            <circle cx="26.5" cy="36.5" r="1.5" fill="white" opacity="0.9" />
+                        </g>
+
+                        {/* right eye */}
+                        <g className="yogi-blink yogi-eye-glow" style={{ transformOrigin: '47px 38px', animationDelay: '0.1s' }}>
+                            <circle cx="47" cy="38" r="7" fill={eyeFill} opacity="0.15" />
+                            <circle cx="47" cy="38" r="4.5" fill={eyeFill} />
+                            <circle cx="48.5" cy="36.5" r="1.5" fill="white" opacity="0.9" />
+                        </g>
+
+                        {/* smile */}
+                        <path d="M24 52 Q36 62 48 52" stroke={smileStroke} strokeWidth="2.5" strokeLinecap="round" fill="none" />
+
+                        {/* bottom panel line */}
+                        <rect x="18" y="60" width="36" height="3" rx="1.5" fill={headStroke} opacity="0.2" />
+
+                        {/* ear bolts */}
+                        <circle cx="8" cy="38" r="4" fill={headFill} stroke={headStroke} strokeWidth="2" />
+                        <circle cx="8" cy="38" r="1.5" fill={headStroke} />
+                        <circle cx="64" cy="38" r="4" fill={headFill} stroke={headStroke} strokeWidth="2" />
+                        <circle cx="64" cy="38" r="1.5" fill={headStroke} />
+                    </svg>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/* ── Telecom data table / SQL block ── */
+function TelecomDataBlock({ td, isDark }) {
     const [sqlOpen, setSqlOpen] = useState(false)
     if (!td) return null
-
     const rows = td.rows || []
     const cols = rows.length > 0
         ? Object.keys(rows[0]).filter(k => !['latitude', 'longitude', 'did'].includes(k))
         : []
 
+    const border = tok(isDark, 'rgba(242,101,34,0.2)', 'rgba(242,101,34,0.15)')
+    const thColor = ORANGE
+    const tdColor = tok(isDark, '#475569', '#94a3b8')
+    const numColor = tok(isDark, '#1e293b', '#cbd5e1')
+    const rowAlt = tok(isDark, 'rgba(0,0,0,0.03)', 'rgba(255,255,255,0.02)')
+
     return (
         <div className="mt-2 space-y-2">
-            {/* Stats */}
+            {/* stats badges */}
             <div className="flex flex-wrap gap-1.5">
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono" style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)' }}>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono" style={{ background: `rgba(242,101,34,0.1)`, color: ORANGE, border: `1px solid rgba(242,101,34,0.25)` }}>
                     {td.row_count} rows
                 </span>
                 {td.metrics?.query_execution_ms != null && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono" style={{ background: 'rgba(34,197,94,0.1)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
                         {td.metrics.query_execution_ms}ms
                     </span>
                 )}
                 {td.intent && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono" style={{ background: 'rgba(168,85,247,0.1)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.2)' }}>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.2)' }}>
                         {td.intent}
                     </span>
                 )}
             </div>
 
-            {/* Table */}
             {cols.length > 0 && (
-                <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid rgba(99,102,241,0.15)' }}>
+                <div className="overflow-x-auto rounded-lg" style={{ border: `1px solid ${border}` }}>
                     <table className="w-full text-[11px] border-collapse">
                         <thead>
-                            <tr style={{ background: 'rgba(99,102,241,0.1)' }}>
+                            <tr style={{ background: `rgba(242,101,34,0.07)` }}>
                                 {cols.map(c => (
-                                    <th key={c} className="px-2 py-1.5 text-left font-semibold whitespace-nowrap font-mono" style={{ color: '#818cf8', borderBottom: '1px solid rgba(99,102,241,0.15)' }}>
-                                        {c}
-                                    </th>
+                                    <th key={c} className="px-2 py-1.5 text-left font-semibold whitespace-nowrap font-mono" style={{ color: thColor, borderBottom: `1px solid ${border}` }}>{c}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {rows.slice(0, 10).map((row, i) => (
-                                <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                                <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : rowAlt }}>
                                     {cols.map(c => {
                                         const v = row[c]
                                         const isNum = typeof v === 'number'
                                         const disp = isNum && !Number.isInteger(v) ? v.toFixed(2) : (v == null ? '—' : String(v))
                                         return (
-                                            <td key={c} className="px-2 py-1 max-w-[120px] truncate" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', color: isNum ? '#cbd5e1' : '#94a3b8', textAlign: isNum ? 'right' : 'left', fontFamily: isNum ? 'monospace' : undefined }}>
+                                            <td key={c} className="px-2 py-1 max-w-[120px] truncate" style={{ borderBottom: `1px solid ${border}`, color: isNum ? numColor : tdColor, textAlign: isNum ? 'right' : 'left', fontFamily: isNum ? 'monospace' : undefined }}>
                                                 {disp}
                                             </td>
                                         )
@@ -62,26 +185,20 @@ function TelecomDataBlock({ td }) {
                         </tbody>
                     </table>
                     {rows.length > 10 && (
-                        <p className="text-center text-[10px] py-1.5" style={{ color: '#64748b' }}>
+                        <p className="text-center text-[10px] py-1.5" style={{ color: tok(isDark, '#64748b', '#64748b') }}>
                             Showing 10 of {rows.length} rows
                         </p>
                     )}
                 </div>
             )}
 
-            {/* SQL collapsible */}
             {td.sql && (
                 <div>
-                    <button
-                        onClick={() => setSqlOpen(v => !v)}
-                        className="flex items-center gap-1 text-[10px] transition"
-                        style={{ color: '#64748b', fontFamily: 'monospace' }}
-                    >
-                        {sqlOpen ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                        VIEW SQL
+                    <button onClick={() => setSqlOpen(v => !v)} className="flex items-center gap-1 text-[10px] transition" style={{ color: tok(isDark, '#94a3b8', '#64748b'), fontFamily: 'monospace' }}>
+                        {sqlOpen ? <ChevronUp size={10} /> : <ChevronDown size={10} />} VIEW SQL
                     </button>
                     {sqlOpen && (
-                        <pre className="mt-1 px-2.5 py-2 rounded-lg overflow-x-auto text-[11px] leading-relaxed" style={{ background: 'rgba(0,0,0,0.4)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.15)', fontFamily: 'monospace' }}>
+                        <pre className="mt-1 px-2.5 py-2 rounded-lg overflow-x-auto text-[11px] leading-relaxed" style={{ background: tok(isDark, '#f1f5f9', 'rgba(0,0,0,0.4)'), color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)', fontFamily: 'monospace' }}>
                             {td.sql}
                         </pre>
                     )}
@@ -91,6 +208,7 @@ function TelecomDataBlock({ td }) {
     )
 }
 
+/* ── Quick prompts draggable strip ── */
 const QUICK_PROMPTS = [
     'Top 10 degraded sites yesterday',
     'Worst cells last 7 days',
@@ -104,15 +222,14 @@ const QUICK_PROMPTS = [
     'Sites with low data success rate',
 ]
 
-function QuickPrompts({ onSelect, disabled }) {
+function QuickPrompts({ onSelect, disabled, isDark }) {
     const railRef = useRef(null)
-    const drag = useRef({ active: false, startX: 0, scrollLeft: 0, moved: false })
+    const drag = useRef({ active: false, startX: 0, scrollLeft: 0, moved: false, pointerId: null })
 
     const onPointerDown = (e) => {
         const rail = railRef.current
         drag.current = { active: true, startX: e.clientX, scrollLeft: rail.scrollLeft, moved: false, pointerId: e.pointerId }
         rail.style.cursor = 'grabbing'
-        // do NOT capture yet — capturing immediately blocks button clicks
     }
     const onPointerMove = (e) => {
         if (!drag.current.active) return
@@ -129,6 +246,8 @@ function QuickPrompts({ onSelect, disabled }) {
         railRef.current.style.cursor = 'grab'
     }
 
+    const borderTop = tok(isDark, '1px solid #e2e8f0', '1px solid #27365C')
+
     return (
         <div
             ref={railRef}
@@ -136,16 +255,22 @@ function QuickPrompts({ onSelect, disabled }) {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1 overflow-x-auto select-none"
-            style={{ borderTop: '1px solid #27365C', scrollbarWidth: 'none', cursor: 'grab' }}
+            className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1.5 overflow-x-auto select-none"
+            style={{ borderTop, scrollbarWidth: 'none', cursor: 'grab' }}
         >
             {QUICK_PROMPTS.map(q => (
                 <button
                     key={q}
                     onClick={() => { if (!drag.current.moved) onSelect(q) }}
                     disabled={disabled}
-                    className="shrink-0 text-[11px] px-2.5 py-1 rounded-full transition disabled:opacity-40 hover:brightness-125"
-                    style={{ background: 'rgba(79,70,229,0.12)', border: '1px solid rgba(79,70,229,0.25)', color: '#818cf8', whiteSpace: 'nowrap', pointerEvents: 'auto' }}
+                    className="shrink-0 text-[11px] px-2.5 py-1 rounded-full transition-all disabled:opacity-40"
+                    style={{
+                        background: tok(isDark, 'rgba(242,101,34,0.07)', 'rgba(242,101,34,0.1)'),
+                        border: `1px solid rgba(242,101,34,${isDark ? '0.25' : '0.3'})`,
+                        color: tok(isDark, ORANGE, '#fb923c'),
+                        whiteSpace: 'nowrap',
+                        pointerEvents: 'auto',
+                    }}
                 >
                     {q}
                 </button>
@@ -154,32 +279,59 @@ function QuickPrompts({ onSelect, disabled }) {
     )
 }
 
-function Message({ msg }) {
+/* ── Bot avatar ── */
+function BotAvatar() {
+    return (
+        <div className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center self-start mt-0.5" style={{ background: `linear-gradient(135deg,${ORANGE},#f97316)`, boxShadow: `0 2px 8px rgba(242,101,34,0.35)` }}>
+            <Bot size={12} color="white" />
+        </div>
+    )
+}
+
+/* ── Single message ── */
+function Message({ msg, isDark }) {
     if (msg.role === 'user') {
         return (
             <div className="flex justify-end">
-                <div className="max-w-[85%] rounded-xl rounded-tr-sm px-3 py-2 text-sm leading-relaxed" style={{ background: 'rgba(79,70,229,0.25)', border: '1px solid rgba(79,70,229,0.35)', color: 'rgba(255,255,255,0.9)' }}>
+                <div className="max-w-[82%] rounded-2xl rounded-tr-sm px-3 py-2 text-sm leading-relaxed" style={{
+                    background: tok(isDark, 'rgba(242,101,34,0.1)', 'rgba(242,101,34,0.18)'),
+                    border: `1px solid rgba(242,101,34,${isDark ? '0.3' : '0.25'})`,
+                    color: tok(isDark, '#1e293b', 'rgba(255,255,255,0.9)'),
+                }}>
                     {msg.text}
                 </div>
             </div>
         )
     }
+
     return (
-        <div className="flex justify-start">
-            <div className="max-w-[95%] rounded-xl rounded-tl-sm px-3 py-2 text-sm leading-relaxed" style={{ background: 'rgba(39,54,92,0.45)', border: '1px solid #27365C', color: msg.error ? '#f87171' : 'rgba(255,255,255,0.85)' }}>
-                {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
-                {msg.thinking && !msg.text && (
-                    <span className="inline-flex gap-1 items-center text-white/40 text-xs">
-                        <Loader2 size={11} className="animate-spin" /> thinking…
+        <div className="flex justify-start gap-2">
+            <BotAvatar />
+            <div className="max-w-[88%] rounded-2xl rounded-tl-sm px-3 py-2 text-sm leading-relaxed" style={{
+                background: tok(isDark, '#f1f5f9', 'rgba(39,54,92,0.45)'),
+                border: `1px solid ${tok(isDark, '#e2e8f0', '#27365C')}`,
+                color: msg.error ? '#ef4444' : tok(isDark, '#334155', 'rgba(255,255,255,0.85)'),
+            }}>
+                {msg.thinking && !msg.text ? (
+                    <span className="flex gap-1.5 items-center py-0.5">
+                        <span style={dotStyle('0s')} />
+                        <span style={dotStyle('0.18s')} />
+                        <span style={dotStyle('0.36s')} />
                     </span>
+                ) : (
+                    <>
+                        {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
+                        {msg.telecomData && <TelecomDataBlock td={msg.telecomData} isDark={isDark} />}
+                    </>
                 )}
-                {msg.telecomData && <TelecomDataBlock td={msg.telecomData} />}
             </div>
         </div>
     )
 }
 
+/* ── Main component ── */
 export default function AiChatFab() {
+    const [isDark, setIsDark] = useState(() => document.documentElement.dataset.theme === 'dark')
     const [isOpen, setIsOpen] = useState(false)
     const [messages, setMessages] = useState([])
     const [input, setInput] = useState('')
@@ -187,6 +339,15 @@ export default function AiChatFab() {
     const bottomRef = useRef(null)
     const inputRef = useRef(null)
     const abortRef = useRef(null)
+
+    /* observe theme changes */
+    useEffect(() => {
+        const obs = new MutationObserver(() =>
+            setIsDark(document.documentElement.dataset.theme === 'dark')
+        )
+        obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+        return () => obs.disconnect()
+    }, [])
 
     useEffect(() => {
         if (isOpen && inputRef.current) inputRef.current.focus()
@@ -214,15 +375,9 @@ export default function AiChatFab() {
     const sendMessage = async () => {
         const text = input.trim()
         if (!text || streaming) return
-
-        setMessages(prev => [
-            ...prev,
-            { role: 'user', text },
-            { role: 'assistant', text: '', thinking: true },
-        ])
+        setMessages(prev => [...prev, { role: 'user', text }, { role: 'assistant', text: '', thinking: true }])
         setInput('')
         setStreaming(true)
-
         try {
             abortRef.current = new AbortController()
             const res = await fetch(CHAT_URL, {
@@ -231,16 +386,12 @@ export default function AiChatFab() {
                 body: JSON.stringify({ prompt: text }),
                 signal: abortRef.current.signal,
             })
-
             if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
             const reader = res.body.getReader()
             const decoder = new TextDecoder()
-
             outer: while (true) {
                 const { done, value } = await reader.read()
                 if (done) break
-
                 const lines = decoder.decode(value, { stream: true }).split('\n')
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue
@@ -248,26 +399,18 @@ export default function AiChatFab() {
                     if (data === '[DONE]') break outer
                     try {
                         const j = JSON.parse(data)
-                        if (j.chunk) {
-                            updateLast(msg => ({ ...msg, thinking: false, text: msg.text + j.chunk }))
-                        }
-                        if (j.telecom_data) {
-                            updateLast(msg => ({ ...msg, thinking: false, telecomData: j.telecom_data }))
-                        }
-                        if (j.error) {
-                            updateLast(msg => ({ ...msg, thinking: false, text: j.error, error: true }))
-                        }
-                    } catch {
-                        // ignore malformed lines
-                    }
+                        if (j.chunk) updateLast(m => ({ ...m, thinking: false, text: m.text + j.chunk }))
+                        if (j.telecom_data) updateLast(m => ({ ...m, thinking: false, telecomData: j.telecom_data }))
+                        if (j.error) updateLast(m => ({ ...m, thinking: false, text: j.error, error: true }))
+                    } catch { /* ignore */ }
                 }
             }
-            updateLast(msg => ({ ...msg, thinking: false }))
+            updateLast(m => ({ ...m, thinking: false }))
         } catch (err) {
             if (err.name !== 'AbortError') {
-                updateLast(msg => ({ ...msg, thinking: false, text: 'Connection error: ' + err.message, error: true }))
+                updateLast(m => ({ ...m, thinking: false, text: 'Connection error: ' + err.message, error: true }))
             } else {
-                updateLast(msg => ({ ...msg, thinking: false }))
+                updateLast(m => ({ ...m, thinking: false }))
             }
         } finally {
             setStreaming(false)
@@ -275,53 +418,59 @@ export default function AiChatFab() {
         }
     }
 
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault()
-            sendMessage()
-        }
-    }
+    /* tokens */
+    const panelBg = tok(isDark, '#ffffff', 'linear-gradient(180deg,#0C1931 0%,#0B1730 100%)')
+    const panelBorder = tok(isDark, '#e2e8f0', '#27365C')
+    const headerBg = tok(isDark, '#f8fafc', 'rgba(12,25,49,0.97)')
+    const panelShadow = tok(isDark, '-6px 0 24px rgba(0,0,0,0.1)', '-10px 0 28px rgba(3,8,24,0.55)')
+    const titleColor = tok(isDark, '#0f172a', '#ffffff')
+    const subtitleColor = tok(isDark, '#64748b', 'rgba(255,255,255,0.45)')
+    const inputBg = tok(isDark, '#f8fafc', 'rgba(39,54,92,0.35)')
+    const inputBorder = tok(isDark, '#e2e8f0', '#27365C')
+    const inputText = tok(isDark, '#0f172a', 'rgba(255,255,255,0.85)')
+    const inputPlaceholder = tok(isDark, '#94a3b8', 'rgba(255,255,255,0.3)')
+    const hintColor = tok(isDark, '#cbd5e1', 'rgba(255,255,255,0.2)')
 
     return (
         <>
-            {/* Sliding chat panel */}
+            {/* ── Panel ── */}
             <div
                 className={`fixed right-0 z-[1100] flex flex-col transition-transform duration-300 ease-in-out ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 style={{
-                    top: 78,
-                    bottom: 0,
-                    width: 400,
+                    top: 78, bottom: 0, width: 400,
                     transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-                    background: 'linear-gradient(180deg,#0C1931 0%,#0B1730 100%)',
-                    borderLeft: '1px solid #27365C',
-                    boxShadow: '-10px 0 28px rgba(3,8,24,0.55)',
+                    background: panelBg,
+                    borderLeft: `1px solid ${panelBorder}`,
+                    boxShadow: panelShadow,
                 }}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: '1px solid #27365C' }}>
-                    <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#4f46e5,#7c3aed)' }}>
-                            <Bot size={14} color="white" />
+                <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: headerBg, borderBottom: `1px solid ${panelBorder}` }}>
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `linear-gradient(135deg,${ORANGE},#f97316)`, boxShadow: `0 3px 10px rgba(242,101,34,0.4)` }}>
+                            <Bot size={16} color="white" />
                         </div>
                         <div>
-                            <p className="text-sm font-bold text-white leading-none">Yogi</p>
-                            <p className="text-[10px]" style={{ color: '#818cf8' }}>by DataYog · KPI Analytics</p>
+                            <p className="text-sm font-bold leading-none" style={{ color: titleColor }}>Yogi</p>
+                            <p className="text-[10px] mt-0.5" style={{ color: subtitleColor }}>by DataYog · KPI Analytics</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                         {streaming && (
                             <button
                                 onClick={() => abortRef.current?.abort()}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] transition"
-                                style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition"
+                                style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}
                             >
                                 Stop
                             </button>
                         )}
                         <button
                             onClick={() => setIsOpen(false)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-white/50 transition-colors hover:text-white"
-                            style={{ border: '1px solid #27365C' }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+                            style={{ border: `1px solid ${panelBorder}`, color: tok(isDark, '#64748b', 'rgba(255,255,255,0.4)') }}
+                            onMouseEnter={e => e.currentTarget.style.color = ORANGE}
+                            onMouseLeave={e => e.currentTarget.style.color = tok(isDark, '#64748b', 'rgba(255,255,255,0.4)')}
                         >
                             <X size={14} />
                         </button>
@@ -329,37 +478,36 @@ export default function AiChatFab() {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
+                <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3 min-h-0" style={{ scrollbarWidth: 'thin', scrollbarColor: `rgba(242,101,34,0.3) transparent` }}>
                     {messages.length === 0 && (
                         <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
-                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', boxShadow: '0 8px 24px rgba(79,70,229,0.3)' }}>
-                                <Database size={24} color="white" />
-                            </div>
+                            <BotCharacter isDark={isDark} />
                             <div>
-                                <p className="text-white/80 text-sm font-semibold">Telecom KPI Analytics</p>
-                                <p className="text-white/35 text-xs mt-1">Ask about site performance, KPI trends, vendor comparison, and more.</p>
+                                <p className="font-bold text-base" style={{ color: titleColor }}>Hi, I'm Yogi!</p>
+                                <p className="text-xs mt-1.5 leading-relaxed" style={{ color: subtitleColor }}>Your AI assistant for telecom KPI analytics.<br />Ask me anything about your network data.</p>
                             </div>
                         </div>
                     )}
-                    {messages.map((msg, i) => <Message key={i} msg={msg} />)}
+                    {messages.map((msg, i) => <Message key={i} msg={msg} isDark={isDark} />)}
                     <div ref={bottomRef} />
                 </div>
 
-                {/* Quick prompts — draggable scroll strip */}
-                <QuickPrompts onSelect={q => { setInput(q); inputRef.current?.focus() }} disabled={streaming} />
+                {/* Quick prompts */}
+                <QuickPrompts onSelect={q => { setInput(q); inputRef.current?.focus() }} disabled={streaming} isDark={isDark} />
 
                 {/* Input */}
-                <div className="shrink-0 px-3 py-3">
-                    <div className="flex items-end gap-2 rounded-xl px-3 py-2" style={{ background: 'rgba(39,54,92,0.35)', border: '1px solid #27365C' }}>
+                <div className="shrink-0 px-3 py-3" style={{ borderTop: `1px solid ${panelBorder}` }}>
+                    <div className="flex items-end gap-2 rounded-xl px-3 py-2" style={{ background: inputBg, border: `1px solid ${inputBorder}` }}>
                         <textarea
                             ref={inputRef}
                             rows={1}
                             value={input}
                             onChange={e => setInput(e.target.value)}
-                            onKeyDown={handleKeyDown}
+                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
                             placeholder="Ask about network KPIs…"
                             disabled={streaming}
-                            className="flex-1 resize-none bg-transparent text-sm text-white/85 placeholder-white/30 outline-none min-h-[22px] max-h-[100px] leading-relaxed"
+                            className="yogi-textarea flex-1 resize-none bg-transparent text-sm outline-none min-h-[22px] max-h-[100px] leading-relaxed"
+                            style={{ color: inputText, caretColor: ORANGE }}
                             onInput={e => {
                                 e.target.style.height = 'auto'
                                 e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px'
@@ -368,31 +516,36 @@ export default function AiChatFab() {
                         <button
                             onClick={sendMessage}
                             disabled={!input.trim() || streaming}
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all disabled:opacity-30"
-                            style={{ background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', color: 'white' }}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all disabled:opacity-30 hover:brightness-110"
+                            style={{ background: ORANGE, color: 'white', boxShadow: `0 2px 8px rgba(242,101,34,0.4)` }}
                         >
                             {streaming ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                         </button>
                     </div>
-                    <p className="mt-1.5 text-center text-[10px] text-white/20">Enter to send · Shift+Enter for newline</p>
+                    <p className="mt-1.5 text-center text-[10px]" style={{ color: hintColor }}>Enter to send · Shift+Enter for newline</p>
                 </div>
             </div>
 
-            {/* FAB */}
-            <button
-                onClick={() => setIsOpen(v => !v)}
-                title="Yogi — AI Assistant"
-                className="fixed bottom-6 right-6 flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 hover:scale-105"
-                style={{
-                    zIndex: 1099,
-                    background: isOpen ? 'rgba(31,21,26,0.96)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)',
-                    border: isOpen ? '1px solid rgba(79,70,229,0.6)' : '1px solid rgba(79,70,229,0.4)',
-                    color: 'white',
-                    boxShadow: isOpen ? '0 4px 16px rgba(79,70,229,0.3)' : '0 8px 24px rgba(79,70,229,0.4)',
-                }}
-            >
-                {isOpen ? <X size={18} /> : <Bot size={18} />}
-            </button>
+            {/* ── FAB ── */}
+            <div className="fixed bottom-6 right-6" style={{ zIndex: 1099 }}>
+                {/* ping ring when closed */}
+                {!isOpen && (
+                    <span className="yogi-ping absolute inset-0 rounded-full" style={{ background: `rgba(242,101,34,0.35)` }} />
+                )}
+                <button
+                    onClick={() => setIsOpen(v => !v)}
+                    title="Yogi — AI Assistant"
+                    className="relative flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 hover:scale-105"
+                    style={{
+                        background: isOpen ? tok(isDark, '#f1f5f9', '#0f1c38') : `linear-gradient(135deg,${ORANGE},#f97316)`,
+                        border: isOpen ? `1px solid rgba(242,101,34,0.4)` : 'none',
+                        color: isOpen ? ORANGE : 'white',
+                        boxShadow: isOpen ? `0 4px 16px rgba(242,101,34,0.2)` : `0 6px 20px rgba(242,101,34,0.45)`,
+                    }}
+                >
+                    {isOpen ? <X size={18} /> : <Bot size={18} />}
+                </button>
+            </div>
         </>
     )
 }

@@ -112,6 +112,9 @@ export const Urls={
     arc_setting: "/map/arc-setting",
     zoom_config: "/api-for-nitika",
 
+    gpl_audit_ericsson:"/gpl-audit-ericsson",
+    compare_ericsson:"/compare-ericsson",
+
 }
 
 export const WebSocketUrls={

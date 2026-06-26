@@ -63,6 +63,8 @@ const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsP
 const TicketsPage = lazy(() => import('../pages/Tickets/index'));
 const GeoDrillDownPage = lazy(() => import('../pages/GeoDrillDown/GeoDrillDownPage'));
 const NetworkComplaintsDashboard = lazy(() => import('../pages/NetworkComplaintsDashboard'));
+const GPLAuditEricsson = lazy(() => import('../pages/Ericsson/GPLAuditEricsson'));
+const CompareEricsson = lazy(() => import('../pages/Ericsson/CompareEricsson'));
 
 export const Sidebar_content = {
     temp: [],
@@ -351,6 +353,18 @@ export const Sidebar_content = {
                 subMenu: [],
                 component: <DBUpdate />,
             }],
+        },
+        {
+            name: "GPL Audit Ericsson",
+            link: "/gpl-audit-ericsson",
+            subMenu: [],
+            component: <GPLAuditEricsson />,
+        },
+          {
+            name: "Compare Ericsson",
+            link: "/compare-ericsson",
+            subMenu: [],
+            component: <CompareEricsson />,
         },
         {
             name: "Network Inventory",
