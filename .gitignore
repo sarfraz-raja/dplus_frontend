@@ -22,6 +22,7 @@ out/
 # Environment variables (NEVER PUSH)
 # =========================
 .env
+.env_copy
 .env.*
 !.env.example
 !.env.sample
@@ -72,3 +73,7 @@ tmp/
 temp/
 *.bak
 *.old
+
+public/tiles/*.pmtiles
+dist/tiles/*.pmtiles
+public/tiles/*.pmtiles

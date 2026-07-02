@@ -44,7 +44,7 @@ export default defineConfig({
   server: {         
     port: 5173,
     strictPort: true,
-    allowedHosts: ['dell5070l', 'dyserver2', '192.168.0.172', '192.168.0.181',"https://dataplus.live","dataplus.live"],
+    allowedHosts: ['dell5070l', 'dyserver2', 'dyserver', '192.168.0.172', '192.168.0.181',"https://dataplus.live","dataplus.live"],
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       Pragma: 'no-cache',

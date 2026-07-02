@@ -6,8 +6,8 @@ import { Urls } from '../../utils/url';
 // --- Constants ---
 
 const TABS = [
-    { label: 'Add Settings',     key: 'add_settings'     },
     { label: 'Compare Settings', key: 'compare_settings' },
+    { label: 'Add Settings',     key: 'add_settings'     },
 ];
 
 // Each tab has its own step labels — kept separate so they can differ independently.

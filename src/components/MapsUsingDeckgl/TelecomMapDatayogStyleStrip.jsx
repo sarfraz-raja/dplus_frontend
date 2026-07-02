@@ -16,6 +16,7 @@ export function TelecomMapStyleRightControl({
   onSelectMapStyle,
   mapStylePickerOpen,
   setMapStylePickerOpen,
+  isOnline = true,
 }) {
   const isCurrentMapLight = LIGHT_MAP_STYLES.has(mapStyleKeyForUi);
 
@@ -44,7 +45,7 @@ export function TelecomMapStyleRightControl({
           <div
             className="grid grid-cols-3 gap-x-2 gap-y-7 sm:gap-x-2.5 sm:gap-y-8 md:flex md:items-center md:gap-3 md:gap-y-0"
           >
-          {TELECOM_MAP_STYLE_OPTIONS.map((opt) => {
+          {TELECOM_MAP_STYLE_OPTIONS.filter(opt => isOnline || opt.value !== 'satellite').map((opt) => {
             const active = mapStyleKeyForUi === opt.value;
             const text = opt.pickerLabel ?? opt.label;
             const ps = opt.previewStyle;
@@ -84,6 +85,10 @@ export function TelecomMapStyleRightControl({
                         : undefined
                     }
                   />
+                  {/* Orange dot on active thumbnail when offline — indicates PMTiles is in use */}
+                  {active && !isOnline && (
+                    <span className="absolute -right-0.5 -top-0.5 z-10 h-2.5 w-2.5 rounded-full border border-[#0B1730] bg-[#F26522]" />
+                  )}
                 </button>
               </div>
             );

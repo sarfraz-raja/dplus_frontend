@@ -1,11 +1,18 @@
 /**
  * Keys consumed by `getMapStyle` in TelecomMap.jsx.
  * `previewStyle` matches Datayog `gis-engine/page.js` `MAP_STYLES` thumbnails.
+ *
+ * OFFLINE STYLES ("offline-light", "offline-dark"):
+ *   These use vector tiles from a local .pmtiles file — no internet needed.
+ *   See PMTILES_PATH and the SETUP comment block in TelecomMap.jsx for
+ *   instructions on downloading and placing the regional .pmtiles file.
+ *   The online styles below them still work normally when internet is available.
  */
 export const TELECOM_MAP_STYLE_OPTIONS = [
   {
     label: "Outdoors",
     pickerLabel: "Terrain",
+    offlineLabel: "PM Light",
     value: "outdoors",
     previewStyle: {
       backgroundColor: "#d9d7c8",
@@ -16,6 +23,7 @@ export const TELECOM_MAP_STYLE_OPTIONS = [
   {
     label: "Streets",
     pickerLabel: "Street",
+    offlineLabel: "PM Light",
     value: "voyager",
     previewStyle: {
       backgroundColor: "#f7f7f5",
@@ -26,6 +34,7 @@ export const TELECOM_MAP_STYLE_OPTIONS = [
   {
     label: "OSM",
     pickerLabel: "OSM",
+    offlineLabel: "PM White",
     value: "osm",
     previewStyle: {
       backgroundColor: "#eef4de",
@@ -46,6 +55,7 @@ export const TELECOM_MAP_STYLE_OPTIONS = [
   {
     label: "Light",
     pickerLabel: "Light",
+    offlineLabel: "PM White",
     value: "light",
     previewStyle: {
       backgroundColor: "#f1f5f9",
@@ -56,6 +66,7 @@ export const TELECOM_MAP_STYLE_OPTIONS = [
   {
     label: "Dark",
     pickerLabel: "Dark",
+    offlineLabel: "PM Dark",
     value: "dark",
     previewStyle: {
       backgroundColor: "#10172e",
@@ -64,3 +75,7 @@ export const TELECOM_MAP_STYLE_OPTIONS = [
     },
   },
 ];
+// NOTE: There are no separate "Offline" options in the picker.
+// When the browser goes offline, the active style automatically switches to
+// its closest OpenFreeMap PMTiles equivalent (see OFFLINE_STYLE_MAP in TelecomMap.jsx).
+// The "Offline Map" badge and orange dot on the active thumbnail indicate offline mode.

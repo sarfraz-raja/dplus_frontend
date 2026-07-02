@@ -26,7 +26,7 @@ import { ALERTS } from '../../store/reducers/component-reducer';
 import { FIXED_COLORS, getDriveTestColor, KPI_RANGE_DEFAULTS, RF_CATEGORY_COLORS, getNeighbourOperationColor } from "./Utils/colorEngine";
 import LegendBox from "./LegendBox";
 import LegendBoxV2 from "./LegendBoxV2";
-import { Check, ChevronDown, ChevronUp, Compass, Copy, MapPin, Maximize, Minus, Plus, Ruler, Settings, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Compass, Copy, MapPin, Maximize, Minus, Plus, Ruler, Settings, WifiOff, X } from "lucide-react";
 import {
   buildDraftMeasurement,
   buildDraftMeasurementLineCollection,
@@ -103,7 +103,11 @@ const GIS_DRAFT_PATH_EXTENSION = new PathStyleExtension({
   highPrecisionDash: true,
 });
 
-/** Datayog `gis-engine/page.js` — `LIGHT_MEASURE_STYLES` */
+/** Datayog `gis-engine/page.js` — `LIGHT_MEASURE_STYLES`
+ *  Styles listed here get dark measurement labels (dots/chips).
+ *  Dark-background styles are omitted — they get light labels instead.
+ *  Offline mode uses the same key as the selected online style, so no
+ *  offline-specific entries are needed here. */
 const LIGHT_MEASURE_STYLES = new Set(["outdoors", "voyager", "osm", "light"]);
 
 /** MapLibre `["interpolate",["linear"],["zoom"],6,v0,10,v1,14,v2]` → pixel width (page.js measurement*LineLayer). */
@@ -236,6 +240,11 @@ function gisLiveDraftLabelOffsetPx(vp, lastPoint, cursorPoint, draftPoints) {
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ONLINE MAP STYLES (require internet)
+// These fetch raster tiles from external CDNs on every pan/zoom.
+// Keys here must match the `value` field in telecomMapStyleOptions.js.
+// ─────────────────────────────────────────────────────────────────────────────
 const MAP_STYLES = {
   // outdoors: {
   //   tiles: ['https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}@2x.png'],
@@ -263,13 +272,211 @@ const MAP_STYLES = {
     attribution: '© OpenStreetMap Contributors'
   },
   satellite: {
+    // Satellite imagery is NOT available offline via PMTiles — this style
+    // always requires internet (Esri CDN). Keep this as an online-only option.
     tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
     attribution: '© Esri, Maxar, Earthstar Geographics'
   },
-
 };
 
-const getMapStyle = (styleKey) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// OFFLINE MAP SUPPORT — PMTiles
+//
+// PMTiles is a single-file tile archive format. MapLibre fetches only the
+// byte ranges it needs via HTTP range requests to the local file, so no
+// tile server process is required.
+//
+// SETUP (one-time, per deployment):
+//   1. Download a regional extract from https://protomaps.com/downloads
+//      Choose the area covering your deployment region (e.g. Southern Africa).
+//   2. Place the file at: /public/tiles/region.pmtiles
+//      Vite serves /public/ at the root, so the browser sees /tiles/region.pmtiles
+//   3. Update PMTILES_PATH below (or set VITE_PMTILES_PATH in .env).
+//   4. The PMTiles protocol adapter is registered in main.jsx (startup).
+//
+// The offline styles use vector tiles (not raster), so they render crisply
+// at any zoom level and use far less storage than raster tile downloads.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Path to the local .pmtiles file (served from /public/tiles/).
+// Change this to match the filename you downloaded.
+const PMTILES_PATH = import.meta.env.VITE_PMTILES_PATH || '/tiles/region.pmtiles';
+
+// Build a MapLibre style spec that reads vector tiles from the local PMTiles file.
+// `theme` — 'light' | 'dark' — controls fill/road/label colors.
+const getOfflinePmtilesStyle = (theme = 'light') => {
+  const isLight = theme === 'light';
+  return {
+    version: 8,
+    // Glyphs are needed to render road labels. These are still fetched from the
+    // network. To go fully offline, download and self-host a glyph set, then
+    // change this URL to point to your local server.
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources: {
+      protomaps: {
+        type: 'vector',
+        // "pmtiles://" prefix is handled by the Protocol adapter registered in main.jsx
+        url: `pmtiles://${PMTILES_PATH}`,
+        attribution: '© Protomaps © OpenStreetMap',
+      },
+    },
+    layers: [
+      // Canvas background
+      {
+        id: 'background',
+        type: 'background',
+        paint: { 'background-color': isLight ? '#f2ede8' : '#12192f' },
+      },
+      // Water bodies
+      {
+        id: 'water',
+        type: 'fill',
+        source: 'protomaps',
+        'source-layer': 'water',
+        paint: { 'fill-color': isLight ? '#a8d4f0' : '#1a2f4a' },
+      },
+      // Natural land (parks, forests)
+      {
+        id: 'natural',
+        type: 'fill',
+        source: 'protomaps',
+        'source-layer': 'natural',
+        paint: { 'fill-color': isLight ? '#d8e8c8' : '#1a2b1a' },
+      },
+      // Land use zones (urban, residential, industrial)
+      {
+        id: 'landuse',
+        type: 'fill',
+        source: 'protomaps',
+        'source-layer': 'landuse',
+        paint: { 'fill-color': isLight ? '#e8e0d8' : '#1c2133', 'fill-opacity': 0.6 },
+      },
+      // Roads — minor (residential, service)
+      {
+        id: 'roads-minor',
+        type: 'line',
+        source: 'protomaps',
+        'source-layer': 'roads',
+        filter: ['in', ['get', 'pmap:kind'], ['literal', ['minor_road', 'service']]],
+        paint: {
+          'line-color': isLight ? '#e0d8d0' : '#2a3550',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 14, 2],
+        },
+      },
+      // Roads — major (primary, secondary, trunk)
+      {
+        id: 'roads-major',
+        type: 'line',
+        source: 'protomaps',
+        'source-layer': 'roads',
+        filter: ['in', ['get', 'pmap:kind'], ['literal', ['primary', 'secondary', 'trunk']]],
+        paint: {
+          'line-color': isLight ? '#ffffff' : '#3a4a6a',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 14, 4],
+        },
+      },
+      // Roads — motorway / highway
+      {
+        id: 'roads-motorway',
+        type: 'line',
+        source: 'protomaps',
+        'source-layer': 'roads',
+        filter: ['==', ['get', 'pmap:kind'], 'highway'],
+        paint: {
+          'line-color': isLight ? '#f5c842' : '#8a7020',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1, 14, 5],
+        },
+      },
+      // Place labels (cities, towns)
+      {
+        id: 'places',
+        type: 'symbol',
+        source: 'protomaps',
+        'source-layer': 'places',
+        layout: {
+          // Before — local language name
+          'text-field': ['get', 'name'],
+
+          // After — English name, falls back to local if English not available
+          'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+
+          'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 12, 14],
+          'text-anchor': 'center',
+        },
+        paint: {
+          'text-color': isLight ? '#333333' : '#cccccc',
+          'text-halo-color': isLight ? '#ffffff' : '#12192f',
+          'text-halo-width': 1.5,
+        },
+      },
+    ],
+  };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OFFLINE STYLE LOADING — OpenFreeMap style JSONs
+//
+// Maps each online style key to the closest OpenFreeMap style file.
+// Style files live in /public/styles/ and are served as static assets.
+// They are patched at runtime to replace the OpenFreeMap CDN tile source
+// with the local PMTiles file at PMTILES_PATH.
+// ─────────────────────────────────────────────────────────────────────────────
+const OFFLINE_STYLE_MAP = {
+  light:     'protomaps-data-viz-white.json', // Light →  White
+  voyager:   'protomaps-light.json',              // Street → Light
+  outdoors:  'protomaps-light.json',              // Terrain → Light
+  osm:       'protomaps-data-viz-grayscale.json',  // OSM →  Grayscale
+  dark:      'protomaps-dark.json',               // Dark → Dark
+  satellite: 'protomaps-light.json',              // No offline satellite — hidden in picker, fallback to light
+};
+
+// Walk all style layers and force English-first labels.
+// Protomaps styles show bilingual labels (local script + English) when tiles
+// have non-Latin place names. This simplifies all name text-fields to prefer
+// name:en, falling back to the local name only if English is unavailable.
+const forceEnglishLabels = (style) => {
+  for (const layer of style.layers) {
+    const layout = layer.layout;
+    if (!layout?.['text-field']) continue;
+    const tf = JSON.stringify(layout['text-field']);
+    // Skip house numbers, road shields, and other non-place labels
+    if (tf.includes('"name"') && !tf.includes('"addr_housenumber"') && !tf.includes('"shield_text"')) {
+      layout['text-field'] = ['coalesce', ['get', 'name:en'], ['get', 'name']];
+    }
+  }
+  return style;
+};
+
+// Fetch a Protomaps style JSON from /public/styles/ and patch it for local use:
+// 1. Replace the demo CDN tile source URL with the local PMTiles file
+// 2. Force English-first place labels
+const loadOfflineStyle = async (styleFile) => {
+  const resp = await fetch(`/styles/${styleFile}`);
+  const style = await resp.json();
+  // Protomaps style JSONs reference their demo CDN as the tile source.
+  // Patch it to use the local PMTiles file instead.
+  for (const src of Object.values(style.sources)) {
+    if (src.url?.includes('protomaps.com')) src.url = `pmtiles://${PMTILES_PATH}`;
+    if (src.tiles) src.tiles = src.tiles.map(t => t.includes('protomaps.com') ? `pmtiles://${PMTILES_PATH}/{z}/{x}/{y}` : t);
+  }
+  return forceEnglishLabels(style);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getMapStyle — routes a style key to the correct MapLibre style spec object.
+//
+// Online  → MAP_STYLES raster tiles from external CDN (requires internet)
+// Offline → OpenFreeMap style JSONs patched to use local PMTiles file
+//           (auto-detected via navigator.onLine, no user action needed)
+// ─────────────────────────────────────────────────────────────────────────────
+const getMapStyle = (styleKey, isOnline, offlineMapStyle) => {
+  if (!isOnline) {
+    // Offline: return the pre-fetched+patched OpenFreeMap style, or a blank
+    // placeholder while the async fetch is still in progress.
+    return offlineMapStyle || { version: 8, sources: {}, layers: [] };
+  }
+  // Online: raster tiles from CDN, fall back to voyager if key is unknown.
   const style = MAP_STYLES[styleKey] || MAP_STYLES.voyager;
   return {
     version: 8,
@@ -277,11 +484,11 @@ const getMapStyle = (styleKey) => {
       basemap: {
         type: 'raster',
         tiles: style.tiles,
-        tileSize: 256,        // ← change from 256 to 512 for @2x tiles
-        attribution: style.attribution
-      }
+        tileSize: 256,
+        attribution: style.attribution,
+      },
     },
-    layers: [{ id: 'basemap-layer', type: 'raster', source: 'basemap' }]
+    layers: [{ id: 'basemap-layer', type: 'raster', source: 'basemap' }],
   };
 };
 
@@ -411,6 +618,15 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
   const [toolsExpanded, setToolsExpanded] = useState(false);
   /** Datayog-style on-map basemap picker (dy3 logic: same `mapView` keys + `setupConf` as RightFilters). */
   const [mapStylePickerOpen, setMapStylePickerOpen] = useState(false);
+
+  // Tracks real network connectivity — updates on browser online/offline events
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  // Manual override: user can force offline basemap even when internet is available
+  const [forceOffline, setForceOffline] = useState(false);
+  // Derived: use offline PMTiles if truly offline OR user manually forced it
+  const isOfflineMode = forceOffline || !isOnline;
+  // Holds the fetched+patched OpenFreeMap style object used when in offline mode
+  const [offlineMapStyle, setOfflineMapStyle] = useState(null);
   const mapStylePickerRef = useRef(null);
   const [gisMeasuring, setGisMeasuring] = useState(false);
   const [gisMeasurements, setGisMeasurements] = useState([]);
@@ -860,6 +1076,26 @@ const neighborsLegendThematic = useMemo(() => {
     const v = config.mapView || "voyager";
     return typeof v === "string" && v.startsWith("mapbox://") ? "voyager" : v;
   }, [config.mapView]);
+
+  // Listen for browser online/offline events to reactively switch basemap
+  useEffect(() => {
+    const goOnline  = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online',  goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online',  goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  // When offline (or style changes while offline), fetch+patch the matching
+  // OpenFreeMap style JSON so getMapStyle() can return it synchronously.
+  useEffect(() => {
+    if (!isOfflineMode) { setOfflineMapStyle(null); return; }
+    const styleFile = OFFLINE_STYLE_MAP[mapStyleKeyForUi] || 'positron.json';
+    loadOfflineStyle(styleFile).then(setOfflineMapStyle);
+  }, [isOfflineMode, mapStyleKeyForUi]);
 
   useEffect(() => {
     if (!mapStylePickerOpen) return undefined;
@@ -2808,6 +3044,33 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
         Zoom Level {currentZoom?.toFixed(2)}x
       </div>
 
+      {/* Basemap mode toggle — always visible.
+          · Online mode  : subtle grey, click to force offline PMTiles
+          · Offline mode : orange, click to switch back to online CDN tiles
+          · Truly offline: orange + locked (forceOffline toggle disabled — no internet anyway) */}
+      <button
+        onClick={() => {
+          // Only allow toggling when internet is actually available
+          if (isOnline) setForceOffline(f => !f);
+        }}
+        title={
+          !isOnline
+            ? 'No internet — using offline basemap'
+            : isOfflineMode
+              ? 'Using offline basemap (click to switch to online)'
+              : 'Using online basemap (click to switch to offline)'
+        }
+        style={{ position: 'absolute', bottom: 36, left: 8, zIndex: 1000 }}
+        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide backdrop-blur-sm transition-all duration-200 ${
+          isOfflineMode
+            ? 'border-[#F26522]/40 bg-[#F26522]/15 text-[#F26522] cursor-pointer'
+            : 'border-white/15 bg-black/30 text-white/50 cursor-pointer hover:border-white/30 hover:text-white/80'
+        } ${!isOnline ? 'cursor-default' : ''}`}
+      >
+        <WifiOff className="h-3 w-3" />
+        {isOfflineMode ? 'Offline Map' : 'Online Map'}
+      </button>
+
       <DeckGL
         ref={deckRef}
         viewState={{ ...activeViewState }}
@@ -2996,7 +3259,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
         /> */}
 
           <Map
-              mapStyle={getMapStyle(config.mapView || "voyager")}
+              mapStyle={getMapStyle(config.mapView || "voyager", !isOfflineMode, offlineMapStyle)}
               className="pointer-events-auto"
               doubleClickZoom={!gisMeasuring}
               attributionControl={false}
@@ -3398,6 +3661,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
             }}
             mapStylePickerOpen={mapStylePickerOpen}
             setMapStylePickerOpen={setMapStylePickerOpen}
+            isOnline={!isOfflineMode}
           />
 
           <div className="flex items-center justify-end gap-3">

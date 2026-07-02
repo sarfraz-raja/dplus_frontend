@@ -167,6 +167,39 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Swal from 'sweetalert2';
+
+// =============================================
+// OFFLINE MAP SUPPORT — PMTiles protocol
+// Register once at app startup so any MapLibre
+// instance in the app can load pmtiles:// URLs.
+//
+// HOW IT WORKS:
+//   MapLibre fetches tiles by intercepting URLs
+//   that start with "pmtiles://". The Protocol
+//   class reads byte ranges from a single local
+//   .pmtiles file instead of making per-tile
+//   HTTP requests to an external CDN.
+//
+// TO USE OFFLINE:
+//   1. Download a regional .pmtiles file from
+//      https://protomaps.com/downloads
+//   2. Place it at: /public/tiles/region.pmtiles
+//      (Vite serves /public/ as the root — the
+//       file will be available at /tiles/region.pmtiles)
+//   3. Set VITE_PMTILES_PATH=/tiles/region.pmtiles
+//      in your .env (or .env.local), OR update
+//      the PMTILES_PATH constant in TelecomMap.jsx
+//   4. Switch the map style to "Offline Light" or
+//      "Offline Dark" in the style picker.
+//
+// NOTE: Satellite imagery is NOT available offline
+// via PMTiles — it remains online-only (Esri CDN).
+// =============================================
+import { Protocol } from 'pmtiles';
+import maplibregl from 'maplibre-gl';
+
+const pmtilesProtocol = new Protocol();
+maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
 import 'sweetalert2/dist/sweetalert2.min.css';
 
 import App from './App.jsx';

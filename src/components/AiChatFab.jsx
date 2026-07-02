@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bot, X, Send, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+    ResponsiveContainer, LineChart, BarChart, Bar, Line,
+    XAxis, YAxis, Tooltip, CartesianGrid,
+} from 'recharts'
 
-const CHAT_URL = 'https://banjo-fasting-snagged.ngrok-free.dev/chat/stream'
+// ngrok link + /chat/stream
+const CHAT_URL = 'https://unhatched-lynne-overderisive.ngrok-free.dev/chat/stream'
 const ORANGE = '#F26522'
 
 /* ── theme-aware token helper ── */
@@ -123,6 +128,118 @@ function BotCharacter({ isDark }) {
     )
 }
 
+/* ── Chart renderer ──
+   Receives chartInfo (type/xKey/yKeys) from detectChart and draws the right chart.
+   Kept separate from TelecomDataBlock so each component has one job. */
+const CHART_COLORS = ['#F26522', '#38bdf8', '#a78bfa', '#34d399']
+
+/* Truncate long axis labels so they don't overlap */
+const truncate = (str, n = 10) => typeof str === 'string' && str.length > n ? str.slice(0, n) + '…' : str
+
+function ChartBlock({ td, chartInfo, isDark }) {
+    const { type, xKey, yKeys } = chartInfo
+    const isHorizontal = type === 'bar-horizontal'
+    const data = td.rows.slice(0, isHorizontal ? 15 : 30)
+    const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'
+    const axisColor = isDark ? 'rgba(255,255,255,0.3)' : '#94a3b8'
+    const tooltipStyle = {
+        fontSize: 11,
+        background: isDark ? '#0C1931' : '#fff',
+        border: '1px solid rgba(242,101,34,0.3)',
+        borderRadius: 8,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        color: isDark ? 'rgba(255,255,255,0.85)' : '#1e293b',
+    }
+    const legendStyle = { fontSize: 10, color: axisColor }
+
+    /* bottom margin grows when we rotate X labels */
+    const shared = { data, margin: { top: 12, right: 12, left: -16, bottom: yKeys.length > 1 ? 24 : 16 } }
+
+    if (type === 'line') return (
+        <ResponsiveContainer width="100%" height={180}>
+            <LineChart {...shared}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                <XAxis
+                    dataKey={xKey}
+                    tick={{ fontSize: 9, fill: axisColor }}
+                    tickFormatter={v => truncate(String(v), 8)}
+                    angle={-35}
+                    textAnchor="end"
+                    interval="preserveStartEnd"
+                />
+                <YAxis tick={{ fontSize: 9, fill: axisColor }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [typeof v === 'number' ? v.toFixed(2) : v]} />
+                {yKeys.map((k, i) => (
+                    <Line key={k} type="monotone" dataKey={k}
+                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                        dot={false} strokeWidth={2}
+                        activeDot={{ r: 4, strokeWidth: 0 }} />
+                ))}
+            </LineChart>
+        </ResponsiveContainer>
+    )
+
+    /* bar and bar-horizontal use the same BarChart component.
+       The only difference is layout="vertical" which flips axes —
+       useful for ranked lists where site names are long. */
+    return (
+        <ResponsiveContainer width="100%" height={isHorizontal ? Math.max(160, data.length * 22) : 180}>
+            <BarChart {...shared} layout={isHorizontal ? 'vertical' : 'horizontal'} barSize={isHorizontal ? 10 : 14}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={!isHorizontal} vertical={isHorizontal} />
+                <XAxis
+                    dataKey={isHorizontal ? undefined : xKey}
+                    type={isHorizontal ? 'number' : 'category'}
+                    domain={isHorizontal ? [0, 'dataMax'] : undefined}
+                    tick={{ fontSize: 9, fill: axisColor }}
+                    tickFormatter={isHorizontal ? undefined : v => truncate(String(v), 8)}
+                    angle={isHorizontal ? 0 : -35}
+                    textAnchor={isHorizontal ? 'middle' : 'end'}
+                    interval={isHorizontal ? 'preserveStartEnd' : 0}
+                    axisLine={false}
+                    tickLine={false}
+                />
+                <YAxis
+                    dataKey={isHorizontal ? xKey : undefined}
+                    type={isHorizontal ? 'category' : 'number'}
+                    tick={{ fontSize: 9, fill: axisColor }}
+                    tickFormatter={isHorizontal ? v => truncate(String(v), 12) : undefined}
+                    width={isHorizontal ? 90 : 36}
+                    axisLine={false}
+                    tickLine={false}
+                />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [typeof v === 'number' ? v.toFixed(2) : v]} />
+                {yKeys.map((k, i) => (
+                    <Bar key={k} dataKey={k}
+                        fill={CHART_COLORS[i % CHART_COLORS.length]}
+                        radius={isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+                        maxBarSize={isHorizontal ? 12 : 28} />
+                ))}
+            </BarChart>
+        </ResponsiveContainer>
+    )
+}
+
+/* ── Chart type detector ──
+   Looks at the backend payload and returns what kind of chart to draw.
+   Returns null when no chart makes sense (e.g. pure text columns). */
+function detectChart(td) {
+    if (!td?.rows?.length) return null
+    const cols = Object.keys(td.rows[0]).filter(k => !['latitude', 'longitude', 'did'].includes(k))
+    const intent = td.intent?.toLowerCase() || ''
+    const dateCol = cols.find(c => /date|day|week|month|hour|time/i.test(c))
+    const numCols = cols.filter(c => {
+        if (typeof td.rows[0][c] !== 'number') return false
+        // reject columns where every sampled value is 0 or null — nothing to chart
+        return td.rows.slice(0, 10).some(r => r[c] != null && r[c] !== 0)
+    })
+    if (!numCols.length) return null
+    if (dateCol || intent.includes('trend'))
+        return { type: 'line', xKey: dateCol || cols[0], yKeys: numCols }
+    if (intent.includes('rank') || intent.includes('top') || intent.includes('worst'))
+        return { type: 'bar-horizontal', xKey: cols[0], yKeys: [numCols[0]] }
+    return { type: 'bar', xKey: cols[0], yKeys: numCols }
+}
+
 /* ── Telecom data table / SQL block ── */
 function TelecomDataBlock({ td, isDark }) {
     const [sqlOpen, setSqlOpen] = useState(false)
@@ -131,6 +248,7 @@ function TelecomDataBlock({ td, isDark }) {
     const cols = rows.length > 0
         ? Object.keys(rows[0]).filter(k => !['latitude', 'longitude', 'did'].includes(k))
         : []
+    const chartInfo = detectChart(td)
 
     const border = tok(isDark, 'rgba(242,101,34,0.2)', 'rgba(242,101,34,0.15)')
     const thColor = ORANGE
@@ -156,6 +274,8 @@ function TelecomDataBlock({ td, isDark }) {
                     </span>
                 )}
             </div>
+
+            {chartInfo && <ChartBlock td={td} chartInfo={chartInfo} isDark={isDark} />}
 
             {cols.length > 0 && (
                 <div className="overflow-x-auto rounded-lg" style={{ border: `1px solid ${border}` }}>
