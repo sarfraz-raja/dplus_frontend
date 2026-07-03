@@ -636,11 +636,13 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
   const [mapStylePickerOpen, setMapStylePickerOpen] = useState(false);
 
   // Tracks real network connectivity — updates on browser online/offline events
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  // const [isOnline, setIsOnline] = useState(navigator.onLine);
   // Manual override: user can force offline basemap even when internet is available
-  const [forceOffline, setForceOffline] = useState(false);
+  // const [forceOffline, setForceOffline] = useState(false);
   // Derived: use offline PMTiles if truly offline OR user manually forced it
-  const isOfflineMode = forceOffline || !isOnline;
+  // const isOfflineMode = forceOffline || !isOnline;
+  // Always offline — online CDN basemaps disabled
+  const isOfflineMode = true;
   // Holds the fetched+patched OpenFreeMap style object used when in offline mode
   const [offlineMapStyle, setOfflineMapStyle] = useState(null);
   const mapStylePickerRef = useRef(null);
@@ -1094,16 +1096,17 @@ const neighborsLegendThematic = useMemo(() => {
   }, [config.mapView]);
 
   // Listen for browser online/offline events to reactively switch basemap
-  useEffect(() => {
-    const goOnline  = () => setIsOnline(true);
-    const goOffline = () => setIsOnline(false);
-    window.addEventListener('online',  goOnline);
-    window.addEventListener('offline', goOffline);
-    return () => {
-      window.removeEventListener('online',  goOnline);
-      window.removeEventListener('offline', goOffline);
-    };
-  }, []);
+  // (disabled — always offline mode)
+  // useEffect(() => {
+  //   const goOnline  = () => setIsOnline(true);
+  //   const goOffline = () => setIsOnline(false);
+  //   window.addEventListener('online',  goOnline);
+  //   window.addEventListener('offline', goOffline);
+  //   return () => {
+  //     window.removeEventListener('online',  goOnline);
+  //     window.removeEventListener('offline', goOffline);
+  //   };
+  // }, []);
 
   // When offline (or style changes while offline), fetch+patch the matching
   // OpenFreeMap style JSON so getMapStyle() can return it synchronously.
@@ -3060,13 +3063,9 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
         Zoom Level {currentZoom?.toFixed(2)}x
       </div>
 
-      {/* Basemap mode toggle — always visible.
-          · Online mode  : subtle grey, click to force offline PMTiles
-          · Offline mode : orange, click to switch back to online CDN tiles
-          · Truly offline: orange + locked (forceOffline toggle disabled — no internet anyway) */}
-      <button
+      {/* Basemap mode toggle — commented out (always offline mode, no toggle needed) */}
+      {/* <button
         onClick={() => {
-          // Only allow toggling when internet is actually available
           if (isOnline) setForceOffline(f => !f);
         }}
         title={
@@ -3085,7 +3084,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
       >
         <WifiOff className="h-3 w-3" />
         {isOfflineMode ? 'Offline Map' : 'Online Map'}
-      </button>
+      </button> */}
 
       <DeckGL
         ref={deckRef}
@@ -3677,7 +3676,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
             }}
             mapStylePickerOpen={mapStylePickerOpen}
             setMapStylePickerOpen={setMapStylePickerOpen}
-            isOnline={!isOfflineMode}
+            isOnline={false /* always offline — orange dot and satellite option hidden */}
           />
 
           <div className="flex items-center justify-end gap-3">
