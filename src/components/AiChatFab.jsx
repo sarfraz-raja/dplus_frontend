@@ -5,8 +5,8 @@ import {
     XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
 
-// ngrok link + /chat/stream
-const CHAT_URL = 'https://unhatched-lynne-overderisive.ngrok-free.dev/chat/stream'
+// (chatbot server:port)/ngrok link + /chat/stream
+const CHAT_URL = 'http://dyserver:8070/chat/stream'
 const ORANGE = '#F26522'
 
 /* ── theme-aware token helper ── */

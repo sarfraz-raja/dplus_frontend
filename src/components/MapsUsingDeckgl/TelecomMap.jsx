@@ -441,7 +441,7 @@ const forceEnglishLabels = (style) => {
     if (!layout?.['text-field']) continue;
     const tf = JSON.stringify(layout['text-field']);
     // Skip house numbers, road shields, and other non-place labels
-    if (tf.includes('"name"') && !tf.includes('"addr_housenumber"') && !tf.includes('"shield_text"')) {
+    if ((tf.includes('"name"') || tf.includes('"name:en"')) && !tf.includes('"addr_housenumber"') && !tf.includes('"shield_text"')) {
       layout['text-field'] = ['coalesce', ['get', 'name:en'], ['get', 'name']];
     }
   }
@@ -454,12 +454,28 @@ const forceEnglishLabels = (style) => {
 const loadOfflineStyle = async (styleFile) => {
   const resp = await fetch(`/styles/${styleFile}`);
   const style = await resp.json();
-  // Protomaps style JSONs reference their demo CDN as the tile source.
-  // Patch it to use the local PMTiles file instead.
+
+  // 1. Patch tile source → local PMTiles file
   for (const src of Object.values(style.sources)) {
     if (src.url?.includes('protomaps.com')) src.url = `pmtiles://${PMTILES_PATH}`;
     if (src.tiles) src.tiles = src.tiles.map(t => t.includes('protomaps.com') ? `pmtiles://${PMTILES_PATH}/{z}/{x}/{y}` : t);
   }
+
+  // 2. Patch sprite → local /sprites/ folder
+  // MapLibre auto-appends @2x.json and @2x.png based on device pixel ratio.
+  // Sprites are blocked on client servers with corporate firewalls (protomaps.github.io → 403).
+  if (style.sprite) {
+    const flavorMatch = style.sprite.match(/sprites\/v4\/(\w+)$/);
+    const flavor = flavorMatch?.[1] || 'light';
+    style.sprite = `/sprites/${flavor}`;
+  }
+
+  // 3. Patch glyphs → local /fonts/ folder
+  // Same firewall issue as sprites — glyph PBF files must be served locally.
+  if (style.glyphs) {
+    style.glyphs = '/fonts/{fontstack}/{range}.pbf';
+  }
+
   return forceEnglishLabels(style);
 };
 
