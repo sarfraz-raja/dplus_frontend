@@ -97,7 +97,8 @@ const getSectorTip = (lat, lng, azimuth, radius_m, mapScale = 1, zoomBoost = 1) 
 //hardcoded uuid for the superset dashboard on the Charts(Cellinfopopup) modal.
 // This is the dashboard that contains the charts for the cell
 const DASHBOARD_UUID = "0ccb9f27-ef5c-47bb-8c86-5126f34bad2f";
-const FILTER_Id = "NATIVE_FILTER-Mk81LVzQVBImboTJa5NV6";
+// const FILTER_Id = "NATIVE_FILTER-Mk81LVzQVBImboTJa5NV6"; //date filter id
+ const FILTER_Id = "NATIVE_FILTER-ipyoMb0eNtKFajg8Tr5KR";  //cell_name filter
 
 const GIS_DRAFT_PATH_EXTENSION = new PathStyleExtension({
   dash: true,

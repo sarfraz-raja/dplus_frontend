@@ -201,6 +201,15 @@ import maplibregl from 'maplibre-gl';
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
 
+// =============================================
+// SHARED ECHARTS THEME
+// Registers 'kpiDark' / 'kpiLight' once at app startup so any chart
+// component can opt in via <ReactECharts theme="kpiDark" | "kpiLight" />.
+// See src/theme/echartsTheme.js.
+// =============================================
+import { registerEchartsThemes } from './theme/echartsTheme';
+registerEchartsThemes();
+
 // Warm the PMTiles directory cache before the map mounts.
 // pmtiles.js must fetch the first 16 KB (header + root tile index) before it
 // can locate any tile inside the archive. Firing this here — at app startup —

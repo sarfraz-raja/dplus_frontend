@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useTheme } from '../../../context/ThemeContext';
+import { echartsThemeName } from '../../../theme/echartsTheme';
 
 /**
  * Wide sparkline used inline in a table's "Trend" column — fills the available
@@ -9,24 +10,20 @@ import { useTheme } from '../../../context/ThemeContext';
 export default function TrendMiniChart({ data = [], color = '#378ADD', height = 40, isDark: isDarkProp = null }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
-  const subColor = isDark ? '#8b93a7' : '#5f5e5a';
-  const splitColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
 
   const values = data.map((d) => d.value);
   const labels = data.map((d) => d.label);
 
   const option = {
-    backgroundColor: 'transparent',
     grid: { left: 4, right: 4, top: 6, bottom: 16 },
     xAxis: {
       type: 'category',
       data: labels,
       boundaryGap: false,
       axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: subColor, fontSize: 9, interval: Math.max(0, Math.ceil(labels.length / 10) - 1) },
+      axisLabel: { fontSize: 9, interval: Math.max(0, Math.ceil(labels.length / 10) - 1) },
     },
-    yAxis: { type: 'value', show: false, splitLine: { lineStyle: { color: splitColor } } },
+    yAxis: { type: 'value', show: false },
     tooltip: { trigger: 'axis' },
     series: [
       {
@@ -42,5 +39,5 @@ export default function TrendMiniChart({ data = [], color = '#378ADD', height = 
     ],
   };
 
-  return <ReactECharts option={option} style={{ height, width: '100%' }} notMerge lazyUpdate />;
+  return <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height, width: '100%' }} notMerge lazyUpdate />;
 }

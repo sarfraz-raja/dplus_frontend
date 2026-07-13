@@ -3,8 +3,9 @@ import { GridLayout } from 'react-grid-layout';
 import { X } from 'lucide-react';
 import 'react-grid-layout/css/styles.css';
 import Button from '../Button';
-import WIDGET_REGISTRY from './widgetRegistry';
+import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle } from './widgetTypeRegistry';
 import MOCK_DATA_SOURCES from './mockDataSources';
+import WidgetStyleFields from './WidgetStyleFields';
 
 let uid = 0;
 const nextId = () => `w${Date.now()}_${uid++}`;
@@ -32,9 +33,6 @@ const dataSourceKeysFor = (dataShape) =>
     .filter(([, ds]) => ds.dataShape === dataShape)
     .map(([key, ds]) => ({ key, label: ds.label }));
 
-const FONT_WEIGHTS = { normal: 'Normal', medium: 'Medium', semibold: 'Semibold', bold: 'Bold' };
-const FONT_SIZES = { sm: '12px', md: '14px', lg: '17px' };
-
 /** Reads a dot-path (e.g. "stats.0", "kpiTableProps") off a live-data object. */
 function getByPath(obj, path) {
   if (!obj || !path) return undefined;
@@ -42,13 +40,16 @@ function getByPath(obj, path) {
 }
 
 /**
- * Maps a widget's { type, dataSource, title, color } to the props its component expects.
+ * Maps a widget's { type, dataSource, title, style } to the props its component expects.
  * `dataSource.type === 'kpiLive'` reads from the dashboard's already-fetched live data
- * (via `dataSource.field`) instead of the mock generators.
+ * (via `dataSource.field`) instead of the mock generators. `style` values come from
+ * resolveWidgetStyle (widgetTypeRegistry.js), already merged with the type's styleFields
+ * defaults — see WidgetStyleFields.jsx for where a widget's `style` object is edited.
  */
 function resolveWidgetProps(widget, ctx) {
-  const { type, dataSource, title, color } = widget;
-  const { kpiLiveData, pixelHeight, isDark, titleColor } = ctx || {};
+  const { type, dataSource, title } = widget;
+  const { kpiLiveData, pixelHeight, isDark, titleColor: dashboardTitleColor } = ctx || {};
+  const style = resolveWidgetStyle(type, widget.style);
 
   let resolved = {};
   if (dataSource?.type === 'kpiLive') {
@@ -59,7 +60,11 @@ function resolveWidgetProps(widget, ctx) {
     resolved = ds ? ds.generate() : {};
   }
 
-  const finalColor = color || resolved.color;
+  const finalColor = style.color || resolved.color;
+  // A dashboard-level titleColor (e.g. the KPI dashboard's own "Customize colors" panel,
+  // passed in via the `titleColor` prop on DashboardCanvasEditor) is the fallback when a
+  // widget hasn't set its own style.titleColor override.
+  const finalTitleColor = style.titleColor || dashboardTitleColor;
   // Chart widgets need an explicit pixel height (ECharts doesn't fill a resizable
   // container on its own) — leave room for the widget's own title row + chrome.
   const chartHeight = pixelHeight ? Math.max(60, pixelHeight - 40) : undefined;
@@ -72,12 +77,16 @@ function resolveWidgetProps(widget, ctx) {
         color: finalColor, darkGradient: resolved.darkGradient, isDark,
       };
     case 'gaugeCard':
-      return { title, value: resolved.value, color: finalColor, height: chartHeight, isDark, titleColor };
+      return { title, value: resolved.value, color: finalColor, height: chartHeight, isDark, titleColor: finalTitleColor };
     case 'sparklineCard':
-      return { title: resolved.title ?? title, unit: resolved.unit, data: resolved.data, color: finalColor, height: chartHeight, isDark, titleColor };
+      return { title: resolved.title ?? title, unit: resolved.unit, data: resolved.data, color: finalColor, height: chartHeight, isDark, titleColor: finalTitleColor };
     case 'kpiTable':
-      return { rows: resolved.rows || [], statusColors: resolved.statusColors, trendRenderer: resolved.trendRenderer };
+      return {
+        rows: resolved.rows || [], statusColors: resolved.statusColors, trendRenderer: resolved.trendRenderer,
+        rowTextColor: style.rowTextColor, rowFontWeight: style.rowFontWeight, rowFontSize: style.rowFontSize,
+      };
     case 'degradedCellsTable':
+      return { rows: resolved.rows || [], rowTextColor: style.rowTextColor, rowFontWeight: style.rowFontWeight, rowFontSize: style.rowFontSize };
     case 'degradedCellsMap':
       return { rows: resolved.rows || [] };
     default:
@@ -120,7 +129,7 @@ export default function DashboardCanvasEditor({
   const [containerRef, containerWidth] = useContainerWidth();
 
   const addWidget = (type) => {
-    const def = WIDGET_REGISTRY[type];
+    const def = WIDGET_TYPE_REGISTRY[type];
     const id = nextId();
     const y = layout.reduce((max, l) => Math.max(max, l.y + l.h), 0);
     setLayout((prev) => [...prev, { i: id, x: 0, y, w: def.defaultSize.w, h: def.defaultSize.h }]);
@@ -128,7 +137,7 @@ export default function DashboardCanvasEditor({
     const defaultColor = MOCK_DATA_SOURCES[defaultSourceKey]?.generate()?.color || '#4f9eff';
     setWidgets((prev) => ({
       ...prev,
-      [id]: { type, title: def.label, dataSource: { type: 'mock', key: defaultSourceKey }, color: defaultColor },
+      [id]: { type, title: def.label, dataSource: { type: 'mock', key: defaultSourceKey }, style: { color: defaultColor } },
     }));
     setSelectedId(id);
   };
@@ -158,29 +167,29 @@ export default function DashboardCanvasEditor({
   const renderWidget = (l, sizeOverride) => {
     const w = widgets[l.i];
     if (!w) return <div key={l.i} />;
-    const Comp = WIDGET_REGISTRY[w.type]?.component;
+    const Comp = WIDGET_TYPE_REGISTRY[w.type]?.component;
     const pixelHeight = l.h * GRID_CONFIG.rowHeight + (l.h - 1) * GRID_CONFIG.margin[1];
     const props = resolveWidgetProps(w, { kpiLiveData, pixelHeight, isDark, titleColor });
-    const textStyle = {
-      color: w.textColor || undefined,
-      fontWeight: w.fontWeight && w.fontWeight !== 'normal' ? w.fontWeight : undefined,
-      fontSize: w.fontSize ? FONT_SIZES[w.fontSize] : undefined,
-      // Without an explicit height, this div defaults to height:auto — any child
-      // relying on height:100% (e.g. a map) can't resolve a percentage against an
-      // ancestor with no definite size, and collapses to 0 even though .dbe-widget
-      // (two levels up) does have a real pixel height from react-grid-layout.
-      height: '100%',
-    };
+    // Style values (color/titleColor/rowTextColor/etc.) now flow directly into each
+    // widget's own props via resolveWidgetProps — this wrapper only needs an explicit
+    // height. Without it, this div defaults to height:auto — any child relying on
+    // height:100% (e.g. a map) can't resolve a percentage against an ancestor with no
+    // definite size, and collapses to 0 even though .dbe-widget (two levels up) does
+    // have a real pixel height from react-grid-layout.
+    const textStyle = { height: '100%' };
     return (
       <div
         key={l.i}
         className={`dbe-widget dbe-widget-${w.type}${selectedId === l.i ? ' selected' : ''}`}
         style={sizeOverride ? { height: sizeOverride.height, width: sizeOverride.width, flexShrink: 0 } : undefined}
+        // Clicking anywhere on a widget selects it and swaps the side panel to its
+        // fields — not just its title bar, which was too small a target to notice.
+        onClick={editable && showChrome && !sizeOverride ? () => setSelectedId(l.i) : undefined}
       >
         {editable && showChrome && !sizeOverride && (
           <div className="dbe-widget-head">
-            <span className="dbe-widget-title" onClick={() => setSelectedId(l.i)}>{w.title}</span>
-            <button type="button" className="dbe-widget-remove" onClick={() => removeWidget(l.i)}><X size={13} /></button>
+            <span className="dbe-widget-title">{w.title}</span>
+            <button type="button" className="dbe-widget-remove" onClick={(e) => { e.stopPropagation(); removeWidget(l.i); }}><X size={13} /></button>
           </div>
         )}
         <div style={textStyle}>
@@ -208,10 +217,10 @@ export default function DashboardCanvasEditor({
         .dbe-palette-icon:hover { border-color:#EC7D09; color:#EC7D09; }
         .dbe-canvas-wrap { flex:1; min-width:0; border:1px dashed rgb(203 213 225); border-radius:10px; padding:8px; overflow:auto; background:rgba(255,255,255,0.4); }
         .dbe-stack { display:flex; flex-direction:column; gap:10px; width:100%; }
-        .dbe-widget { height:100%; width:100%; background:#fff; border:1px solid rgb(226 232 240); border-radius:10px; padding:6px; overflow:hidden; position:relative; }
+        .dbe-widget { height:100%; width:100%; background:#fff; border:1px solid rgb(226 232 240); border-radius:10px; padding:6px; overflow:hidden; position:relative; cursor:pointer; }
         .dbe-widget.selected { outline:2px solid #EC7D09; }
         .dbe-widget-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
-        .dbe-widget-title { font-size:11px; font-weight:500; color:#475569; cursor:pointer; }
+        .dbe-widget-title { font-size:11px; font-weight:500; color:#475569; }
         .dbe-widget-remove { color:#ef4444; cursor:pointer; background:none; border:none; display:flex; align-items:center; }
         .dbe-side-panel { flex-shrink:0; border-top:1px solid rgb(226 232 240); padding-top:10px; font-size:12px; }
         .dbe-side-panel-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:#94a3b8; margin-bottom:8px; }
@@ -248,7 +257,7 @@ export default function DashboardCanvasEditor({
         {editable && showChrome && (
           <div className="dbe-left-panel">
             <div className="dbe-palette-row">
-              {Object.entries(WIDGET_REGISTRY).map(([type, def]) => {
+              {Object.entries(WIDGET_TYPE_REGISTRY).filter(([, def]) => def.builderVisible !== false).map(([type, def]) => {
                 const Icon = def.icon;
                 return (
                   <button
@@ -288,56 +297,17 @@ export default function DashboardCanvasEditor({
                       value={selected.dataSource?.key || ''}
                       onChange={(e) => updateWidget(selectedId, { dataSource: { type: 'mock', key: e.target.value } })}
                     >
-                      {dataSourceKeysFor(WIDGET_REGISTRY[selected.type]?.dataShape).map((ds) => (
+                      {dataSourceKeysFor(WIDGET_TYPE_REGISTRY[selected.type]?.dataShape).map((ds) => (
                         <option key={ds.key} value={ds.key}>{ds.label}</option>
                       ))}
                     </select>
                   </label>
                 )}
-                <div className="dbe-color-row">
-                  {selected.type !== 'kpiTable' && (
-                    <label>
-                      Color
-                      <input
-                        type="color"
-                        style={{ width: '100%', height: 28, padding: 2, cursor: 'pointer' }}
-                        value={selected.color || '#4f9eff'}
-                        onChange={(e) => updateWidget(selectedId, { color: e.target.value })}
-                      />
-                    </label>
-                  )}
-                  <label>
-                    Text color
-                    <input
-                      type="color"
-                      style={{ width: '100%', height: 28, padding: 2, cursor: 'pointer' }}
-                      value={selected.textColor || '#1a1a18'}
-                      onChange={(e) => updateWidget(selectedId, { textColor: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <label>
-                  Font weight
-                  <select
-                    value={selected.fontWeight || 'normal'}
-                    onChange={(e) => updateWidget(selectedId, { fontWeight: e.target.value })}
-                  >
-                    {Object.entries(FONT_WEIGHTS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Font size
-                  <select
-                    value={selected.fontSize || 'md'}
-                    onChange={(e) => updateWidget(selectedId, { fontSize: e.target.value })}
-                  >
-                    {Object.entries(FONT_SIZES).map(([key]) => (
-                      <option key={key} value={key}>{key.toUpperCase()}</option>
-                    ))}
-                  </select>
-                </label>
+                <WidgetStyleFields
+                  fields={WIDGET_TYPE_REGISTRY[selected.type]?.styleFields}
+                  value={selected.style}
+                  onChange={(key, val) => updateWidget(selectedId, { style: { ...selected.style, [key]: val } })}
+                />
               </div>
             )}
           </div>
