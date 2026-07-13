@@ -21,9 +21,18 @@ export default function KpiTable({
     fontWeight: rowFontWeight ? FONT_WEIGHT_CSS[rowFontWeight] : undefined,
     fontSize: rowFontSize ? `${rowFontSize}px` : undefined,
   };
+  // No bg/border/rounded on this wrapper — unlike StatCard/GaugeCard/SparklineCard (which
+  // paint their own chrome), this widget's *ancestor* (DashboardCanvasEditor's `.dbe-widget`)
+  // already supplies the card box, both standalone in the Builder (its generic `.dbe-widget`
+  // rule) and inside the KPI dashboard (`.dbe-widget-kpiTable`, which specifically boxes the
+  // wrapper for this reason — see KpiMonitoringDashboard.jsx's comment above that rule).
+  // Boxing this element too would double it up — exactly the bug that shipped once already.
   return (
-    <div className="kpi-table-wrap relative h-full flex flex-col rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C] overflow-hidden">
-      <div className="kpi-card-header flex items-center gap-2 px-3 py-2 text-xs font-bold bg-slate-50 dark:bg-[#282E41] text-slate-500 dark:text-white/85">
+    <div className="kpi-table-wrap relative h-full flex flex-col">
+      {/* rounded-t-lg here (not overflow-hidden on the wrapper) — KpiMonitoringDashboard's
+          own .kpi-card-header uses a negative margin to pull itself to the card's edges,
+          which overflow:hidden on this wrapper would clip. */}
+      <div className="kpi-card-header rounded-t-lg flex items-center gap-2 px-3 py-2 text-xs font-bold bg-slate-50 dark:bg-[#282E41] text-slate-500 dark:text-white/85">
         <div className="kpi-header-col kpi-header-col-1 w-[22%] overflow-hidden text-ellipsis whitespace-nowrap">KPIs</div>
         <div className="kpi-header-col kpi-header-col-2 w-[18%] overflow-hidden text-ellipsis whitespace-nowrap">Real-Time Value</div>
         <div className="kpi-header-col kpi-header-col-3 w-[16%] overflow-hidden text-ellipsis whitespace-nowrap">Criteria</div>

@@ -16,8 +16,11 @@ export default function DegradedCellsTable({ rows = [], rowTextColor = null, row
     fontWeight: rowFontWeight ? FONT_WEIGHT_CSS[rowFontWeight] : undefined,
     fontSize: rowFontSize ? `${rowFontSize}px` : undefined,
   };
+  // No bg/border/rounded here — same reasoning as KpiTable.jsx: the ancestor `.dbe-widget`
+  // (generic in the Builder, `.dbe-widget-degradedCellsTable` inside the KPI dashboard)
+  // already boxes this widget; adding our own here would double it up.
   return (
-    <table className="kpi-cells-tbl border-collapse text-sm w-full rounded-lg overflow-hidden border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]">
+    <table className="kpi-cells-tbl border-collapse text-sm w-full">
       <thead>
         <tr>
           <th className="text-left font-semibold px-3 py-2.5 border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/85">Cell ID</th>

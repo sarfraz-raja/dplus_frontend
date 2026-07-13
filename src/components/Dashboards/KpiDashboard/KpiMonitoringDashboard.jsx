@@ -75,8 +75,10 @@ function formatUpdatedAt(date) {
  */
 function mapLiveDataToKpi(rawRows, colors) {
   const rows = Array.isArray(rawRows) ? rawRows.filter((r) => r && typeof r === 'object') : [];
-  if (rows.length === 0) return null;
-  const latest = rows[0];
+  // No early return on empty rows — every field below already falls back to '—'/0/[]
+  // via `pct`/`num`/array ops on an empty `latest`, so the dashboard's widgets/layout
+  // still render (with empty values) instead of vanishing entirely when data is missing.
+  const latest = rows[0] || {};
   const pct = (v) => (v === undefined || v === null || v === '' ? '—' : `${Number(v).toFixed(1)}%`);
   const num = (v, unit = '') => (v === undefined || v === null || v === '' ? '—' : `${Number(v).toFixed(1)}${unit}`);
   const series = (field) =>
@@ -870,13 +872,16 @@ export default function KpiMonitoringDashboard({ embedded = false, showControls 
             </div>
           )}
 
+          {/* Error/no-data is a banner above the grid, not a replacement for it — widgets
+              still render (with empty values, via mapLiveDataToKpi's '—'/0/[] fallbacks)
+              so the dashboard's layout stays visible even when the server is unreachable. */}
           {!loading && (fetchError || !kpi) && (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--kpi-text-sub)', fontSize: 13 }}>
+            <div style={{ padding: '0.75rem 1rem', textAlign: 'center', color: 'var(--kpi-text-sub)', fontSize: 13 }}>
               {fetchError ? `Error: ${fetchError}` : 'No Data Found'}
             </div>
           )}
 
-          {!loading && kpi && (
+          {!loading && (
             <div className="kpi-grid-wrap">
               <DashboardCanvasEditor
                 key={`${layoutEditable}-${layoutResetTick}`}

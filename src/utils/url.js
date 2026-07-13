@@ -58,9 +58,9 @@ export const Urls={
     mtandaoComplaints:"/mtandaoComplaints",
     isonForm:"/isonForm",
     nokiaprepost:"/nokiaprepost",
-    /** Absolute URL — different host/port than the app's API base. */
-    kpiEngineLiveMonitoring:"http://dyserver2:8060/kpi-engine/live-monitoring",
-    
+
+    kpiEngineLiveMonitoring:"/kpi-engine/live-monitoring",
+
     proRules:"/proRules",
     proRulesOutput:"/proRulesOutput",
     cellProRulesOutput:"/cellProRulesOutput",

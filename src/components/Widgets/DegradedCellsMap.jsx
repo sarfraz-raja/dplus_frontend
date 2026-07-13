@@ -35,7 +35,11 @@ const STYLE_OPTIONS = [
   { key: 'grayscale', label: 'Grayscale', file: 'protomaps-data-viz-grayscale.json', sprite: 'grayscale' },
 ];
 
-const DEFAULT_VIEW = { latitude: -0.8, longitude: 11.6, zoom: 5.5 };
+const DEFAULT_VIEW = {
+  latitude: Number(import.meta.env.VITE_DEFAULT_MAP_LAT) || -0.8,
+  longitude: Number(import.meta.env.VITE_DEFAULT_MAP_LNG) || 11.6,
+  zoom: 5.5,
+};
 
 /**
  * Small, self-contained map plotting the "Top Degraded Cells" list — no deck.gl, no
