@@ -94,8 +94,10 @@ const getSectorTip = (lat, lng, azimuth, radius_m, mapScale = 1, zoomBoost = 1) 
   return [lng + Math.sin(azRad) * factor, lat + Math.cos(azRad) * factor];
 };
 
+//hardcoded uuid for the superset dashboard on the Charts(Cellinfopopup) modal.
+// This is the dashboard that contains the charts for the cell
 const DASHBOARD_UUID = "0ccb9f27-ef5c-47bb-8c86-5126f34bad2f";
-const FILTER_Id = "NATIVE_FILTER-Frwtlbdl8UhCOYVoGiXp9";
+const FILTER_Id = "NATIVE_FILTER-Mk81LVzQVBImboTJa5NV6";
 
 const GIS_DRAFT_PATH_EXTENSION = new PathStyleExtension({
   dash: true,
@@ -457,7 +459,12 @@ const loadOfflineStyle = async (styleFile) => {
 
   // 1. Patch tile source → local PMTiles file
   for (const src of Object.values(style.sources)) {
-    if (src.url?.includes('protomaps.com')) src.url = `pmtiles://${PMTILES_PATH}`;
+    // if (src.url?.includes('protomaps.com')) src.url = `pmtiles://${PMTILES_PATH}`;
+
+     if (src.url?.includes('protomaps.com')) {
+      src.url = `pmtiles://${PMTILES_PATH}`;
+      src.maxzoom = 15;
+    }
     if (src.tiles) src.tiles = src.tiles.map(t => t.includes('protomaps.com') ? `pmtiles://${PMTILES_PATH}/{z}/{x}/{y}` : t);
   }
 

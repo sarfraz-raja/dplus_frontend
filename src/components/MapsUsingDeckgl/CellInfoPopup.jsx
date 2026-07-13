@@ -3,6 +3,14 @@ import CustomTooltip from "../CustomTooltip";
 
 const ORANGE = "#EC7D09";
 
+const formatLabel = (key) =>
+  key
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
+const LABEL_OVERRIDES = { operator: "vendor" };
+
 const CellInfoPopup = ({
   data = {},
   mapH,
@@ -296,7 +304,7 @@ const CellInfoPopup = ({
               {Object.entries(data).map(([key, val], idx) => (
                 <tr key={key} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}>
                   <td className="px-3 py-1.5 text-slate-500 font-medium border-b border-slate-100 whitespace-nowrap">
-                    {key}
+                    {formatLabel(LABEL_OVERRIDES[key] ?? key)}
                   </td>
                   <td className="px-3 py-1.5 text-slate-800 border-b border-slate-100 break-all">
                     {val ?? "-"}

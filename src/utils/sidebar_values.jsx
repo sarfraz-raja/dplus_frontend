@@ -63,6 +63,7 @@ const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsP
 const TicketsPage = lazy(() => import('../pages/Tickets/index'));
 const GeoDrillDownPage = lazy(() => import('../pages/GeoDrillDown/GeoDrillDownPage'));
 const NetworkComplaintsDashboard = lazy(() => import('../pages/NetworkComplaintsDashboard'));
+const DashboardBuilder = lazy(() => import('../pages/DashboardBuilder'));
 const GPLAuditEricsson = lazy(() => import('../pages/Ericsson/GPLAuditEricsson'));
 const CompareEricsson = lazy(() => import('../pages/Ericsson/CompareEricsson'));
 
@@ -188,6 +189,12 @@ export const Sidebar_content = {
             link: "/network-complaints-dashboard",
             subMenu: [],
             component: <NetworkComplaintsDashboard />,
+        },
+        {
+            name: "Dashboard Builder",
+            link: "/dashboard-builder",
+            subMenu: [],
+            component: <DashboardBuilder />,
         },
         {
             name: "Multi-Map View",

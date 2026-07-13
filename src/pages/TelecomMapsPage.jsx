@@ -64,7 +64,7 @@
 // export default TelecomMapsPage;
 
 import React, { useEffect, useRef } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import TelecomMap from "../components/MapsUsingDeckgl/TelecomMap";
 import TelecomMapGisToolbar from "../components/MapsUsingDeckgl/TelecomMapGisToolbar";
 import MapActions from "../store/actions/map-actions";
@@ -72,6 +72,7 @@ import MapActions from "../store/actions/map-actions";
 const TelecomMapsPage = () => {
   const dispatch = useDispatch();
   const gisFullscreenRootRef = useRef(null);
+  const selectedOperator = useSelector((state) => state.map.selectedOperator);
 
   useEffect(() => {
     const init = async () => {
@@ -119,7 +120,7 @@ const TelecomMapsPage = () => {
       className="relative h-full min-h-0 w-full flex-1 overflow-hidden"
     >
       <div className="absolute inset-0 min-h-0">
-        <TelecomMap operator="Huawei" fullscreenRootRef={gisFullscreenRootRef} />
+        <TelecomMap operator={selectedOperator} fullscreenRootRef={gisFullscreenRootRef} />
       </div>
       <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex justify-start px-3 pt-2">
         <div className="pointer-events-auto">

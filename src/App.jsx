@@ -47,7 +47,7 @@ function App() {
     const dispatch = useDispatch()
     const navigate = useNavigate()
     const locdata = useLocation()
-    const [sidebarOpen, setsidebarOpenn] = useState(true)
+    const [sidebarOpen, setsidebarOpenn] = useState(false)
     const [isMobileViewport, setIsMobileViewport] = useState(false)
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
     const isLoginRoute = locdata.pathname === '/' || locdata.pathname === '/login'

@@ -459,6 +459,10 @@ export default function AiChatFab() {
     const bottomRef = useRef(null)
     const inputRef = useRef(null)
     const abortRef = useRef(null)
+    const [fabPos, setFabPos] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('yogiFabPos')) } catch { return null }
+    })
+    const fabDrag = useRef({ active: false, moved: false, startX: 0, startY: 0, origX: 0, origY: 0, pointerId: null })
 
     /* observe theme changes */
     useEffect(() => {
@@ -536,6 +540,45 @@ export default function AiChatFab() {
             setStreaming(false)
             abortRef.current = null
         }
+    }
+
+    const FAB_SIZE = 48
+    const onFabPointerDown = (e) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        fabDrag.current = {
+            active: true, moved: false,
+            startX: e.clientX, startY: e.clientY,
+            origX: rect.left, origY: rect.top,
+            pointerId: e.pointerId,
+        }
+    }
+    const onFabPointerMove = (e) => {
+        const d = fabDrag.current
+        if (!d.active) return
+        const dx = e.clientX - d.startX
+        const dy = e.clientY - d.startY
+        if (!d.moved && Math.hypot(dx, dy) > 4) {
+            d.moved = true
+            e.currentTarget.setPointerCapture(d.pointerId)
+        }
+        if (d.moved) {
+            const maxX = window.innerWidth - FAB_SIZE
+            const maxY = window.innerHeight - FAB_SIZE
+            const left = Math.min(Math.max(d.origX + dx, 0), maxX)
+            const top = Math.min(Math.max(d.origY + dy, 0), maxY)
+            setFabPos({ left, top })
+        }
+    }
+    const onFabPointerUp = (e) => {
+        const d = fabDrag.current
+        if (d.moved) {
+            e.currentTarget.releasePointerCapture(d.pointerId)
+            setFabPos(prev => {
+                if (prev) localStorage.setItem('yogiFabPos', JSON.stringify(prev))
+                return prev
+            })
+        }
+        fabDrag.current.active = false
     }
 
     /* tokens */
@@ -647,13 +690,20 @@ export default function AiChatFab() {
             </div>
 
             {/* ── FAB ── */}
-            <div className="fixed bottom-6 right-6" style={{ zIndex: 1099 }}>
+            <div
+                className={fabPos ? 'fixed' : 'fixed bottom-6 right-6'}
+                style={{ zIndex: 1099, ...(fabPos ? { left: fabPos.left, top: fabPos.top } : {}) }}
+                onPointerDown={!isOpen ? onFabPointerDown : undefined}
+                onPointerMove={!isOpen ? onFabPointerMove : undefined}
+                onPointerUp={!isOpen ? onFabPointerUp : undefined}
+                onPointerCancel={!isOpen ? onFabPointerUp : undefined}
+            >
                 {/* ping ring when closed */}
                 {!isOpen && (
                     <span className="yogi-ping absolute inset-0 rounded-full" style={{ background: `rgba(242,101,34,0.35)` }} />
                 )}
                 <button
-                    onClick={() => setIsOpen(v => !v)}
+                    onClick={() => { if (!fabDrag.current.moved) setIsOpen(v => !v) }}
                     title="Yogi — AI Assistant"
                     className="relative flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200 hover:scale-105"
                     style={{
@@ -661,6 +711,8 @@ export default function AiChatFab() {
                         border: isOpen ? `1px solid rgba(242,101,34,0.4)` : 'none',
                         color: isOpen ? ORANGE : 'white',
                         boxShadow: isOpen ? `0 4px 16px rgba(242,101,34,0.2)` : `0 6px 20px rgba(242,101,34,0.45)`,
+                        cursor: isOpen ? 'pointer' : (fabDrag.current.active ? 'grabbing' : 'grab'),
+                        touchAction: 'none',
                     }}
                 >
                     {isOpen ? <X size={18} /> : <Bot size={18} />}

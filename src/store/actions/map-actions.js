@@ -881,6 +881,7 @@ import {
     SET_FILTERS,
     SET_SYNC_ENABLED,
     SET_SELECTED_CELL,
+    SET_SELECTED_OPERATOR,
     SET_MAP_CONFIG,
     SET_TELECOM_FILTER_META,
     SET_TELECOM_TECH_META,
@@ -1061,7 +1062,7 @@ const MapActions = {
                 cell_id: item.cell_name,
                 site_name: item.site_name,
                 technology: item.technology,
-                operator: item.vendor,
+                operator: item.vendor, // API calls this "vendor"; app-wide state/UI uses "operator" — this is the only place the rename happens
                 region: item.region,
                 band: item.band,
                 latitude: item.latitude,
@@ -1141,7 +1142,7 @@ const MapActions = {
                 cell_id: item.cell_name,
                 site_name: item.site_name,
                 technology: item.technology,
-                operator: item.vendor,
+                operator: item.vendor, // API calls this "vendor"; app-wide state/UI uses "operator" — this is the only place the rename happens
                 region: item.region,
                 band: item.band,
                 latitude: item.latitude,
@@ -1564,6 +1565,10 @@ const MapActions = {
 
     setSelectedCell: (cell) => (dispatch) => {
         dispatch(SET_SELECTED_CELL(cell))
+    },
+
+    setSelectedOperator: (operator) => (dispatch) => {
+        dispatch(SET_SELECTED_OPERATOR(operator))
     },
 
     setMapConfig: (config) => (dispatch) => {

@@ -60,6 +60,9 @@ const initialState = {
     // 🔹 Selected cell for popup / modal
     selectedCell: null,
 
+    // 🔹 Currently selected operator for single-map view (derived from loaded cell data — see SET_RAW_CELLS)
+    selectedOperator: null,
+
     // 🔹 TELECOM FILTER METADATA
     // telecomFilterMeta: {},
     // telecomTechMeta: {},
@@ -198,6 +201,9 @@ const mapQuery = createSlice({
         SET_RAW_CELLS: (state, { payload }) => {
              console.log("SET_RAW_CELLS CALLED 🚨");
             state.rawCells = payload;
+            if (!state.selectedOperator && payload.length > 0) {
+                state.selectedOperator = payload[0].operator;
+            }
         },
 
         // 🔹 Update filters (region, tech, vendor)
@@ -221,6 +227,11 @@ const mapQuery = createSlice({
         // 🔹 Store selected cell for popup / modal
         SET_SELECTED_CELL: (state, { payload }) => {
             state.selectedCell = payload;
+        },
+
+        // 🔹 Store selected operator (single-map view) — explicit/manual override
+        SET_SELECTED_OPERATOR: (state, { payload }) => {
+            state.selectedOperator = payload;
         },
 
         // 🔹 Update map configuration (scale / style)
@@ -486,6 +497,7 @@ export const {
     SET_VIEW_STATE,
     SET_SYNC_ENABLED,
     SET_SELECTED_CELL,
+    SET_SELECTED_OPERATOR,
     SET_MAP_CONFIG,
     SET_TELECOM_FILTER_META,
     SET_TELECOM_TECH_META,

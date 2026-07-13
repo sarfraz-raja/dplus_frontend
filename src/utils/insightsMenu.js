@@ -44,7 +44,7 @@ export const buildInsightsRootTree = (menuList, { rolename, includeInactive = fa
 
     const cloneNode = (node) => ({
         ...node,
-        children: (node.children || [])
+        children: sortBySequence(node.children || [])
             .filter((child) => canViewNode(child, rolename) && (includeInactive || isActiveNode(child)))
             .map(cloneNode),
     });
@@ -52,16 +52,16 @@ export const buildInsightsRootTree = (menuList, { rolename, includeInactive = fa
     const rootClone = cloneNode(root);
     const existingIds = new Set(flattenTree(rootClone.children).map((item) => item.id).filter(Boolean));
     const allIds = new Set(flattenTree(menuList).map((item) => item.id).filter(Boolean));
-    const orphanRootChildren = (menuList || [])
-        .filter((item) => {
+    const orphanRootChildren = sortBySequence(
+        (menuList || []).filter((item) => {
             if (!item || item.id === root.id || existingIds.has(item.id)) return false;
             if (!canViewNode(item, rolename)) return false;
             if (!includeInactive && !isActiveNode(item)) return false;
             if (!isInsightsRoute(item.route)) return false;
             return isBlankParent(item.parent_id) || item.parent_id === root.id || !allIds.has(item.parent_id);
         })
-        .map(cloneNode);
+    ).map(cloneNode);
 
-    rootClone.children = [...rootClone.children, ...orphanRootChildren];
+    rootClone.children = sortBySequence([...rootClone.children, ...orphanRootChildren]);
     return rootClone;
 };

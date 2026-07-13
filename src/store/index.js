@@ -11,6 +11,7 @@ import websocket from "./reducers/websocket-reducer"
 import map from "./reducers/map-reducer"
 import cxix from "./reducers/cxix-reducer"
 import insightsEngine from "./reducers/insightsEngine-reducer"
+import kpiEngine from "./reducers/kpiEngine-reducer"
 
 const store = configureStore({
     reducer: {
@@ -26,6 +27,7 @@ const store = configureStore({
         map,
         cxix,
         insightsEngine,
+        kpiEngine,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

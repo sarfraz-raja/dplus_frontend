@@ -1,0 +1,1 @@
+function o(t,n){let e="";for(let r=0;r<=n;r++)e+=t[r];return e}function c(t){return Object.keys(t).filter(e=>t[e]!==""&&t[e]!=="select").map(e=>encodeURIComponent(e)+"="+encodeURIComponent(t[e])).join("&")}function i(t){return Object.keys(t).filter(e=>t[e]!==""&&t[e]!=="select").map(e=>encodeURIComponent(t[e]))}export{i as a,o as m,c as o};

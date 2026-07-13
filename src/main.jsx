@@ -200,7 +200,16 @@ import maplibregl from 'maplibre-gl';
 
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
+
+// Warm the PMTiles directory cache before the map mounts.
+// pmtiles.js must fetch the first 16 KB (header + root tile index) before it
+// can locate any tile inside the archive. Firing this here — at app startup —
+// means that fetch runs in parallel with React rendering, so by the time the
+// map component requests its first tile the directory is already cached.
+fetch('/tiles/region.pmtiles', { headers: { Range: 'bytes=0-16383' } });
 import 'sweetalert2/dist/sweetalert2.min.css';
+import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
+import '@fortawesome/fontawesome-free/css/solid.min.css';
 
 import App from './App.jsx';
 import './index.css';

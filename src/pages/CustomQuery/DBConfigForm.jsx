@@ -145,10 +145,11 @@
 // };
 
 // export default DBConfigForm;
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
+import FormModal from '../../components/FormModal';
 
 const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
@@ -158,6 +159,7 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
 
     const dispatch = useDispatch()
     const userList = useSelector((state) => state?.customQuery?.usersList)
+    const [confirmBlankPassword, setConfirmBlankPassword] = useState(null)
 
     const {
         register,
@@ -170,10 +172,20 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
     useEffect(() => {
         reset({})
         if (!resetting) {
-            Object.keys(formValue).forEach((key) => setValue(key, formValue[key]))
+            Object.keys(formValue).forEach((key) => {
+                if (key === 'password') return
+                setValue(key, formValue[key])
+            })
+            // API never returns the real password (masked as "********"), so leave it blank on edit
+            setValue('password', '')
             // API returns userid (lowercase) but field is registered as userId — handle both
             const userIdValue = formValue.userId ?? formValue.userid ?? formValue.user_id
-            if (userIdValue) setValue('userId', userIdValue)
+            if (userIdValue) {
+                setValue('userId', userIdValue)
+            } else if (formValue.name && userList?.length) {
+                const match = userList.find((u) => u.label === formValue.name)
+                if (match) setValue('userId', match.value)
+            }
         }
     }, [formValue, resetting, userList])
 
@@ -181,7 +193,7 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
         dispatch(CustomQueryActions.testDBConfig(true, data, () => {}))
     }
 
-    const onTableViewSubmit = (data) => {
+    const submitConfig = (data) => {
         if (data.uniqueid) {
             delete data.name
             dispatch(CustomQueryActions.postDBConfig(true, data, () => {
@@ -194,6 +206,14 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
                 dispatch(CustomQueryActions.getDBConfig())
             }))
         }
+    }
+
+    const onTableViewSubmit = (data) => {
+        if (data.uniqueid && !data.password) {
+            setConfirmBlankPassword(data)
+            return
+        }
+        submitConfig(data)
     }
 
     return (
@@ -312,6 +332,43 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
                     {resetting ? 'Add' : 'Save Changes'}
                 </button>
             </div>
+
+            <FormModal
+                title="Password not entered"
+                headerColor="#b91c1c"
+                isOpen={!!confirmBlankPassword}
+                setIsOpen={() => setConfirmBlankPassword(null)}
+            >
+                <div className="flex flex-col items-center gap-3 py-4 px-2 text-center">
+                    <p className="text-slate-700 text-sm font-medium">
+                        You haven't entered a password for this connection.
+                    </p>
+                    <p className="text-xs text-slate-400">
+                        Saving without a password may leave this connection unable to authenticate. Continue anyway?
+                    </p>
+                </div>
+                <div className="flex justify-end gap-3 mt-2">
+                    <button
+                        type="button"
+                        onClick={() => setConfirmBlankPassword(null)}
+                        className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const data = confirmBlankPassword
+                            setConfirmBlankPassword(null)
+                            submitConfig(data)
+                        }}
+                        className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm"
+                        style={{ background: '#b91c1c' }}
+                    >
+                        Save Anyway
+                    </button>
+                </div>
+            </FormModal>
 
         </>
     )

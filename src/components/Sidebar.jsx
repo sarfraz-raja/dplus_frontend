@@ -75,7 +75,7 @@ import {
 } from 'lucide-react';
 import { Sidebar_content } from '../utils/sidebar_values';
 import { meMenuToSidebarItems } from '../utils/meMenuToSidebar';
-import { buildInsightsRootTree, isInsightsRoute } from '../utils/insightsMenu';
+import { buildInsightsRootTree, isInsightsRoute, sortBySequence } from '../utils/insightsMenu';
 
 /** Build a flat name→link lookup from all sidebar_values items (all_routes + Admin + GlobalUrl). */
 const buildNameToLinkMap = (items, map = {}) => {
@@ -483,7 +483,7 @@ const getDashboardIcon = (item) =>
   DASHBOARD_ICON_MAP[item?.icon] || getSidebarChildIcon(item?.title) || null;
 
 const dashboardNodeToSidebarItem = (node, isTopLevel = false) => {
-  const children = (node.children || []).map((child) => dashboardNodeToSidebarItem(child, false));
+  const children = sortBySequence(node.children || []).map((child) => dashboardNodeToSidebarItem(child, false));
   return {
     title: node.title,
     route: node.route,
