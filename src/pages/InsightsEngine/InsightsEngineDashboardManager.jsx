@@ -11,6 +11,11 @@ import {
 import Button from '../../components/Button';
 import FormModal from '../../components/FormModal';
 import DataTable from '../../components/DataTable';
+import { listDashboards } from '../../store/actions/dashboardBuilder-actions';
+
+// Confirmed via a live POST /dashboards/{id}/data response — the field is `is_published`
+// (a plain boolean), not `status`. Same helper as DashboardBuilder.jsx/EmbeddedDashboard.jsx's isPublished.
+const isDashboardPublished = (d) => d?.is_published === true;
 
 /* ─── Icon options ─── */
 const ICON_OPTIONS = [
@@ -54,17 +59,24 @@ const slugify = (str) =>
     str.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
 const EMPTY_FORM = {
-    type:          'link',
-    title:         '',
-    parent_id:     null,
-    route:         '',
-    routeAuto:     true,
-    superset_id:   '',
-    superset_uuid: '',
-    icon:          null,
-    is_active:     true,
-    sequence:      '',
+    type:              'link',
+    title:             '',
+    parent_id:         null,
+    route:             '',
+    routeAuto:         true,
+    dashboard_platform: 'superset',
+    superset_id:       '',
+    superset_uuid:     '',
+    icon:              null,
+    is_active:         true,
+    sequence:          '',
 };
+
+const PLATFORM_OPTIONS = [
+    { value: 'superset', label: 'Superset' },
+    { value: 'grafana', label: 'Grafana' },
+    { value: 'dashboard_builder', label: 'Dashboard Builder' },
+];
 
 const COLUMNS = [
     { label: 'Title',   key: 'title'         },
@@ -82,6 +94,21 @@ const COLUMNS = [
 const DashboardForm = ({ initial = EMPTY_FORM, onSave, onCancel, allGroups = [] }) => {
     const [form,   setForm]   = useState({ ...EMPTY_FORM, ...initial });
     const [errors, setErrors] = useState({});
+    // Only fetched when the Dashboard Builder platform is picked — list of published
+    // (not draft) Dashboard Builder dashboards to choose from, instead of a raw numeric id.
+    const [builderDashboards, setBuilderDashboards] = useState([]);
+    const [builderLoading, setBuilderLoading] = useState(false);
+    const [builderError, setBuilderError] = useState(null);
+
+    useEffect(() => {
+        if (form.dashboard_platform !== 'dashboard_builder') return;
+        setBuilderLoading(true);
+        setBuilderError(null);
+        listDashboards()
+            .then((list) => setBuilderDashboards(list.filter(isDashboardPublished)))
+            .catch((e) => setBuilderError(e.message))
+            .finally(() => setBuilderLoading(false));
+    }, [form.dashboard_platform]);
 
     const set = (key, val) => {
         setForm(p => ({ ...p, [key]: val }));
@@ -108,11 +135,15 @@ const DashboardForm = ({ initial = EMPTY_FORM, onSave, onCancel, allGroups = [] 
         if (!form.route.trim()) e.route = 'Route is required';
         if (isLink) {
             if (form.superset_id === '')
-                e.superset_id = 'ID is required';
+                e.superset_id = form.dashboard_platform === 'dashboard_builder' ? 'Dashboard is required' : 'ID is required';
+            // Dashboard Builder's id comes from a <select> of real dashboards (string values,
+            // not necessarily numeric) — only Superset/Grafana ids need the positive-int check.
             else if (
-                isNaN(Number(form.superset_id)) ||
-                !Number.isInteger(Number(form.superset_id)) ||
-                Number(form.superset_id) < 1
+                form.dashboard_platform !== 'dashboard_builder' && (
+                    isNaN(Number(form.superset_id)) ||
+                    !Number.isInteger(Number(form.superset_id)) ||
+                    Number(form.superset_id) < 1
+                )
             ) e.superset_id = 'ID must be a positive whole number';
         }
         return e;
@@ -122,8 +153,8 @@ const DashboardForm = ({ initial = EMPTY_FORM, onSave, onCancel, allGroups = [] 
         const e = validate();
         if (Object.keys(e).length) { setErrors(e); return; }
         const { routeAuto, ...payload } = form;
-        if (!isLink) { delete payload.superset_id; delete payload.superset_uuid; }
-        else if (payload.superset_id) payload.superset_id = Number(payload.superset_id);
+        if (!isLink) { delete payload.superset_id; delete payload.superset_uuid; delete payload.dashboard_platform; }
+        else if (payload.superset_id && payload.dashboard_platform !== 'dashboard_builder') payload.superset_id = Number(payload.superset_id);
         if (payload.sequence !== '' && payload.sequence !== null)
             payload.sequence = Math.trunc(Number(payload.sequence));
         else
@@ -215,8 +246,46 @@ const DashboardForm = ({ initial = EMPTY_FORM, onSave, onCancel, allGroups = [] 
                 </div>
             </div>
 
-            {/* Row 3: ID + UUID — link only */}
+            {/* Row 3: Platform — link only */}
             {isLink && (
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                        Platform
+                    </label>
+                    <select
+                        value={form.dashboard_platform}
+                        onChange={e => set('dashboard_platform', e.target.value)}
+                        className={inputCls('dashboard_platform')}
+                    >
+                        {PLATFORM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                </div>
+            )}
+
+            {/* Row 4: ID + UUID (Superset/Grafana) OR a published-dashboard picker (Dashboard Builder) */}
+            {isLink && form.dashboard_platform === 'dashboard_builder' ? (
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                        Dashboard <span className="text-red-400">*</span>
+                    </label>
+                    <select
+                        value={form.superset_id}
+                        onChange={e => set('superset_id', e.target.value)}
+                        className={inputCls('superset_id')}
+                        disabled={builderLoading}
+                    >
+                        <option value="">{builderLoading ? 'Loading…' : '— Select a published dashboard —'}</option>
+                        {builderDashboards.map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                    </select>
+                    {errors.superset_id && <p className="text-xs text-red-500 mt-1">{errors.superset_id}</p>}
+                    {builderError && <p className="text-xs text-red-500 mt-1">{builderError}</p>}
+                    {!builderLoading && !builderError && builderDashboards.length === 0 && (
+                        <p className="text-xs text-slate-400 mt-1">No published dashboards yet — publish one from the Dashboard Builder first.</p>
+                    )}
+                </div>
+            ) : isLink && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">

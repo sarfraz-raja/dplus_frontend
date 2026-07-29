@@ -4,7 +4,7 @@
  * instead of re-deriving textColor/subColor/axisColor/splitColor locally.
  */
 import * as echarts from 'echarts/core';
-import { chartTokens } from './tokens';
+import { chartTokens, CHART_PALETTE } from './tokens';
 
 export const DARK_THEME_NAME = 'kpiDark';
 export const LIGHT_THEME_NAME = 'kpiLight';
@@ -12,6 +12,7 @@ export const LIGHT_THEME_NAME = 'kpiLight';
 function buildTheme(isDark) {
   const { text, sub, axis, split, track } = chartTokens(isDark);
   return {
+    color: CHART_PALETTE,
     backgroundColor: 'transparent',
     textStyle: { color: text },
     categoryAxis: {

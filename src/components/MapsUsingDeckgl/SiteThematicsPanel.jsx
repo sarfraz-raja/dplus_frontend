@@ -27,9 +27,13 @@ const kpiThematicOptions = [
     // "RSSI",
     // "RSRP",
     "CSSR",
-    "CDR",
-    "DL Thrp",
-    "Frequency",
+    "Data_SR",
+    "Availability",
+
+    // "CDR",
+    // "DL Thrp",
+    // "Frequency",
+
 ];
 
 const SiteThematicsPanel = ({ setSiteThematicsConfig,  tempLegend,

@@ -1,6 +1,6 @@
 // import React, { useEffect } from 'react';
-// import LineChart from '../../components/Widgets/LineChart';
-// import LiningChart from '../../components/Widgets/LineChart';
+// import LineChart from './LineChart';
+// import LiningChart from './LineChart';
 // import { useDispatch, useSelector } from 'react-redux';
 // import { useNavigate, useParams } from 'react-router-dom';
 // import MapActions from '../../store/actions/map-actions';
@@ -249,7 +249,7 @@
 //  Map charts manually coded - old code, tied to "click to open chart" button in index.jsx
 import React from "react";
 import { useSelector } from "react-redux";
-import LiningChart from "../../components/Widgets/LineChart";
+import LiningChart from "./LineChart";
 
 const MapChart = () => {
   const marketChartList = useSelector(

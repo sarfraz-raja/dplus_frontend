@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Zap } from 'lucide-react';
-import KpiMonitoringDashboard from '../components/Dashboards/KpiDashboard/KpiMonitoringDashboard';
+import KpiMonitoringDashboard from '../components/DashboardBuilder/legacy/KpiDashboard/KpiMonitoringDashboard';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -14,7 +14,7 @@ const Home = () => {
       <div className="mx-auto h-full max-w-[1600px] flex flex-col">
         <section className="mb-0.5 flex flex-col sm:flex-row items-start justify-between gap-2">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-[#090728] dark:text-white-600">Dashboard</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#090728] dark:text-white">Live Monitoring Dashboard</p>
             <h1 className="mt-0.5 text-2xl font-black text-slate-900 dark:text-white">DataPlus Network Intelligence</h1>
           </div>
           <div className="relative flex min-w-0 items-center gap-1.5 sm:gap-2 mr-7">
@@ -41,7 +41,7 @@ const Home = () => {
             <KpiMonitoringDashboard embedded />
 
             {/* 3-Column Row: GIS Engine, Insights Engine, Query Workbench */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {/* <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-lg dark:border-orange-500/30 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-2xl flex flex-col">
                 <div className="absolute inset-0 opacity-10">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500 rounded-full blur-3xl"></div>
@@ -115,10 +115,10 @@ const Home = () => {
                   </button>
                 </div>
               </div>
-            </div>
+            </div> */}
 
             {/* 2-Column Row: xAlerts, Ticketing System */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="relative overflow-hidden rounded-3xl border border-amber-200 bg-white p-8 shadow-lg dark:border-yellow-600/30 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
                 <div className="absolute inset-0 opacity-10">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500 rounded-full blur-3xl"></div>
@@ -162,7 +162,7 @@ const Home = () => {
                   </div>
                 </div>
               </div>
-            </div>
+            </div> */}
 
           </div>
         </div>

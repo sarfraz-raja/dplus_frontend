@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import UrlDashboard from '../SuperSet/UrlDashboard';
 import GrafanaDashboard from '../Grafana/GrafanaDashboard';
+import EmbeddedDashboard from '../../components/DashboardBuilder/dashboard/EmbeddedDashboard';
 
 const flattenMenu = (items) =>
     (items || []).reduce((acc, item) => {
@@ -21,6 +22,7 @@ const DynamicInsightsDashboard = () => {
     }, [menuList, pathname]);
 
     const isGrafana = menuItem?.dashboard_platform === 'grafana';
+    const isBuilder = menuItem?.dashboard_platform === 'dashboard_builder';
     const isConfigured = isGrafana ? !!menuItem?.dashboard_uuid : !!menuItem?.dashboard_id;
 
     if (!isConfigured) {
@@ -37,6 +39,16 @@ const DynamicInsightsDashboard = () => {
                 <div className="flex-1">
                     {/* <GrafanaDashboard  dashboard_name={menuItem.dashboard_id} dashboard_uid={menuItem.dashboard_uuid} /> */}
                     <GrafanaDashboard access_token={menuItem.dashboard_id || menuItem.dashboard_uuid} />
+                </div>
+            </div>
+        );
+    }
+
+    if (isBuilder) {
+        return (
+            <div className="w-full h-full flex flex-col">
+                <div className="flex-1 min-h-0 overflow-auto">
+                    <EmbeddedDashboard dashboardId={menuItem.dashboard_id} />
                 </div>
             </div>
         );

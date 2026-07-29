@@ -274,9 +274,10 @@ const quotePostgresIdentifiers = (sql) => {
     const parts = sql.split(/(\'(?:[^\'\\]|\\.)*\'|"[^"]*")/);
     return parts.map((part, i) => {
         if (i % 2 === 1) return part;
-        return part.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (match) => {
-            if (PG_KEYWORDS.has(match.toUpperCase())) return match;
-            if (/[A-Z]/.test(match)) return `"${match}"`;
+        return part.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b(\s*\()?/g, (match, name, followedByParen) => {
+            if (followedByParen) return match; // function call — never quote
+            if (PG_KEYWORDS.has(name.toUpperCase())) return match;
+            if (/[A-Z]/.test(name)) return `"${name}"`;
             return match;
         });
     }).join('');

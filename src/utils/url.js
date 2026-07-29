@@ -61,6 +61,23 @@ export const Urls={
 
     kpiEngineLiveMonitoring:"/kpi-engine/live-monitoring",
 
+    // Dashboard Builder's own datasource namespace — separate from /querybuilder/*, and the
+    // database itself is fixed for now (no per-datasource connection selection, see
+    // dashboardBuilder-actions.js). Confirmed against the backend team's full API doc.
+    dashboardBuilder_previewDatasource:"/dashboard-builder/datasources/preview",
+    dashboardBuilder_datasources:"/dashboard-builder/datasources", // POST (register) / GET (list)
+    // Widgets are now their own standalone, globally-reusable resource (Superset-style),
+    // separate from dashboards — /widgets for the definition itself, /dashboards/{id}/widgets
+    // for attaching one to a specific dashboard (a join-row concern, not the widget itself).
+    dashboardBuilder_dashboards:"/dashboard-builder/dashboards", // POST (create) / GET (list)
+    dashboardBuilder_widgets:"/dashboard-builder/widgets", // POST (create) / GET (list)
+    // Phase 19b — NOT YET CONFIRMED with the backend team (unlike the entries above, which
+    // matched the real API doc). Standalone, reusable Theme resource mirroring the Widgets
+    // pattern exactly: /themes for the definition, dashboard.theme_id for binding one to a
+    // dashboard (a plain field on the dashboard, not a join table, since a dashboard can only
+    // bind one theme at a time — unlike widgets, which are many-per-dashboard).
+    dashboardBuilder_themes:"/dashboard-builder/themes", // POST (create) / GET (list)
+
     proRules:"/proRules",
     proRulesOutput:"/proRulesOutput",
     cellProRulesOutput:"/cellProRulesOutput",

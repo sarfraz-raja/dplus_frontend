@@ -1,0 +1,143 @@
+import React from 'react';
+import BarChart from '../../Widgets/BarChart';
+import AreaChart from '../../Widgets/AreaChart';
+import PieChart from '../../Widgets/PieChart';
+import LineAreaChart from '../../Widgets/LineAreaChart';
+import StatCard from '../../Widgets/StatCard';
+import GaugeCard from '../../Widgets/GaugeCard';
+import ScatterChart from '../../Widgets/ScatterChart';
+import HorizontalBarChart from '../../Widgets/HorizontalBarChart';
+import StackedBarChart from '../../Widgets/StackedBarChart';
+import FunnelChart from '../../Widgets/FunnelChart';
+import WaterfallChart from '../../Widgets/WaterfallChart';
+import TreemapChart from '../../Widgets/TreemapChart';
+import HeatStripChart from '../../Widgets/HeatStripChart';
+import VirtualizedTable from './VirtualizedTable';
+
+/**
+ * Maps a real backend chart_type + mapping + queried rows onto whichever existing themed
+ * Widgets/ component matches its shape. Shared between ChartLibrary.jsx (standalone preview)
+ * and any dashboard view that renders attached real widgets, so both stay in sync instead of
+ * each re-implementing the chart_type switch. LINE uses LineAreaChart (ECharts, themed)
+ * rather than the separate MapBox/LineChart.jsx, which is Recharts-based, unrelated to
+ * DashboardBuilder, and doesn't follow this app's shared theming.
+ *
+ * `style` (optional) — per-placement visual overrides (titleColor/titleWeight/titleSize/
+ * titleFont/bgColor/bgGradient/palette/valueTextColor/valueTextSize/axisTextColor/
+ * axisTextWeight/axisTextSize/axisTextFont), from a dashboard widget's own `style` object
+ * (see widgetTypeRegistry.js's `chartLibrary` styleFields, cascaded through
+ * DashboardCanvasEditor.jsx's resolveWidgetProps the same way every mock widget's style is)
+ * — layered on top of the chart's shared chart_type/mapping/data, never touching those.
+ * Passed to every case uniformly; each underlying component simply ignores whichever of
+ * these props it doesn't support (e.g. StatCard has no axis, PieChart has no axis, etc.) —
+ * safe to pass regardless.
+ */
+export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style = {} }) {
+  const xAxis = mapping.x_axis;
+  const yAxis = mapping.y_axis;
+  const {
+    titleColor, titleWeight, titleSize, titleFont, titlePosition, bgColor,
+    bgGradient: bgGradientRaw, bgGradientFrom, bgGradientTo, palette, color,
+    colorFrom, colorTo, valuePosition,
+    valueTextColor, valueTextSize, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
+    valueDecimals: valueDecimalsRaw, unit, donut, showLegend,
+  } = style;
+  // `?? 2` here too (not just in DashboardCanvasEditor.jsx's cascade) since ChartLibrary.jsx's
+  // own standalone preview calls this directly with `mapping.style`, bypassing that cascade
+  // entirely — this is the one spot both paths funnel through, so the default lives here as
+  // a safety net regardless of which caller it came from.
+  const valueDecimals = valueDecimalsRaw ?? 2;
+  // Same story as valueDecimals above: DashboardCanvasEditor.jsx's cascade pre-combines
+  // bgGradientFrom/bgGradientTo into a `bgGradient` array before calling this — but
+  // ChartLibrary.jsx's own standalone preview passes `mapping.style` directly, which only
+  // ever has the two raw pieces (that's literally how WidgetStyleFields stores them, one key
+  // per field), never a pre-combined array. Combining it here too means both callers work.
+  const bgGradient = bgGradientRaw || ((bgGradientFrom || bgGradientTo) ? [bgGradientFrom, bgGradientTo] : null);
+  const round = (v) => (typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(valueDecimals)) : v);
+  const seriesData = () => rows.map((r) => ({ label: String(r[xAxis]), value: round(Number(r[yAxis]) || 0) }));
+  const styleProps = {
+    titleColor, titleWeight, titleSize, titleFont, titlePosition, bgColor, bgGradient, palette, color,
+    valueTextColor, valueTextSize, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
+  };
+
+  switch (chartType) {
+    case 'BAR':
+      return <BarChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} {...styleProps} />;
+    case 'AREA':
+      return <AreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} {...styleProps} />;
+    case 'PIE':
+      return <PieChart title={name} data={seriesData()} height={height} donut={donut} showLegend={showLegend} {...styleProps} />;
+    case 'LINE':
+      return <LineAreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} {...styleProps} />;
+    case 'KPI_CARD': {
+      const rawValue = rows[0]?.[yAxis];
+      const displayValue = typeof rawValue === 'number' ? String(round(rawValue)) : String(rawValue ?? '—');
+      return (
+        <StatCard
+          label={name}
+          value={displayValue}
+          unit={unit}
+          bgColor={bgColor}
+          bgGradient={bgGradient}
+          valueTextColor={valueTextColor}
+          valueTextSize={valueTextSize}
+          titleColor={titleColor}
+          titleWeight={titleWeight}
+          titleSize={titleSize}
+          titleFont={titleFont}
+          titlePosition={titlePosition}
+          valuePosition={valuePosition}
+        />
+      );
+    }
+    case 'GAUGE':
+      return <GaugeCard title={name} value={round(Number(rows[0]?.[yAxis]) || 0)} height={height} {...styleProps} />;
+    case 'SCATTER':
+      return (
+        <ScatterChart
+          title={name}
+          xLabel={xAxis}
+          yLabel={yAxis}
+          data={rows.map((r) => ({ x: round(Number(r[xAxis]) || 0), y: round(Number(r[yAxis]) || 0) }))}
+          height={height}
+          {...styleProps}
+        />
+      );
+    case 'HORIZONTAL_BAR':
+      return <HorizontalBarChart title={name} data={seriesData()} height={height} limit={20} {...styleProps} />;
+    case 'FUNNEL':
+      return <FunnelChart title={name} data={seriesData()} height={height} {...styleProps} />;
+    case 'WATERFALL':
+      return <WaterfallChart title={name} data={seriesData()} height={height} {...styleProps} />;
+    case 'TREEMAP':
+      return <TreemapChart title={name} data={seriesData()} height={height} {...styleProps} />;
+    case 'STACKED_BAR': {
+      const seriesAxis = mapping.series;
+      const categories = [...new Set(rows.map((r) => String(r[xAxis])))];
+      const seriesNames = [...new Set(rows.map((r) => String(r[seriesAxis])))];
+      const series = seriesNames.map((sName) => ({
+        name: sName,
+        data: categories.map((cat) => {
+          const match = rows.find((r) => String(r[xAxis]) === cat && String(r[seriesAxis]) === sName);
+          return match ? round(Number(match[yAxis]) || 0) : 0;
+        }),
+      }));
+      return <StackedBarChart title={name} categories={categories} series={series} height={height} showLegend={showLegend} {...styleProps} />;
+    }
+    case 'TABLE': {
+      const cols = mapping.columns || [];
+      return (
+        <div
+          className="border border-slate-100 rounded-lg h-full"
+          style={{ background: bgGradient ? `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` : bgColor || undefined }}
+        >
+          <VirtualizedTable rows={rows} cols={cols} round={round} valueTextColor={valueTextColor} />
+        </div>
+      );
+    }
+    case 'HEAT_MAP':
+      return <HeatStripChart title={name} unit={unit} data={seriesData()} colorFrom={colorFrom} colorTo={colorTo} height={height} {...styleProps} />;
+    default:
+      return <div className="text-xs text-slate-500">{rows.length} row(s) returned.</div>;
+  }
+}
