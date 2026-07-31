@@ -79,7 +79,12 @@ function buildLocalLayoutAndWidgets(attachedWidgets, dashboardLayout) {
     widgets[localId] = {
       type: 'chartLibrary',
       title: w.name || 'Widget',
-      dataSource: { type: 'chartLibrary', widgetId: w.id, chartType: w.chart_type, mapping: w.mapping },
+      // `datasource_id` is needed for cross-filtering's "same datasourceId" match strictness
+      // (DashboardCanvasEditor.jsx's handleWidgetPointClickRef) — without it, every widget
+      // loaded from a saved dashboard silently had no datasourceId at all (only widgets
+      // freshly added in the current editing session got one, via addWidget's later async
+      // updateWidget call), making that safety check permanently inert for real dashboards.
+      dataSource: { type: 'chartLibrary', widgetId: w.id, chartType: w.chart_type, mapping: w.mapping, datasourceId: w.datasource_id },
       // Per-placement style has no dedicated backend field — it rides along inside each
       // dashboard.layout entry (see handleSave below), the same JSON array that already
       // reliably round-trips position via PATCH /dashboards/{id}. Without this, every

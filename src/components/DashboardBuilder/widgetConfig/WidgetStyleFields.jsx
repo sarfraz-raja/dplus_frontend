@@ -1,17 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import Button from '../../Button';
 
-// Auto-groups a field into one of three collapsible sections purely from its own
+// Auto-groups a field into one of four collapsible sections purely from its own
 // key/type shape — no per-field `group` metadata needed on every styleFields entry across
 // widgetTypeRegistry.js (which would've meant touching every existing field descriptor).
-// Colors always go together; *Weight/*Size text fields go together; everything else
-// (row-count limits, donut/legend/value-label toggles) is "layout & behavior."
+// Cross-filter toggles get their own section (checked first, before the generic Layout &
+// Behavior catch-all, since they'd otherwise match no other rule and fall through to it
+// anyway); colors always go together; *Weight/*Size/*Position text fields go together;
+// everything else (row-count limits, donut/legend/value-label toggles) is "layout & behavior."
 function groupFor(field) {
+  if (field.key === 'crossFilterSource' || field.key === 'crossFilterTarget') return 'Cross-Filtering';
   if (field.type === 'color') return 'Colors & Branding';
   if (/Weight$|Size$|Position$/.test(field.key)) return 'Text Styling';
   return 'Layout & Behavior';
 }
-const GROUP_ORDER = ['Colors & Branding', 'Text Styling', 'Layout & Behavior'];
+// Cross-Filtering leads — it's the "what does this widget do" decision, worth seeing before
+// both the other behavior toggles and the purely cosmetic groups.
+const GROUP_ORDER = ['Cross-Filtering', 'Layout & Behavior', 'Colors & Branding', 'Text Styling'];
 
 const isShowHide = (field) => field.type === 'select' && field.options?.length === 2
   && field.options.every((o) => ['show', 'hide'].includes(String(o.value).toLowerCase()));

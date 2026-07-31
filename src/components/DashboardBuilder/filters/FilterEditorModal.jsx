@@ -4,6 +4,36 @@ import FormModal from '../../FormModal';
 import Button from '../../Button';
 import { getDatasourceDetail, sampleDatasource } from '../../../store/actions/dashboardBuilder-actions';
 import MultiSelectFilterInput from './MultiSelectFilterInput';
+import { resolveTimeRangeValue, toDateTimeLocalInput, fromDateTimeLocalInput } from '../utils/resolveTimeRange';
+
+const RELATIVE_UNITS = [
+  { value: 'days', label: 'Days' },
+  { value: 'weeks', label: 'Weeks' },
+  { value: 'months', label: 'Months' },
+  { value: 'quarters', label: 'Quarters' },
+  { value: 'years', label: 'Years' },
+];
+const THIS_PERIOD_UNITS = [
+  { value: 'week', label: 'This week' },
+  { value: 'month', label: 'This month' },
+  { value: 'quarter', label: 'This quarter' },
+  { value: 'year', label: 'This year' },
+];
+
+// The BETWEEN value's own `mode` tag drives which range-type UI shows — defaults to
+// 'custom' (today's plain two-date-picker behavior) for both a brand-new filter and any
+// legacy saved filter whose value is still a bare [from, to] array.
+function rangeModeOf(value) {
+  if (Array.isArray(value) || !value) return 'custom';
+  return value.mode || 'custom';
+}
+
+function defaultValueForRangeMode(mode, granularity = 'date') {
+  if (mode === 'relative') return { mode: 'relative', amount: 7, unit: 'days', direction: 'before', granularity };
+  if (mode === 'thisPeriod') return { mode: 'thisPeriod', unit: 'month', granularity };
+  return { mode: 'custom', from: '', to: '', granularity };
+}
+
 
 let localIdCounter = 0;
 const nextLocalId = () => `f_${Date.now()}_${localIdCounter++}`;
@@ -21,7 +51,7 @@ const OPERATORS = [
   { value: 'LIKE', label: 'Like (pattern match)' },
   { value: 'IN', label: 'In (multiple values)' },
   { value: 'NOT IN', label: 'Not in (multiple values)' },
-  { value: 'BETWEEN', label: 'Between (range)' },
+  { value: 'BETWEEN', label: 'Between (range)', dateLabel: 'Date/time range' },
 ];
 
 function isMultiSelectOperator(operator) {
@@ -157,7 +187,12 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
   const handleSave = async () => {
     const invalid = rows.some((r) => {
       if (!r.column) return true;
-      if (r.operator === 'BETWEEN') return !r.value?.[0] || !r.value?.[1];
+      if (r.operator === 'BETWEEN') {
+        if (rangeModeOf(r.value) === 'relative') return !r.value?.amount || !r.value?.unit;
+        if (rangeModeOf(r.value) === 'thisPeriod') return !r.value?.unit;
+        const resolved = resolveTimeRangeValue(r.value);
+        return !resolved?.[0] || !resolved?.[1];
+      }
       if (r.operator === 'IN' || r.operator === 'NOT IN') return !r.value || r.value.length === 0;
       return !r.value;
     });
@@ -179,6 +214,58 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
   const selectedColumnMeta = columns.find((c) => c.column_name === selected?.column);
   const isDateColumn = /date|time|timestamp/i.test(selectedColumnMeta?.data_type || '');
   const rangeInputType = isDateColumn ? 'date' : 'number';
+  // TIMESTAMP/DATETIME columns need a full 'YYYY-MM-DD HH:MM:SS' per the backend's own
+  // documented contract (it sends whatever string we give it straight into SQL, no
+  // conversion) — plain DATE columns must stay date-only, or it's a DB error the other way.
+  const selectedDataType = selectedColumnMeta?.data_type || '';
+  const dateGranularity = /timestamp|datetime/i.test(selectedDataType)
+    ? 'datetime'
+    : /^time$/i.test(selectedDataType.trim())
+      ? 'time'
+      : 'date';
+
+  // One Custom-mode endpoint (From or To) — either a fixed date/datetime, or pinned to `now`
+  // (resolved fresh at query time, see resolveTimeRangeValue's custom branch). `side` is
+  // 'from' or 'to'.
+  const renderCustomEndpoint = (side, label) => {
+    const endpoint = selected.value?.[side];
+    const isNow = endpoint && typeof endpoint === 'object' && endpoint.type === 'now';
+    const fixedValue = isNow ? '' : (endpoint || '');
+    return (
+      <div>
+        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</label>
+        <div className="flex gap-2">
+          <select
+            value={isNow ? 'now' : 'fixed'}
+            onChange={(e) => updateSelected({
+              value: { ...selected.value, mode: 'custom', [side]: e.target.value === 'now' ? { type: 'now' } : '' },
+            })}
+            className="border border-slate-200 rounded-lg px-2 py-2 text-sm"
+          >
+            <option value="fixed">
+              {dateGranularity === 'datetime' ? 'Fixed date/time' : dateGranularity === 'time' ? 'Fixed time' : 'Fixed date'}
+            </option>
+            <option value="now">Now</option>
+          </select>
+          {!isNow && (
+            <input
+              type={dateGranularity === 'datetime' ? 'datetime-local' : dateGranularity === 'time' ? 'time' : 'date'}
+              step={dateGranularity === 'time' ? 1 : undefined}
+              value={dateGranularity === 'datetime' ? toDateTimeLocalInput(fixedValue) : fixedValue}
+              onChange={(e) => updateSelected({
+                value: {
+                  ...selected.value,
+                  mode: 'custom',
+                  [side]: dateGranularity === 'datetime' ? fromDateTimeLocalInput(e.target.value) : e.target.value,
+                },
+              })}
+              className="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm"
+            />
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <FormModal title="Add and edit filters" isOpen={isOpen} setIsOpen={setIsOpen} size="lg">
@@ -264,15 +351,109 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Operator</label>
                   <select
                     value={selected.operator}
-                    onChange={(e) => updateSelected({ operator: e.target.value, value: defaultValueForOperator(e.target.value) })}
+                    onChange={(e) => updateSelected({
+                      operator: e.target.value,
+                      value: (e.target.value === 'BETWEEN' && isDateColumn)
+                        ? defaultValueForRangeMode('custom', dateGranularity)
+                        : defaultValueForOperator(e.target.value),
+                    })}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   >
-                    {OPERATORS.map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
+                    {/* BETWEEN reads as "Date/time range" once a date-typed column is picked
+                        — same operator/value shape underneath, just a clearer label than the
+                        generic "Between (range)" wording for a column where that's obviously
+                        what it means (see the Option A vs. B filter-type discussion). */}
+                    {OPERATORS.map((op) => (
+                      <option key={op.value} value={op.value}>{isDateColumn && op.dateLabel ? op.dateLabel : op.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              {isRangeOperator(selected.operator) ? (
+              {isRangeOperator(selected.operator) && isDateColumn ? (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Range type</label>
+                    <select
+                      value={rangeModeOf(selected.value)}
+                      onChange={(e) => updateSelected({ value: defaultValueForRangeMode(e.target.value, dateGranularity) })}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      {/* Calendar-day/period arithmetic doesn't apply to a plain TIME-only
+                          column (no date to add days to) — only Custom (with an optional
+                          "Now" endpoint for current time-of-day) makes sense there. */}
+                      {dateGranularity !== 'time' && <option value="relative">Last N…</option>}
+                      {dateGranularity !== 'time' && <option value="thisPeriod">This period…</option>}
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+
+                  {rangeModeOf(selected.value) === 'relative' && (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Amount</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={selected.value?.amount ?? ''}
+                          onChange={(e) => updateSelected({ value: { ...selected.value, amount: Number(e.target.value) } })}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Unit</label>
+                        <select
+                          value={selected.value?.unit || 'days'}
+                          onChange={(e) => updateSelected({ value: { ...selected.value, unit: e.target.value } })}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        >
+                          {RELATIVE_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Direction</label>
+                        <select
+                          value={selected.value?.direction || 'before'}
+                          onChange={(e) => updateSelected({ value: { ...selected.value, direction: e.target.value } })}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        >
+                          <option value="before">Before now</option>
+                          <option value="after">After now</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {rangeModeOf(selected.value) === 'thisPeriod' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Period</label>
+                      <select
+                        value={selected.value?.unit || 'month'}
+                        onChange={(e) => updateSelected({ value: { ...selected.value, unit: e.target.value } })}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      >
+                        {THIS_PERIOD_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {rangeModeOf(selected.value) === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {renderCustomEndpoint('from', 'From')}
+                      {renderCustomEndpoint('to', 'To')}
+                    </div>
+                  )}
+
+                  {(() => {
+                    const [from, to] = resolveTimeRangeValue(selected.value);
+                    return (
+                      <div className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                        Actual time range: <span className="font-semibold text-slate-700">{from || '…'} – {to || '…'}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : isRangeOperator(selected.operator) ? (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">From</label>

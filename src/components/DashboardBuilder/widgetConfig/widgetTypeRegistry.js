@@ -390,13 +390,29 @@ export function resolveWidgetStyle(type, style, extraFields = []) {
 // Merged with chartLibrary's own generic styleFields (title/bg/axis/value) in
 // DashboardCanvasEditor.jsx's side panel — same field-descriptor shape WidgetStyleFields
 // already knows how to render, just computed per-instance instead of per-type.
+// Opt-in cross-filter toggles (first cut: BAR/PIE/LINE/AREA only) — clicking a data point on
+// a "source" widget filters every "target" widget sharing the clicked column + datasourceId.
+// Deliberately opt-in per widget rather than automatic: matching is just column-name equality
+// with no declared relationships between datasources, so an automatic "any shared column name"
+// rule risks false-positive filters between widgets that only coincidentally share a column
+// name. See DashboardCanvasEditor.jsx's cross-filter click handler for how these are read.
+const CROSS_FILTER_FIELDS = [
+  { key: 'crossFilterSource', label: 'Cross-filter source', type: 'select', default: 'off', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] },
+  { key: 'crossFilterTarget', label: 'Cross-filter target', type: 'select', default: 'off', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] },
+];
+
 export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   PIE: [
     { key: 'donut', label: 'Style', type: 'select', default: 'pie', options: [{ value: 'pie', label: 'Pie' }, { value: 'donut', label: 'Donut' }] },
     { key: 'showLegend', label: 'Legend', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
+    ...CROSS_FILTER_FIELDS,
   ],
+  // Cross-filter matches by category (x_axis) only — a stacked segment's own series/grouping
+  // dimension (mapping.series) isn't part of the match for this first cut (see
+  // DashboardCanvasEditor.jsx's cross-filter handler's own comment on this simplification).
   STACKED_BAR: [
     { key: 'showLegend', label: 'Legend', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
+    ...CROSS_FILTER_FIELDS,
   ],
   // Single-series chart_types — one accent color, not a palette (see ACCENT_COLOR_FIELD).
   // BAR/AREA/LINE also get VALUE_POSITION_FIELD — the exact real-chart-type analogs of the
@@ -404,11 +420,14 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   // text (see widgetTypeRegistry.js's own styleFields for those). SCATTER/HORIZONTAL_BAR
   // don't — no separate value/total text element to reposition (see TitleValueOverlay.jsx's
   // own comment on the survey behind this scoping).
-  BAR: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD],
-  AREA: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD],
-  LINE: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD],
+  BAR: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
+  AREA: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
+  LINE: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
+  // SCATTER is deliberately excluded from CROSS_FILTER_FIELDS — its mapping (x_axis/y_axis)
+  // is two raw measures (RAW_CHART_TYPES), not a dimension column, so there's no {column,
+  // value} pair a click could ever produce here.
   SCATTER: [ACCENT_COLOR_FIELD],
-  HORIZONTAL_BAR: [ACCENT_COLOR_FIELD],
+  HORIZONTAL_BAR: [ACCENT_COLOR_FIELD, ...CROSS_FILTER_FIELDS],
   // Free-text suffix appended after the value (e.g. "%", "MB", "ms") — mirrors statCard's
   // own `unit` field (widgetTypeRegistry.js's statCard entry) for the mock-widget path.
   KPI_CARD: [
@@ -422,7 +441,11 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   HEAT_MAP: [
     { key: 'colorFrom', label: 'Gradient — low color', type: 'color', default: null },
     { key: 'colorTo', label: 'Gradient — high color', type: 'color', default: '#EC4899' },
+    ...CROSS_FILTER_FIELDS,
   ],
+  FUNNEL: [...CROSS_FILTER_FIELDS],
+  WATERFALL: [...CROSS_FILTER_FIELDS],
+  TREEMAP: [...CROSS_FILTER_FIELDS],
 };
 
 // Which real backend chart_types actually have a visible axis, or an inline value label —

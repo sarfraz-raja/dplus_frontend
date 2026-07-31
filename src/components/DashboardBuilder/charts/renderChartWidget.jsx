@@ -32,9 +32,32 @@ import VirtualizedTable from './VirtualizedTable';
  * these props it doesn't support (e.g. StatCard has no axis, PieChart has no axis, etc.) —
  * safe to pass regardless.
  */
-export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style = {} }) {
+export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style = {}, onPointClick = null }) {
   const xAxis = mapping.x_axis;
   const yAxis = mapping.y_axis;
+  // Cross-filtering — `onPointClick` (from DashboardCanvasEditor's widget-level handler)
+  // needs to know which column the clicked point actually came from. Wired for every
+  // chart_type whose mapping has a real dimension column and whose click event reports back
+  // a category/slice *label* rather than raw x/y measures: BAR, PIE, LINE, AREA,
+  // HORIZONTAL_BAR, FUNNEL, WATERFALL, TREEMAP, HEAT_MAP, STACKED_BAR (matched by category/
+  // x_axis only — a stacked segment's own series/grouping dimension isn't part of the match
+  // for this first cut). That label is always `String(row[xAxis])` (see seriesData() below),
+  // so the column is always `xAxis` regardless of chart type. Deliberately NOT wired for
+  // SCATTER (its mapping is two raw measures, no dimension column at all — RAW_CHART_TYPES),
+  // GAUGE/KPI_CARD (measure-only mapping, nothing to click into), or TABLE (a DOM row/cell
+  // click, not an ECharts event — a separate mechanism, out of scope here).
+  //
+  // A real SQL NULL in the row becomes the 3-character string "null" once it passes through
+  // `String(row[xAxis])` for display — ECharts has no other way to render a missing category.
+  // Sending that string straight back as the filter value produces `column = 'null'` (a string
+  // comparison), which matches zero rows even though the null row genuinely exists — the
+  // backend needs a real `null` here to build an IS NULL check instead. This only
+  // mis-identifies a genuine string value that happens to literally be "null", which is the
+  // same ambiguity the chart's own category label already has (nothing displayed can tell the
+  // two apart either).
+  const handlePointClick = onPointClick
+    ? (label) => onPointClick({ column: xAxis, value: label === 'null' ? null : label })
+    : null;
   const {
     titleColor, titleWeight, titleSize, titleFont, titlePosition, bgColor,
     bgGradient: bgGradientRaw, bgGradientFrom, bgGradientTo, palette, color,
@@ -62,13 +85,13 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
 
   switch (chartType) {
     case 'BAR':
-      return <BarChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} {...styleProps} />;
+      return <BarChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} {...styleProps} />;
     case 'AREA':
-      return <AreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} {...styleProps} />;
+      return <AreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} {...styleProps} />;
     case 'PIE':
-      return <PieChart title={name} data={seriesData()} height={height} donut={donut} showLegend={showLegend} {...styleProps} />;
+      return <PieChart title={name} data={seriesData()} height={height} donut={donut} showLegend={showLegend} onPointClick={handlePointClick} {...styleProps} />;
     case 'LINE':
-      return <LineAreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} {...styleProps} />;
+      return <LineAreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} {...styleProps} />;
     case 'KPI_CARD': {
       const rawValue = rows[0]?.[yAxis];
       const displayValue = typeof rawValue === 'number' ? String(round(rawValue)) : String(rawValue ?? '—');
@@ -104,13 +127,13 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
         />
       );
     case 'HORIZONTAL_BAR':
-      return <HorizontalBarChart title={name} data={seriesData()} height={height} limit={20} {...styleProps} />;
+      return <HorizontalBarChart title={name} data={seriesData()} height={height} limit={20} onPointClick={handlePointClick} {...styleProps} />;
     case 'FUNNEL':
-      return <FunnelChart title={name} data={seriesData()} height={height} {...styleProps} />;
+      return <FunnelChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} {...styleProps} />;
     case 'WATERFALL':
-      return <WaterfallChart title={name} data={seriesData()} height={height} {...styleProps} />;
+      return <WaterfallChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} {...styleProps} />;
     case 'TREEMAP':
-      return <TreemapChart title={name} data={seriesData()} height={height} {...styleProps} />;
+      return <TreemapChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} {...styleProps} />;
     case 'STACKED_BAR': {
       const seriesAxis = mapping.series;
       const categories = [...new Set(rows.map((r) => String(r[xAxis])))];
@@ -122,7 +145,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
           return match ? round(Number(match[yAxis]) || 0) : 0;
         }),
       }));
-      return <StackedBarChart title={name} categories={categories} series={series} height={height} showLegend={showLegend} {...styleProps} />;
+      return <StackedBarChart title={name} categories={categories} series={series} height={height} showLegend={showLegend} onPointClick={handlePointClick} {...styleProps} />;
     }
     case 'TABLE': {
       const cols = mapping.columns || [];
@@ -136,7 +159,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       );
     }
     case 'HEAT_MAP':
-      return <HeatStripChart title={name} unit={unit} data={seriesData()} colorFrom={colorFrom} colorTo={colorTo} height={height} {...styleProps} />;
+      return <HeatStripChart title={name} unit={unit} data={seriesData()} colorFrom={colorFrom} colorTo={colorTo} height={height} onPointClick={handlePointClick} {...styleProps} />;
     default:
       return <div className="text-xs text-slate-500">{rows.length} row(s) returned.</div>;
   }

@@ -1,4 +1,4 @@
-import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ResponsiveGridLayout } from 'react-grid-layout';
 import { X, ChevronLeft, ChevronRight, Copy, Download, Pencil, Palette } from 'lucide-react';
 import 'react-grid-layout/css/styles.css';
@@ -28,6 +28,7 @@ import DASHBOARD_STYLE_FIELDS from '../themes/dashboardStyleFields';
 import FilterPanel from '../filters/FilterPanel';
 import FiltersToggleButton from '../filters/FiltersToggleButton';
 import { sortWidgetsByRecency, withDatasourceOnly } from '../charts/sortWidgets';
+import { resolveFiltersForQuery } from '../utils/resolveTimeRange';
 
 // Widget types whose legend/slice colors come from the shared theme palette (cycling by
 // position) — Phase 8b lets each of these pin a specific color per category name instead.
@@ -128,6 +129,7 @@ function resolveWidgetProps(widget, ctx) {
     axisTextSize: dashboardAxisTextSize, axisTextFont: dashboardAxisTextFont,
     bgGradientFrom: dashboardBgGradientFrom, bgGradientTo: dashboardBgGradientTo,
     valueDecimals: dashboardValueDecimals,
+    widgetId, onPointClick: onWidgetPointClick,
   } = ctx || {};
   // For a real (chartLibrary) widget, its own definition — edited via the Charts tab,
   // stored in dataSource.mapping.style — is the base default for EVERY placement of that
@@ -337,6 +339,14 @@ function resolveWidgetProps(widget, ctx) {
         picked: resolved.picked, chartType: resolved.chartType, mapping: resolved.mapping,
         rows: resolved.rows, loading: resolved.loading, error: resolved.error,
         name: title, height: chartHeight,
+        // Cross-filtering (BAR/PIE/LINE/AREA only, first cut) — only wired when this
+        // placement has explicitly opted in as a source (see CROSS_FILTER_FIELDS in
+        // widgetTypeRegistry.js); `onWidgetPointClick` is a single stable callback from
+        // DashboardCanvasEditor (see its own ref-backed useCallback), never recreated here,
+        // so this doesn't defeat WidgetContent's memoization.
+        onPointClick: extraStyle.crossFilterSource === 'on' && onWidgetPointClick
+          ? (point) => onWidgetPointClick(widgetId, point)
+          : undefined,
         style: {
           titleColor: finalTitleColor, titleWeight: finalTitleWeight, titleSize: finalTitleSize, titleFont: finalTitleFont, titlePosition: finalTitlePosition, bgColor: finalBgColor, bgGradient: finalBgGradient, palette: finalPalette, ...valueText, ...axisText,
           donut: extraStyle.donut === 'donut',
@@ -435,6 +445,7 @@ const WidgetContent = React.memo(function WidgetContent({
   palette, accentColor, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
   bgGradientFrom, bgGradientTo, valueDecimals,
   mockDataCache, datasources, chartLibraryEntry,
+  widgetId, onPointClick,
 }) {
   const Comp = WIDGET_TYPE_REGISTRY[widget.type]?.component;
   if (!Comp) return null;
@@ -445,6 +456,7 @@ const WidgetContent = React.memo(function WidgetContent({
     bgGradientFrom, bgGradientTo, valueDecimals,
     dataCache: mockDataCache, datasources,
     chartLibraryData: widget.dataSource?.widgetId && chartLibraryEntry ? { [widget.dataSource.widgetId]: chartLibraryEntry } : {},
+    widgetId, onPointClick,
   });
   return <Comp {...props} />;
 });
@@ -554,6 +566,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const [chartListActionError, setChartListActionError] = useState(null);
   const [chartLibraryData, setChartLibraryData] = useState({});
   const chartLibraryFetchingRef = useRef(new Set());
+  // Cross-filtering (opt-in, BAR/PIE/LINE/AREA only) — transient, never persisted to
+  // dashboard.global_filters/updateDashboard, unlike dashboardFilters below. Shape:
+  // { sourceWidgetId, column, value, label, targetIds: string[] }. See
+  // handleWidgetPointClickRef's assignment further down for the actual click logic.
+  const [activeCrossFilter, setActiveCrossFilter] = useState(null);
   const [dashboardExportMenuOpen, setDashboardExportMenuOpen] = useState(false);
   // Phase 18 — dashboard-level global_filters, only meaningful when backendId is set.
   const [dashboardFilters, setDashboardFilters] = useState(initialGlobalFilters);
@@ -930,10 +947,22 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     if (!backendId) return;
     let cancelled = false;
     const hasOverride = deepLinkFilters && deepLinkFilters.length > 0;
+    const applyWidgetResults = (widgetResults) => {
+      setChartLibraryData((prev) => {
+        const next = { ...prev };
+        Object.entries(widgetResults).forEach(([widgetId, result]) => {
+          next[widgetId] = result.status === 200
+            ? { rows: result.data?.rows }
+            : { error: result.msg || 'Failed to load' };
+        });
+        return next;
+      });
+    };
     getDashboardData(backendId, hasOverride ? { filters: deepLinkFilters } : {})
       .then(({ dashboard, widgets: widgetResults }) => {
         if (cancelled) return;
-        setDashboardFilters(hasOverride ? deepLinkFilters : (dashboard.global_filters || []));
+        const savedFilters = dashboard.global_filters || [];
+        setDashboardFilters(hasOverride ? deepLinkFilters : savedFilters);
         // `theme` is a proper JSONB column (confirmed with the backend dev — it used to be
         // VARCHAR(64), which hard-crashed with a 500 on save for any real style object past
         // ~1-2 fields; now fixed, round-trips as a real object with no size limit) — the
@@ -943,15 +972,23 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           setDashboardStyle(dashboard.theme);
         }
         setBoundThemeId(dashboard.theme_id || null);
-        setChartLibraryData((prev) => {
-          const next = { ...prev };
-          Object.entries(widgetResults).forEach(([widgetId, result]) => {
-            next[widgetId] = result.status === 200
-              ? { rows: result.data?.rows }
-              : { error: result.msg || 'Failed to load' };
-          });
-          return next;
-        });
+        applyWidgetResults(widgetResults);
+
+        // The backend's "omit filters, auto-apply dashboard.global_filters" fast path (above)
+        // only works for filters it can interpret as-is — a saved relative/thisPeriod time
+        // range (e.g. "Last 7 days") is a spec that must be resolved to concrete dates by us,
+        // not something the backend can evaluate on its own. So when any saved filter needs
+        // that resolution, immediately re-fetch once with the resolved dates and swap the
+        // corrected widget data in — the common case (no relative filters) never pays this
+        // second round trip.
+        const needsResolution = !hasOverride && savedFilters.some(
+          (f) => f.operator === 'BETWEEN' && f.value && typeof f.value === 'object' && !Array.isArray(f.value) && f.value.mode && f.value.mode !== 'custom',
+        );
+        if (needsResolution) {
+          getDashboardData(backendId, { filters: resolveFiltersForQuery(savedFilters) })
+            .then(({ widgets: resolvedWidgetResults }) => { if (!cancelled) applyWidgetResults(resolvedWidgetResults); })
+            .catch(() => {});
+        }
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -1026,7 +1063,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     setDashboardFilters(rows);
     if (!backendId) return;
     const [dataResult] = await Promise.all([
-      getDashboardData(backendId, { filters: rows }),
+      // Sends the resolved concrete dates for the query, but persists `rows` (the raw
+      // relative/thisPeriod spec, if any) below — never the resolved dates — so "Last 7 days"
+      // stays live on every future load instead of freezing to today's resolved window.
+      getDashboardData(backendId, { filters: resolveFiltersForQuery(rows) }),
       updateDashboard(backendId, { global_filters: rows }),
     ]);
     setChartLibraryData((prev) => {
@@ -1060,6 +1100,83 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       });
       return next;
     });
+  };
+
+  // Cross-filtering — ephemeral, scoped refetch for the widgets a click actually affects
+  // (never dashboard.global_filters/updateDashboard, unlike persistAndApplyFilters above).
+  // `dataResult.widgets` is keyed by backend chart widgetId, same key space chartLibraryData
+  // itself uses (see WidgetContent's chartLibraryData prop) — only the entries for
+  // `targetIds`'s own dataSource.widgetId get merged in, every other widget's cached data is
+  // left untouched, unlike persistAndApplyFilters/clearFilterValues which merge everything.
+  const applyCrossFilterTo = async (targetIds, crossFilterRow) => {
+    if (!backendId || targetIds.length === 0) return;
+    const filters = crossFilterRow ? [...dashboardFilters, crossFilterRow] : dashboardFilters;
+    const dataResult = await getDashboardData(backendId, { filters: resolveFiltersForQuery(filters) });
+    setChartLibraryData((prev) => {
+      const next = { ...prev };
+      targetIds.forEach((id) => {
+        const backendWidgetId = widgets[id]?.dataSource?.widgetId;
+        const result = backendWidgetId ? dataResult.widgets[backendWidgetId] : undefined;
+        if (result) {
+          next[backendWidgetId] = result.status === 200
+            ? { rows: result.data?.rows }
+            : { error: result.msg || 'Failed to load' };
+        }
+      });
+      return next;
+    });
+  };
+
+  // Kept in a ref, reassigned every render, so the single callback actually handed to every
+  // WidgetContent (stableOnPointClick below) never changes identity — a fresh function prop
+  // there would defeat WidgetContent's React.memo (the same perf issue already fixed once
+  // this session for Table widgets) — while this still always reads the latest
+  // widgets/dashboardFilters/activeCrossFilter via closure.
+  const handleWidgetPointClickRef = useRef(() => {});
+  handleWidgetPointClickRef.current = async (sourceWidgetId, { column, value }) => {
+    const sourceWidget = widgets[sourceWidgetId];
+    if (!sourceWidget?.dataSource) return;
+    const clickId = `${sourceWidgetId}:${column}:${value}`;
+    // Clicking the same point again clears the cross-filter — matches Power BI/Superset's
+    // click-to-toggle convention.
+    if (activeCrossFilter?.clickId === clickId) {
+      await applyCrossFilterTo(activeCrossFilter.targetIds, null);
+      setActiveCrossFilter(null);
+      return;
+    }
+    // Match strictness (confirmed with user): column name AND same datasourceId — avoids
+    // matching two widgets that only coincidentally share a column name across different
+    // datasources.
+    const sourceDatasourceId = sourceWidget.dataSource.datasourceId;
+    // `crossFilterTarget` may have been set at the chart's own base default (mapping.style,
+    // via ChartLibrary.jsx's own Style tab) rather than this specific placement's own
+    // widget.style override — resolving it via the same baseStyle/resolveWidgetStyle cascade
+    // resolveWidgetProps' 'chartLibrary' case already uses for the source-side gating, so
+    // both sides of the match see the same value regardless of which level it was set at.
+    const isCrossFilterTarget = (w) => {
+      if (w.dataSource?.type !== 'chartLibrary') return false;
+      const baseStyle = { ...(w.dataSource.mapping?.style || {}), ...(w.style || {}) };
+      const extraFields = CHART_TYPE_EXTRA_STYLE_FIELDS[w.dataSource.chartType] || [];
+      return resolveWidgetStyle(w.type, baseStyle, extraFields).crossFilterTarget === 'on';
+    };
+    const targetIds = Object.entries(widgets)
+      .filter(([id, w]) => id !== sourceWidgetId
+        && isCrossFilterTarget(w)
+        && w.dataSource?.datasourceId === sourceDatasourceId
+        && Object.values(w.dataSource?.mapping || {}).includes(column))
+      .map(([id]) => id);
+    if (targetIds.length === 0) return;
+    await applyCrossFilterTo(targetIds, { column, operator: '=', value });
+    setActiveCrossFilter({ clickId, sourceWidgetId, column, value, label: String(value), targetIds });
+  };
+  // The actual prop passed down — stable across every render (empty dep array), so it never
+  // breaks WidgetContent's memoization; always delegates to the freshest ref above.
+  const stableOnPointClick = useCallback((widgetId, point) => handleWidgetPointClickRef.current(widgetId, point), []);
+  // Explicit clear affordance (the clear-chip) — same effect as re-clicking the same point.
+  const clearCrossFilter = () => {
+    if (!activeCrossFilter) return;
+    applyCrossFilterTo(activeCrossFilter.targetIds, null);
+    setActiveCrossFilter(null);
   };
 
   // Phase 19a — persists the dashboard-level style defaults (bgColor/accentColor/titleColor/
@@ -1134,10 +1251,14 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       bgGradientTo: effectiveDashboardStyle.bgGradientTo,
       dataCache: mockDataCacheRef.current, datasources, chartLibraryData,
     };
+    // Visual indicator (Power BI-style): this widget is currently narrowed by the active
+    // cross-filter's own click, applied one level above the chart components (not inside
+    // BarChart.jsx etc.) so those 4 components stay otherwise unchanged.
+    const isCrossFilterTarget = !!activeCrossFilter?.targetIds.includes(l.i);
     return (
       <div
         key={l.i}
-        className={`dbe-widget dbe-widget-${w.type}${selectedId === l.i ? ' selected' : ''}`}
+        className={`dbe-widget dbe-widget-${w.type}${selectedId === l.i ? ' selected' : ''}${isCrossFilterTarget ? ' dbe-cross-filtered' : ''}`}
         // Clicking anywhere on a widget selects it and swaps the side panel to its
         // fields — not just its title bar, which was too small a target to notice.
         onClick={editable && showChrome ? () => setSelectedId(l.i) : undefined}
@@ -1234,6 +1355,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             mockDataCache={mockDataCacheRef.current}
             datasources={datasources}
             chartLibraryEntry={chartLibraryEntry}
+            widgetId={l.i}
+            onPointClick={stableOnPointClick}
           />
         </div>
       </div>
@@ -1324,6 +1447,14 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
            transparent ancestor) can't accidentally get this background peeking through
            behind them. */
           [data-theme="dark"] .dbe-widget { background:#22273C; border-color:rgba(255,255,255,0.1); }
+        /* Cross-filtering active-target indicator (Power BI-style) — a colored left edge on
+           whichever widget(s) the current click narrowed, so it's clear at a glance which
+           charts are affected. Accent color, not the app's brand orange, to read as
+           "filtered" rather than "selected" (selectedId already uses its own outline). */
+        .dbe-cross-filtered { box-shadow: inset 3px 0 0 #6366F1; }
+        .dbe-cross-filter-chip { display:inline-flex; align-items:center; gap:8px; width:fit-content; margin-bottom:8px; padding:4px 10px; border-radius:999px; font-size:12px; background:rgba(99,102,241,0.12); color:#4F46E5; border:1px solid rgba(99,102,241,0.3); }
+        [data-theme="dark"] .dbe-cross-filter-chip { background:rgba(99,102,241,0.18); color:#A5B4FC; border-color:rgba(99,102,241,0.4); }
+        .dbe-cross-filter-chip button { background:none; border:none; cursor:pointer; color:inherit; font-size:12px; line-height:1; padding:0; }
         /* react-grid-layout's default resize-handle corner marks are a near-black
            rgba(0,0,0,0.4) — invisible against this editor's dark widget cards.
            Uses the [data-theme] attribute (not :where(.dark), which ties in specificity
@@ -1779,6 +1910,17 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               (toolbar above) moved it inline next to FiltersToggleButton. */}
           {!editable && backendId && showFiltersInline && (
             <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} />
+          )}
+          {/* Cross-filter clear chip — shown in both editable and read-only/embedded views,
+              since clicking a chart to cross-filter is a viewer action, not an edit-mode-only
+              one (unlike the Filters strip above, which only ever shows for real backend
+              dashboards). Placed once here rather than duplicated at both FilterPanel render
+              sites above/below, since it isn't tied to either. */}
+          {activeCrossFilter && (
+            <div className="dbe-cross-filter-chip">
+              Filtering by {activeCrossFilter.column} = {activeCrossFilter.label}
+              <button type="button" onClick={clearCrossFilter} aria-label="Clear cross-filter">✕</button>
+            </div>
           )}
           <div
             className="dbe-canvas-wrap"

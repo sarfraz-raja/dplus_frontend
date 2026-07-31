@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getDatasourceDetail, sampleDatasource } from '../../../store/actions/dashboardBuilder-actions';
 import MultiSelectFilterInput from './MultiSelectFilterInput';
+import { resolveTimeRangeValue, toDateTimeLocalInput, fromDateTimeLocalInput } from '../utils/resolveTimeRange';
 
 // `filters` (dashboard.global_filters, optionally merged with deep-link overrides from the
 // parent — see EmbeddedDashboard.jsx's B6 param parsing) only carries {column,operator,value}
@@ -12,6 +13,33 @@ function labelFor(f) {
 
 function isDateRange(f) {
   return f.operator === 'BETWEEN';
+}
+
+function isNowEndpoint(endpoint) {
+  return !!(endpoint && typeof endpoint === 'object' && endpoint.type === 'now');
+}
+
+// A relative/thisPeriod spec, or a Custom spec with either endpoint pinned to "Now" (see
+// FilterEditorModal.jsx's Range type), has no plain fixed date this strip can safely offer as
+// an editable input — it's resolved fresh at query time. Editing that shape only happens in
+// "Add and edit filters"; this strip just shows the currently-resolved window as read-only
+// info instead of date inputs.
+function isLiveTimeRange(f) {
+  if (!isDateRange(f) || !f.value || typeof f.value !== 'object' || Array.isArray(f.value)) return false;
+  if (f.value.mode && f.value.mode !== 'custom') return true;
+  return isNowEndpoint(f.value.from) || isNowEndpoint(f.value.to);
+}
+
+// A plain-editable Custom BETWEEN's value is `{mode:'custom', from, to, granularity}` (or the
+// legacy bare `[from, to]` array) — this normalizes either into a `[from, to]` pair for
+// display, and `toEditablePatch` reconstructs whichever shape the filter already uses on edit.
+function editableRangeOf(value) {
+  if (Array.isArray(value)) return value;
+  return [value?.from || '', value?.to || ''];
+}
+function withEditableRange(value, from, to) {
+  if (Array.isArray(value)) return [from, to];
+  return { ...value, mode: 'custom', from, to };
 }
 
 function isMultiSelect(f) {
@@ -117,14 +145,27 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
     });
   }, [localValues, datasourceOptions]);
 
-  const inputTypeFor = (column) => (/date|time|timestamp/i.test(typeByColumn[column] || '') ? 'date' : 'number');
+  // Timestamp/datetime columns need the full datetime-local editor here too, or editing a
+  // fixed Custom endpoint through this strip would silently truncate its time-of-day — same
+  // granularity split FilterEditorModal.jsx's dateGranularity uses.
+  const inputTypeFor = (column) => {
+    const dataType = typeByColumn[column] || '';
+    if (/timestamp|datetime/i.test(dataType)) return 'datetime-local';
+    if (/^time$/i.test(dataType.trim())) return 'time';
+    if (/date/i.test(dataType)) return 'date';
+    return 'number';
+  };
 
   if (localValues.length === 0) return null;
 
   // Apply lights up only when there's an actual unapplied edit (matches the reference —
   // Apply reads as inactive/greyed once localValues matches what's already applied). Clear
   // all lights up only when at least one filter currently holds a real value to clear.
-  const hasValue = (f) => (Array.isArray(f.value) ? f.value.length > 0 : !!f.value);
+  const hasValue = (f) => {
+    if (Array.isArray(f.value)) return f.value.length > 0;
+    if (isDateRange(f) && f.value && typeof f.value === 'object') return isLiveTimeRange(f) || !!f.value.from || !!f.value.to;
+    return !!f.value;
+  };
   const isDirty = JSON.stringify(localValues) !== JSON.stringify(filters);
   const hasAnyValue = localValues.some(hasValue);
 
@@ -150,7 +191,10 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
   const handleClearAll = async () => {
     const cleared = localValues.map((f) => ({
       ...f,
-      value: isDateRange(f) ? ['', ''] : isMultiSelect(f) ? [] : '',
+      // A relative/thisPeriod/now-anchored filter has no free-form value to blank — it's
+      // always "live" — so "Clear all" leaves it untouched rather than collapsing it into an
+      // empty custom range.
+      value: isLiveTimeRange(f) ? f.value : isDateRange(f) ? withEditableRange(f.value, '', '') : isMultiSelect(f) ? [] : '',
     }));
     setLocalValues(cleared);
     setApplying(true);
@@ -171,23 +215,39 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
           <label className="text-[0.6875rem] font-semibold text-slate-600 whitespace-nowrap">
             {labelFor(f)}
           </label>
-          {isDateRange(f) ? (
-            <div className="flex items-center gap-1">
-              <input
-                type={inputTypeFor(f.column)}
-                value={f.value?.[0] || ''}
-                onChange={(e) => updateValue(f.column, [e.target.value, f.value?.[1] || ''])}
-                className="border border-slate-200 rounded-md px-1.5 py-1 text-xs bg-white"
-              />
-              <span className="text-xs text-slate-400">–</span>
-              <input
-                type={inputTypeFor(f.column)}
-                value={f.value?.[1] || ''}
-                onChange={(e) => updateValue(f.column, [f.value?.[0] || '', e.target.value])}
-                className="border border-slate-200 rounded-md px-1.5 py-1 text-xs bg-white"
-              />
-            </div>
-          ) : isComparison(f) ? (
+          {isLiveTimeRange(f) ? (() => {
+            const [from, to] = resolveTimeRangeValue(f.value);
+            return (
+              <span className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
+                {from} – {to} <span className="text-slate-400">(live, edit in Filters)</span>
+              </span>
+            );
+          })() : isDateRange(f) ? (() => {
+            const [from, to] = editableRangeOf(f.value);
+            const rangeType = inputTypeFor(f.column);
+            const isDateTime = rangeType === 'datetime-local';
+            const toInput = (v) => (isDateTime ? toDateTimeLocalInput(v) : v);
+            const fromInput = (v) => (isDateTime ? fromDateTimeLocalInput(v) : v);
+            return (
+              <div className="flex items-center gap-1">
+                <input
+                  type={rangeType}
+                  step={rangeType === 'time' ? 1 : undefined}
+                  value={toInput(from)}
+                  onChange={(e) => updateValue(f.column, withEditableRange(f.value, fromInput(e.target.value), to))}
+                  className="border border-slate-200 rounded-md px-1.5 py-1 text-xs bg-white"
+                />
+                <span className="text-xs text-slate-400">–</span>
+                <input
+                  type={rangeType}
+                  step={rangeType === 'time' ? 1 : undefined}
+                  value={toInput(to)}
+                  onChange={(e) => updateValue(f.column, withEditableRange(f.value, from, fromInput(e.target.value)))}
+                  className="border border-slate-200 rounded-md px-1.5 py-1 text-xs bg-white"
+                />
+              </div>
+            );
+          })() : isComparison(f) ? (
             <input
               type={inputTypeFor(f.column)}
               value={f.value || ''}

@@ -16,7 +16,7 @@ export default function LineAreaChart({
   title = '', unit = '', data = [], color = '#378ADD', height = 90, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
-  titlePosition = 'top-left', valuePosition = 'top-right',
+  titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -36,6 +36,7 @@ export default function LineAreaChart({
     },
     yAxis: {
       type: 'value',
+      scale: true,
       splitNumber: 2,
       axisLabel: {
         fontSize: axisTextSize || 8,
@@ -54,13 +55,19 @@ export default function LineAreaChart({
         itemStyle: { color, borderColor: '#ffffff', borderWidth: 1.5 },
         lineStyle: { width: 2, color },
         areaStyle: { color, opacity: 0.1 },
+        emphasis: { disabled: true },
+        blur: {
+          lineStyle: { opacity: 1 },
+          areaStyle: { opacity: 0.1 },
+          itemStyle: { opacity: 1 },
+        },
       },
     ],
   };
 
   return (
     <div className="kpi-spark-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
+      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={onPointClick ? { click: (p) => onPointClick(p.name) } : undefined} />
       <TitleValueOverlay
         title={title}
         titleClassName="kpi-spark-title font-bold text-[0.6875rem]"
