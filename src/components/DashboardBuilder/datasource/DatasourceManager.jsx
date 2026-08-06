@@ -1,7 +1,7 @@
 import React, { useEffect, useImperativeHandle, useState } from 'react';
-import { Database, Play, Trash2, Plus, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Database, Play, Trash2, Plus, RefreshCw, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import FormModal from '../../FormModal';
-import { previewDatasource, registerDatasource, listDatasources, getDatasourceDetail, deleteDatasource, refreshDatasourceSchema, updateDatasourceColumn, sampleDatasource } from '../../../store/actions/dashboardBuilder-actions';
+import { previewDatasource, registerDatasource, listDatasources, getDatasourceDetail, deleteDatasource, refreshDatasourceSchema, updateDatasourceColumn, sampleDatasource, listWidgets } from '../../../store/actions/dashboardBuilder-actions';
 import { notifyDatasourcesChanged } from '../../../store/actions/datasourceEvents';
 
 // The API doc's example column JSON doesn't show an explicit id field (only column_name,
@@ -49,6 +49,14 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  // Blast-radius check for the delete confirm below — which charts (by name) are built on
+  // this datasource, fetched fresh each time the confirm step opens (no backend field for
+  // this, so it's computed client-side from the one existing listWidgets() summary call,
+  // filtered by datasource_id — cheap, unlike an equivalent "used in N dashboards" check for
+  // a widget would be, which has no such single cheap summary call to filter). Best-effort:
+  // a failure here just shows nothing extra, never blocks the delete itself.
+  const [usageWidgets, setUsageWidgets] = useState(null); // null = not checked yet; [] = checked, none found
+  const [usageLoading, setUsageLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
   const [refreshMsg, setRefreshMsg] = useState(null);
@@ -350,31 +358,62 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
             {editingId && !confirmingDelete && (
               <button
                 type="button"
-                onClick={() => setConfirmingDelete(true)}
+                onClick={() => {
+                  setConfirmingDelete(true);
+                  setUsageLoading(true);
+                  setUsageWidgets(null);
+                  listWidgets()
+                    .then((all) => setUsageWidgets(all.filter((w) => w.datasource_id === editingId)))
+                    .catch(() => setUsageWidgets([]))
+                    .finally(() => setUsageLoading(false));
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-500 border border-red-200 bg-red-50 hover:bg-red-100"
               >
                 <Trash2 size={12} /> Delete
               </button>
             )}
             {editingId && confirmingDelete && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-600">Delete this datasource?</span>
-                <button
-                  type="button"
-                  onClick={remove}
-                  disabled={deleting}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 disabled:opacity-50"
-                >
-                  {deleting ? 'Deleting…' : 'Yes, delete'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  disabled={deleting}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200"
-                >
-                  Cancel
-                </button>
+              <div className="flex flex-col gap-1.5">
+                {usageLoading && <span className="text-xs text-slate-400">Checking which charts use this datasource…</span>}
+                {!usageLoading && usageWidgets?.length > 0 && (
+                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 max-w-md">
+                    <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div className="flex flex-col gap-1.5 min-w-0">
+                      <div className="text-xs font-semibold text-amber-800">
+                        Used by {usageWidgets.length} chart{usageWidgets.length === 1 ? '' : 's'} — deleting this datasource will break {usageWidgets.length === 1 ? 'it' : 'them'} on every dashboard {usageWidgets.length === 1 ? "it's" : "they're"} placed on.
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {usageWidgets.slice(0, 8).map((w) => (
+                          <span key={w.id} className="text-[11px] font-medium bg-white border border-amber-200 rounded-full px-2 py-0.5 text-amber-700">
+                            {w.name}
+                          </span>
+                        ))}
+                        {usageWidgets.length > 8 && (
+                          <span className="text-[11px] text-amber-600 px-1 py-0.5">+{usageWidgets.length - 8} more</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600">Delete this datasource?</span>
+                  <button
+                    type="button"
+                    onClick={remove}
+                    disabled={deleting}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting…' : 'Yes, delete'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
             {!editingId && (

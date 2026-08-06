@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ResponsiveGridLayout } from 'react-grid-layout';
-import { X, ChevronLeft, ChevronRight, Copy, Download, Pencil, Palette } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, Pencil, Palette } from 'lucide-react';
 import 'react-grid-layout/css/styles.css';
 import Button from '../../Button';
 import ConfirmModal from '../../ConfirmModal';
@@ -17,10 +17,12 @@ import { loadDatasources } from '../datasource/dashboardDatasources';
 import { aggregateDatasourceRows } from '../legacy/mock/dbDataSource';
 import {
   listWidgets as listChartLibraryWidgets, getWidgetDetail as getChartLibraryWidgetDetail, getStandaloneWidgetData,
-  deleteWidget as deleteChartLibraryWidget, createWidget as createChartLibraryWidget,
-  getDatasourceDetail as getChartDatasourceDetail, getDashboardData, updateDashboard, listDatasources as listBackendDatasources,
+  deleteWidget as deleteChartLibraryWidget,
+  duplicateWidget as duplicateChartLibraryWidgetDef,
+  getDatasourceDetail as getChartDatasourceDetail, getDashboardData, getWidgetData, updateDashboard, listDatasources as listBackendDatasources,
   listThemes as listBackendThemes, getThemeDetail,
 } from '../../../store/actions/dashboardBuilder-actions';
+import { subscribeWidgetsChanged, notifyWidgetsChanged } from '../../../store/actions/widgetEvents';
 import CHART_TYPE_META, { MOCK_TYPE_TO_CHART_TYPE } from '../charts/chartTypeMeta';
 import ChartListItem from '../charts/ChartListItem';
 import WidgetCreateWizard from '../charts/WidgetCreateWizard';
@@ -28,7 +30,7 @@ import DASHBOARD_STYLE_FIELDS from '../themes/dashboardStyleFields';
 import FilterPanel from '../filters/FilterPanel';
 import FiltersToggleButton from '../filters/FiltersToggleButton';
 import { sortWidgetsByRecency, withDatasourceOnly } from '../charts/sortWidgets';
-import { resolveFiltersForQuery } from '../utils/resolveTimeRange';
+import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
 
 // Widget types whose legend/slice colors come from the shared theme palette (cycling by
 // position) — Phase 8b lets each of these pin a specific color per category name instead.
@@ -129,7 +131,7 @@ function resolveWidgetProps(widget, ctx) {
     axisTextSize: dashboardAxisTextSize, axisTextFont: dashboardAxisTextFont,
     bgGradientFrom: dashboardBgGradientFrom, bgGradientTo: dashboardBgGradientTo,
     valueDecimals: dashboardValueDecimals,
-    widgetId, onPointClick: onWidgetPointClick,
+    widgetId, onPointClick: onWidgetPointClick, onDrillUp: onWidgetDrillUp,
   } = ctx || {};
   // For a real (chartLibrary) widget, its own definition — edited via the Charts tab,
   // stored in dataSource.mapping.style — is the base default for EVERY placement of that
@@ -158,6 +160,9 @@ function resolveWidgetProps(widget, ctx) {
       chartType: dataSource.chartType,
       mapping: dataSource.mapping,
       rows: entry?.rows,
+      drillDown: entry?.drillDown,
+      drilling: !!entry?.drilling,
+      comparison: entry?.comparison,
       loading: !!dataSource.widgetId && !entry,
       error: entry?.error,
     };
@@ -339,12 +344,28 @@ function resolveWidgetProps(widget, ctx) {
         picked: resolved.picked, chartType: resolved.chartType, mapping: resolved.mapping,
         rows: resolved.rows, loading: resolved.loading, error: resolved.error,
         name: title, height: chartHeight,
+        // The backend's own drill_down.{enabled,has_next_level,hierarchy,path,level} for this
+        // widget's current (possibly already-drilled) response — drives the breadcrumb and
+        // whether a click drills vs. cross-filters (see handleWidgetPointClickRef's own check
+        // in DashboardCanvasEditor, which reads this same entry).
+        drillDown: resolved.drillDown,
+        drilling: resolved.drilling,
+        // KPI_CARD's "Compare to" — { delta, deltaPercent, deltaUp } | null (fetch failed) |
+        // undefined (no compare_to set, or still loading) — see the comparisonData fetch
+        // effect above. renderChartWidget.jsx's KPI_CARD case turns this into StatCard's
+        // existing delta/deltaUp props, formatted per mapping.style.delta_format.
+        comparison: resolved.comparison,
+        onDrillUp: resolved.drillDown?.path?.length && onWidgetDrillUp
+          ? (level) => onWidgetDrillUp(dataSource.widgetId, level)
+          : undefined,
         // Cross-filtering (BAR/PIE/LINE/AREA only, first cut) — only wired when this
         // placement has explicitly opted in as a source (see CROSS_FILTER_FIELDS in
-        // widgetTypeRegistry.js); `onWidgetPointClick` is a single stable callback from
-        // DashboardCanvasEditor (see its own ref-backed useCallback), never recreated here,
-        // so this doesn't defeat WidgetContent's memoization.
-        onPointClick: extraStyle.crossFilterSource === 'on' && onWidgetPointClick
+        // widgetTypeRegistry.js), OR when the backend says this widget can drill further —
+        // a click only ever means one of the two, never both (see handleWidgetPointClickRef,
+        // which checks drill_down first). `onWidgetPointClick` is a single stable callback
+        // from DashboardCanvasEditor (see its own ref-backed useCallback), never recreated
+        // here, so this doesn't defeat WidgetContent's memoization.
+        onPointClick: (extraStyle.crossFilterSource === 'on' || resolved.drillDown?.enabled) && onWidgetPointClick
           ? (point) => onWidgetPointClick(widgetId, point)
           : undefined,
         style: {
@@ -444,19 +465,25 @@ const WidgetContent = React.memo(function WidgetContent({
   titleColor, bgColor, titleWeight, titleSize, titleFont, titlePosition,
   palette, accentColor, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
   bgGradientFrom, bgGradientTo, valueDecimals,
-  mockDataCache, datasources, chartLibraryEntry,
-  widgetId, onPointClick,
+  mockDataCache, datasources, chartLibraryEntry, comparisonEntry,
+  widgetId, onPointClick, onDrillUp,
 }) {
   const Comp = WIDGET_TYPE_REGISTRY[widget.type]?.component;
   if (!Comp) return null;
+  // `comparisonEntry` (KPI_CARD's "Compare to") merged onto chartLibraryEntry here, inside
+  // WidgetContent's own render — not at the call site below — so React.memo still compares
+  // the two incoming prop references (chartLibraryEntry/comparisonEntry) rather than a fresh
+  // object built every render, same reasoning as chartLibraryEntry's own comment above.
   const { __resolved, ...props } = resolveWidgetProps(widget, {
     kpiLiveData, pixelHeight, isDark,
     titleColor, bgColor, titleWeight, titleSize, titleFont, titlePosition,
     palette, accentColor, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
     bgGradientFrom, bgGradientTo, valueDecimals,
     dataCache: mockDataCache, datasources,
-    chartLibraryData: widget.dataSource?.widgetId && chartLibraryEntry ? { [widget.dataSource.widgetId]: chartLibraryEntry } : {},
-    widgetId, onPointClick,
+    chartLibraryData: widget.dataSource?.widgetId && chartLibraryEntry
+      ? { [widget.dataSource.widgetId]: { ...chartLibraryEntry, comparison: comparisonEntry } }
+      : {},
+    widgetId, onPointClick, onDrillUp,
   });
   return <Comp {...props} />;
 });
@@ -566,6 +593,20 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const [chartListActionError, setChartListActionError] = useState(null);
   const [chartLibraryData, setChartLibraryData] = useState({});
   const chartLibraryFetchingRef = useRef(new Set());
+  // KPI_CARD's "Compare to" (see resolveWidgetProps' 'chartLibrary' branch, and the fetch
+  // effect below) — keyed by backend widgetId: { delta, deltaPercent, deltaUp }. Kept
+  // separate from chartLibraryData since it's a second, independent query (only for KPI_CARD
+  // widgets that opt in via mapping.compare_to), not part of the widget's own normal rows.
+  const [comparisonData, setComparisonData] = useState({});
+  // Map of widgetId -> the cacheKey (widgetId+compare_to+resolved filters) already fetched or
+  // in flight for it — checked BEFORE fetching, and set as soon as a fetch starts (not just
+  // while in-flight), so a stale value doesn't get silently kept once its cacheKey has moved
+  // on, but a cacheKey that's already been fetched doesn't refetch on every subsequent render.
+  const comparisonKeyRef = useRef(new Map());
+  // KPI_CARD's own per-card date filter (mapping.date_filter_column/range) — same
+  // cacheKey-in-a-ref dedupe pattern as comparisonKeyRef above, tracking which resolved
+  // filter set this widget's own base rows were last fetched under.
+  const kpiDateFilterKeyRef = useRef(new Map());
   // Cross-filtering (opt-in, BAR/PIE/LINE/AREA only) — transient, never persisted to
   // dashboard.global_filters/updateDashboard, unlike dashboardFilters below. Shape:
   // { sourceWidgetId, column, value, label, targetIds: string[] }. See
@@ -827,14 +868,44 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // `widgets[id]`) onto a fresh id, placed via the same best-fit slot finder addWidget
   // uses for click-to-add, at the source widget's own size (not the type's defaultSize —
   // a duplicate should match what you actually resized it to, not reset).
-  const duplicateWidget = (id) => {
+  //
+  // For a chartLibrary-backed widget, the naive clone below (just deep-copying `widgets[id]`)
+  // would leave the new tile's dataSource.widgetId pointing at the SAME shared chart
+  // definition as the original — editing either tile's mapping/style would then edit both
+  // (and every other dashboard that chart is placed on too), since chart edits always write
+  // through updateWidget(widgetId, ...) to that one shared record. So this creates a real,
+  // independent copy of the underlying widget first (same duplicateWidget backend action the
+  // Charts-tab list and this dashboard's own "Your Charts" list already use — see its doc
+  // comment in dashboardBuilder-actions.js), and points the new tile at THAT id instead.
+  const duplicateWidget = async (id) => {
     const src = widgets[id];
     const srcLayout = layout.find((l) => l.i === id);
     if (!src || !srcLayout) return;
+    const clone = JSON.parse(JSON.stringify(src));
+    if (clone.dataSource?.type === 'chartLibrary' && clone.dataSource.widgetId) {
+      try {
+        const copy = await duplicateChartLibraryWidgetDef(clone.dataSource.widgetId);
+        clone.dataSource.widgetId = copy.id;
+        // This canvas placement's own `title` (shown on the tile header and in the Selected
+        // Widget panel) is a separate field from the chart definition's own `name` — seeded
+        // once from it when a chart is first placed (see addWidget), then independently
+        // editable per-placement. The deep-clone above copied the OLD title verbatim, so
+        // without this it'd keep reading e.g. "User Growth Trends" while the chart editor
+        // (bound to the new copy's own `name`) shows "User Growth Trends (Copy)" — exactly
+        // the mismatch reported. Syncing it from `copy.name` keeps both in agreement right
+        // after duplicating; the user can still retitle the placement afterward as usual.
+        clone.title = copy.name;
+        refreshChartLibraryList();
+        notifyWidgetsChanged();
+      } catch (err) {
+        setChartListActionError(err.message);
+        return;
+      }
+    }
     const newId = nextId();
     const { x, y } = findFreeSlot(layout, srcLayout.w, srcLayout.h, GRID_CONFIG.cols);
     setLayout((prev) => [...prev, { i: newId, x, y, w: srcLayout.w, h: srcLayout.h }]);
-    setWidgets((prev) => ({ ...prev, [newId]: JSON.parse(JSON.stringify(src)) }));
+    setWidgets((prev) => ({ ...prev, [newId]: clone }));
     setSelectedId(newId);
   };
 
@@ -870,6 +941,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
 
   const refreshChartLibraryList = () => listChartLibraryWidgets().then(setChartLibraryList).catch(() => {});
 
+  // ChartLibrary.jsx's own Charts tab keeps a separate list cache, live at the same time this
+  // one is (it's always mounted, just hidden via CSS while a dashboard is open — see
+  // DashboardBuilder.jsx) — without this, a widget created/edited/deleted/duplicated from
+  // THERE never showed up in this "Your Charts" panel until it was manually reopened.
+  useEffect(() => {
+    if (!editable) return undefined;
+    return subscribeWidgetsChanged(() => { refreshChartLibraryList(); });
+  }, [editable]);
+
   // Delete/duplicate straight from the "Your Charts" list — same actions ChartLibrary.jsx's
   // own Charts tab list offers, so a chart doesn't have to be added to this dashboard (or
   // opened in the Charts tab) just to remove or copy it from the shared library.
@@ -880,22 +960,21 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       try {
         await deleteChartLibraryWidget(widget.id);
         refreshChartLibraryList();
+        notifyWidgetsChanged();
       } catch (err) {
         setChartListActionError(err.message);
       }
     },
   });
 
+  // Shared with ChartLibrary.jsx's own Charts-tab list and this dashboard's own canvas-tile
+  // Duplicate button (duplicateWidget below) — see duplicateWidget's doc comment in
+  // dashboardBuilder-actions.js for what actually gets copied.
   const duplicateChartFromList = async (widget) => {
     try {
-      const detail = await getChartLibraryWidgetDetail(widget.id);
-      await createChartLibraryWidget({
-        name: `${detail.name} (Copy)`,
-        datasourceId: detail.datasource_id,
-        chartType: detail.chart_type,
-        mapping: detail.mapping || {},
-      });
-      refreshChartLibraryList();
+      await duplicateChartLibraryWidgetDef(widget.id);
+      await refreshChartLibraryList();
+      notifyWidgetsChanged();
     } catch (err) {
       setChartListActionError(err.message);
     }
@@ -928,11 +1007,113 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       if (chartLibraryData[id] || chartLibraryFetchingRef.current.has(id)) return;
       chartLibraryFetchingRef.current.add(id);
       getStandaloneWidgetData(id)
-        .then((data) => setChartLibraryData((prev) => ({ ...prev, [id]: { rows: data.rows } })))
+        .then((data) => setChartLibraryData((prev) => ({ ...prev, [id]: { rows: data.rows, drillDown: data.drillDown } })))
         .catch((err) => setChartLibraryData((prev) => ({ ...prev, [id]: { error: err.message } })))
         .finally(() => chartLibraryFetchingRef.current.delete(id));
     });
   }, [widgets, chartLibraryData, backendId]);
+
+  // A KPI_CARD's actually-effective filter set: its own date_filter_column/range if set
+  // (excluding the dashboard's global filter on that SAME column, so the two can't stack into
+  // a contradictory BETWEEN...AND BETWEEN that silently returns zero rows — see the
+  // conversation this was decided in), otherwise just the dashboard's own filters unchanged.
+  // Shared by both the base-rows fetch effect below and the "Compare to" effect further down,
+  // so "what am I comparing against" always matches "what am I currently showing".
+  const kpiEffectiveFilters = (mapping) => {
+    const dateCol = mapping.date_filter_column;
+    if (!dateCol) return dashboardFilters;
+    const cardFilter = buildDateFilterFromPreset(dateCol, mapping.date_filter_range || 'Last 7 days');
+    if (!cardFilter) return dashboardFilters;
+    return [...dashboardFilters.filter((f) => f.column !== dateCol), cardFilter];
+  };
+
+  // KPI_CARD's own date filter (mapping.date_filter_column/range) — refetches this widget's
+  // base rows under its own resolved filter set whenever that changes, independent of
+  // whatever batched/generic fetch (Phase 18, the per-widget cache-fill effect above, etc.)
+  // already populated chartLibraryData with. Only widgets that actually set
+  // date_filter_column opt into this — everything else keeps using whatever the generic
+  // fetch paths already provide.
+  useEffect(() => {
+    Object.values(widgets).forEach((w) => {
+      if (w.dataSource?.type !== 'chartLibrary' || w.dataSource.chartType !== 'KPI_CARD') return;
+      const widgetId = w.dataSource.widgetId;
+      const mapping = w.dataSource.mapping || {};
+      if (!widgetId || !mapping.date_filter_column) return;
+      const filters = resolveFiltersForQuery(kpiEffectiveFilters(mapping));
+      const cacheKey = `${widgetId}:${JSON.stringify(filters)}`;
+      if (kpiDateFilterKeyRef.current.get(widgetId) === cacheKey) return;
+      kpiDateFilterKeyRef.current.set(widgetId, cacheKey);
+      const fetchPromise = backendId
+        ? getWidgetData(backendId, widgetId, { filters })
+        : getStandaloneWidgetData(widgetId, { filters });
+      fetchPromise
+        .then((data) => {
+          if (kpiDateFilterKeyRef.current.get(widgetId) !== cacheKey) return; // superseded
+          setChartLibraryData((prev) => ({ ...prev, [widgetId]: { rows: data.rows, drillDown: data.drillDown } }));
+        })
+        .catch((err) => {
+          if (kpiDateFilterKeyRef.current.get(widgetId) === cacheKey) {
+            setChartLibraryData((prev) => ({ ...prev, [widgetId]: { error: err.message } }));
+          }
+        });
+    });
+  }, [widgets, dashboardFilters, backendId]);
+
+  // KPI_CARD "Compare to" — a second, independent fetch against a date-shifted filter set
+  // (see buildComparisonFilters's own doc comment for why this can't just be a backend
+  // parameter). Runs once this widget's own rows have already loaded (so the current value
+  // it needs to diff against is available), and only for KPI_CARD widgets that actually opted
+  // in via mapping.compare_to. `comparisonData` is keyed by widgetId (what resolveWidgetProps
+  // looks it up by); `comparisonFetchingRef` instead tracks the full cacheKey (widgetId +
+  // compare_to + resolved filters) so a changed comparison target or filter set is recognized
+  // as needing a fresh fetch rather than silently keeping a now-stale value under the same
+  // widgetId slot.
+  useEffect(() => {
+    Object.values(widgets).forEach((w) => {
+      if (w.dataSource?.type !== 'chartLibrary' || w.dataSource.chartType !== 'KPI_CARD') return;
+      const widgetId = w.dataSource.widgetId;
+      const mapping = w.dataSource.mapping || {};
+      const compareTo = mapping.compare_to;
+      if (!widgetId || !compareTo || compareTo === 'None') return;
+      const entry = chartLibraryData[widgetId];
+      const yAxis = mapping.y_axis;
+      if (!entry?.rows || !yAxis) return;
+      // 'Custom' has no "current window" to shift for LATEST (its date_filter_column is
+      // deliberately unset — see LATEST_BY_FIELD's comment), so it takes a fixed cutoff date
+      // instead — see buildCustomComparisonFilters's own doc comment for the two shapes this
+      // can produce depending on aggregation.
+      const compareFilters = compareTo === 'Custom'
+        ? buildCustomComparisonFilters({
+          filters: kpiEffectiveFilters(mapping),
+          customDate: mapping.compare_custom_date,
+          latestByColumn: mapping.aggregation === 'LATEST' ? mapping.latest_by : null,
+        })
+        : buildComparisonFilters(kpiEffectiveFilters(mapping), compareTo);
+      if (!compareFilters) return; // no BETWEEN filter to shift — nothing meaningful to compare
+      const cacheKey = `${widgetId}:${compareTo}:${JSON.stringify(compareFilters)}`;
+      if (comparisonKeyRef.current.get(widgetId) === cacheKey) return;
+      comparisonKeyRef.current.set(widgetId, cacheKey);
+      const fetchPromise = backendId
+        ? getWidgetData(backendId, widgetId, { filters: compareFilters })
+        : getStandaloneWidgetData(widgetId, { filters: compareFilters });
+      fetchPromise
+        .then((data) => {
+          if (comparisonKeyRef.current.get(widgetId) !== cacheKey) return; // superseded
+          const currentVal = Number(entry.rows[0]?.[yAxis]) || 0;
+          const pastVal = Number(data.rows?.[0]?.[yAxis]) || 0;
+          const delta = currentVal - pastVal;
+          setComparisonData((prev) => ({
+            ...prev,
+            [widgetId]: { delta, deltaPercent: pastVal !== 0 ? (delta / pastVal) * 100 : null, deltaUp: delta >= 0 },
+          }));
+        })
+        .catch(() => {
+          if (comparisonKeyRef.current.get(widgetId) === cacheKey) {
+            setComparisonData((prev) => ({ ...prev, [widgetId]: null }));
+          }
+        });
+    });
+  }, [widgets, chartLibraryData, dashboardFilters, backendId]);
 
   // Phase 18 — batched, filter-aware fetch for dashboards with a real backend id. Omitting
   // `filters` from the call (see getDashboardData's own doc comment) makes the backend
@@ -952,7 +1133,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         const next = { ...prev };
         Object.entries(widgetResults).forEach(([widgetId, result]) => {
           next[widgetId] = result.status === 200
-            ? { rows: result.data?.rows }
+            ? { rows: result.data?.rows, drillDown: result.data?.drill_down }
             : { error: result.msg || 'Failed to load' };
         });
         return next;
@@ -1073,7 +1254,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const next = { ...prev };
       Object.entries(dataResult.widgets).forEach(([widgetId, result]) => {
         next[widgetId] = result.status === 200
-          ? { rows: result.data?.rows }
+          ? { rows: result.data?.rows, drillDown: result.data?.drill_down }
           : { error: result.msg || 'Failed to load' };
       });
       return next;
@@ -1095,7 +1276,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const next = { ...prev };
       Object.entries(dataResult.widgets).forEach(([widgetId, result]) => {
         next[widgetId] = result.status === 200
-          ? { rows: result.data?.rows }
+          ? { rows: result.data?.rows, drillDown: result.data?.drill_down }
           : { error: result.msg || 'Failed to load' };
       });
       return next;
@@ -1119,12 +1300,34 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         const result = backendWidgetId ? dataResult.widgets[backendWidgetId] : undefined;
         if (result) {
           next[backendWidgetId] = result.status === 200
-            ? { rows: result.data?.rows }
+            ? { rows: result.data?.rows, drillDown: result.data?.drill_down }
             : { error: result.msg || 'Failed to load' };
         }
       });
       return next;
     });
+  };
+
+  // Drill-down — a click on a chart whose latest response has drill_down.enabled &&
+  // has_next_level walks one level deeper into that response's own hierarchy, instead of
+  // cross-filtering sibling widgets. Refetches only the one widget (getWidgetData when this
+  // dashboard has a real backendId, so the dashboard's own current filters stay applied while
+  // drilling; getStandaloneWidgetData otherwise, matching the no-backendId per-widget fetch
+  // path above) and replaces its chartLibraryData entry — drillDown.path/level/hierarchy in
+  // the new response drive the breadcrumb.
+  const fetchDrilledWidget = async (backendWidgetId, drillPath) => {
+    // `drilling: true` keeps the previous entry's rows/drillDown on screen (so the chart
+    // doesn't flash blank/"Loading…") while ChartLibraryWidgetView shows a busy overlay —
+    // set synchronously before the await so the click's own render already reflects it.
+    setChartLibraryData((prev) => ({ ...prev, [backendWidgetId]: { ...prev[backendWidgetId], drilling: true } }));
+    try {
+      const data = backendId
+        ? await getWidgetData(backendId, backendWidgetId, { filters: resolveFiltersForQuery(dashboardFilters), drillPath })
+        : await getStandaloneWidgetData(backendWidgetId, { drillPath });
+      setChartLibraryData((prev) => ({ ...prev, [backendWidgetId]: { rows: data.rows, drillDown: data.drillDown } }));
+    } catch (err) {
+      setChartLibraryData((prev) => ({ ...prev, [backendWidgetId]: { ...prev[backendWidgetId], drilling: false, error: err.message } }));
+    }
   };
 
   // Kept in a ref, reassigned every render, so the single callback actually handed to every
@@ -1136,6 +1339,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   handleWidgetPointClickRef.current = async (sourceWidgetId, { column, value }) => {
     const sourceWidget = widgets[sourceWidgetId];
     if (!sourceWidget?.dataSource) return;
+    // Drilling takes priority over cross-filtering — a widget only ever wires onPointClick
+    // for cross-filtering OR drilling (see resolveWidgetProps' 'chartLibrary' case), never
+    // both interpretations of the same click, so this check is really "which mode is this
+    // widget in right now", not a tie-break.
+    const backendWidgetId = sourceWidget.dataSource.widgetId;
+    const entry = backendWidgetId ? chartLibraryData[backendWidgetId] : undefined;
+    if (entry?.drillDown?.enabled && entry?.drillDown?.has_next_level) {
+      await fetchDrilledWidget(backendWidgetId, [...(entry.drillDown.path || []), value]);
+      return;
+    }
     const clickId = `${sourceWidgetId}:${column}:${value}`;
     // Clicking the same point again clears the cross-filter — matches Power BI/Superset's
     // click-to-toggle convention.
@@ -1178,6 +1391,18 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     applyCrossFilterTo(activeCrossFilter.targetIds, null);
     setActiveCrossFilter(null);
   };
+
+  // Drill-up (breadcrumb click) — `level` is the index of the clicked breadcrumb segment,
+  // i.e. how many path entries should remain (0 = back to the root/undrilled view). Same
+  // ref-then-stable-callback split as handleWidgetPointClickRef/stableOnPointClick above, for
+  // the same reason: WidgetContent's props must stay identity-stable across renders.
+  const handleDrillUpRef = useRef(() => {});
+  handleDrillUpRef.current = async (backendWidgetId, level) => {
+    const entry = chartLibraryData[backendWidgetId];
+    const path = (entry?.drillDown?.path || []).slice(0, level);
+    await fetchDrilledWidget(backendWidgetId, path);
+  };
+  const stableOnDrillUp = useCallback((backendWidgetId, level) => handleDrillUpRef.current(backendWidgetId, level), []);
 
   // Phase 19a — persists the dashboard-level style defaults (bgColor/accentColor/titleColor/
   // titleWeight/titleSize) into `theme`. Local-only (no backendId) dashboards can still edit
@@ -1230,6 +1455,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // wholesale into WidgetContent would defeat its memoization, since that object gets a
     // new reference whenever *any* widget's data resolves, not just this one's.
     const chartLibraryEntry = w.dataSource?.widgetId ? chartLibraryData[w.dataSource.widgetId] : undefined;
+    const comparisonEntry = w.dataSource?.widgetId ? comparisonData[w.dataSource.widgetId] : undefined;
     // Shared context for resolveWidgetProps — used both by WidgetContent (rendering) and the
     // Export CSV button below (computed fresh on click, not cached from render, so it's
     // never stale and doesn't need `resolved` threaded out of the memoized child).
@@ -1267,71 +1493,122 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             "Title color" field) is the only one shown, in both edit and preview, so what
             you see while editing matches what gets saved exactly. Just a small floating
             remove control layered on top instead of a dedicated header row. */}
-        {showChrome && (
-          <div className={`dbe-widget-actions${exportMenuOpen ? ' dbe-force-visible' : ''}`}>
-            <div className="dbe-export-wrap">
-              <button
-                type="button"
-                className="dbe-widget-action"
-                title="Export"
-                onClick={(e) => { e.stopPropagation(); setExportMenuId(exportMenuOpen ? null : l.i); }}
-              >
-                <Download size={13} />
-              </button>
-              {exportMenuOpen && (
+        {(() => {
+          // Drill up/down — a single location (this same icon row export/edit/duplicate/
+          // delete already use), not a separate in-chart control, and always rendered
+          // (edit mode AND read-only/published view alike — see the conversation this was
+          // consolidated in), unlike the rest of this row which is editor-only chrome. Down
+          // drills into the top-ranked category (the row with the highest y-axis value) —
+          // a deterministic stand-in for "click a bar", since a generic down-arrow has no
+          // other unambiguous single target the way "up" does.
+          const drillDown = chartLibraryEntry?.drillDown;
+          const drillable = !!drillDown?.enabled;
+          const canDrillUp = drillable && (drillDown.path?.length || 0) > 0;
+          const xAxis = drillable ? (drillDown.dimension || w.dataSource?.mapping?.x_axis) : null;
+          const yAxis = w.dataSource?.mapping?.y_axis;
+          const topRow = drillable && drillDown.has_next_level && chartLibraryEntry?.rows?.length
+            ? chartLibraryEntry.rows.reduce((best, r) => (best == null || Number(r[yAxis]) > Number(best[yAxis]) ? r : best), null)
+            : null;
+          const canDrillDown = !!topRow;
+          if (!drillable && !showChrome) return null;
+          return (
+            <div className={`dbe-widget-actions${exportMenuOpen || drillable ? ' dbe-force-visible' : ''}`}>
+              {drillable && (
                 <>
-                  {/* Transparent backdrop closes the menu on outside click without needing
-                      a document-level listener. */}
-                  <div className="dbe-export-backdrop" onClick={(e) => { e.stopPropagation(); setExportMenuId(null); }} />
-                  <div className="dbe-export-menu" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="dbe-widget-action"
+                    title={canDrillUp ? 'Up one level' : 'Already at the top level'}
+                    disabled={!canDrillUp}
+                    onClick={(e) => { e.stopPropagation(); stableOnDrillUp(w.dataSource.widgetId, (drillDown.path?.length || 0) - 1); }}
+                  >
+                    <ChevronUp size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="dbe-widget-action"
+                    title={canDrillDown ? `Drill into "${String(topRow[xAxis])}" (top result)` : 'No further level to drill into'}
+                    disabled={!canDrillDown}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!canDrillDown) return;
+                      const label = String(topRow[xAxis]);
+                      stableOnPointClick(l.i, { column: xAxis, value: label === 'null' ? null : label });
+                    }}
+                  >
+                    <ChevronDown size={13} />
+                  </button>
+                </>
+              )}
+              {showChrome && (
+                <>
+                  <div className="dbe-export-wrap">
                     <button
                       type="button"
-                      onClick={() => {
-                        // Computed fresh here rather than reused from render — `resolved`
-                        // used to be captured every render of `renderWidget` regardless of
-                        // whether anyone actually opened this menu; now it's only ever
-                        // computed on an actual click, and WidgetContent below (the thing
-                        // that's memoized against unrelated re-renders) never needs to leak
-                        // this value back out to the toolbar.
-                        const { __resolved: resolved } = resolveWidgetProps(w, widgetCtx);
-                        exportWidgetCSV(w.type, w.title, resolved);
-                        setExportMenuId(null);
-                      }}
+                      className="dbe-widget-action"
+                      title="Export"
+                      onClick={(e) => { e.stopPropagation(); setExportMenuId(exportMenuOpen ? null : l.i); }}
                     >
-                      Export CSV
+                      <Download size={13} />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const node = widgetNodeRefs.current[l.i];
-                        if (node) exportWidgetPNG(node, w.title);
-                        setExportMenuId(null);
-                      }}
-                    >
-                      Export PNG
-                    </button>
+                    {exportMenuOpen && (
+                      <>
+                        {/* Transparent backdrop closes the menu on outside click without
+                            needing a document-level listener. */}
+                        <div className="dbe-export-backdrop" onClick={(e) => { e.stopPropagation(); setExportMenuId(null); }} />
+                        <div className="dbe-export-menu" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Computed fresh here rather than reused from render —
+                              // `resolved` used to be captured every render of
+                              // `renderWidget` regardless of whether anyone actually opened
+                              // this menu; now it's only ever computed on an actual click,
+                              // and WidgetContent below (the thing that's memoized against
+                              // unrelated re-renders) never needs to leak this value back
+                              // out to the toolbar.
+                              const { __resolved: resolved } = resolveWidgetProps(w, widgetCtx);
+                              exportWidgetCSV(w.type, w.title, resolved);
+                              setExportMenuId(null);
+                            }}
+                          >
+                            Export CSV
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const node = widgetNodeRefs.current[l.i];
+                              if (node) exportWidgetPNG(node, w.title);
+                              setExportMenuId(null);
+                            }}
+                          >
+                            Export PNG
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
+                  {editable && w.type === 'chartLibrary' && w.dataSource?.widgetId && (
+                    <button
+                      type="button"
+                      className="dbe-widget-action"
+                      title="Edit widget"
+                      onClick={(e) => { e.stopPropagation(); onEditInChartsTab?.(w.dataSource.widgetId); }}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  {editable && (
+                    <>
+                      <button type="button" className="dbe-widget-action" title="Duplicate" onClick={(e) => { e.stopPropagation(); duplicateWidget(l.i); }}><Copy size={13} /></button>
+                      <button type="button" className="dbe-widget-action dbe-widget-remove" title="Remove" onClick={(e) => { e.stopPropagation(); removeWidget(l.i); }}><X size={13} /></button>
+                    </>
+                  )}
                 </>
               )}
             </div>
-            {editable && w.type === 'chartLibrary' && w.dataSource?.widgetId && (
-              <button
-                type="button"
-                className="dbe-widget-action"
-                title="Edit widget"
-                onClick={(e) => { e.stopPropagation(); onEditInChartsTab?.(w.dataSource.widgetId); }}
-              >
-                <Pencil size={13} />
-              </button>
-            )}
-            {editable && (
-              <>
-                <button type="button" className="dbe-widget-action" title="Duplicate" onClick={(e) => { e.stopPropagation(); duplicateWidget(l.i); }}><Copy size={13} /></button>
-                <button type="button" className="dbe-widget-action dbe-widget-remove" title="Remove" onClick={(e) => { e.stopPropagation(); removeWidget(l.i); }}><X size={13} /></button>
-              </>
-            )}
-          </div>
-        )}
+          );
+        })()}
         <div style={textStyle} ref={(el) => { widgetNodeRefs.current[l.i] = el; }}>
           <WidgetContent
             widget={w}
@@ -1355,8 +1632,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             mockDataCache={mockDataCacheRef.current}
             datasources={datasources}
             chartLibraryEntry={chartLibraryEntry}
+            comparisonEntry={comparisonEntry}
             widgetId={l.i}
             onPointClick={stableOnPointClick}
+            onDrillUp={stableOnDrillUp}
           />
         </div>
       </div>
@@ -1475,6 +1754,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           color:#64748b; cursor:pointer; background:rgba(255,255,255,0.9); border:none; border-radius:5px;
         }
         .dbe-widget-action:hover { filter:brightness(0.95); }
+        .dbe-widget-action:disabled { opacity:0.35; cursor:default; }
+        .dbe-widget-action:disabled:hover { filter:none; }
         .dbe-widget-action.dbe-widget-remove { color:#ef4444; }
         .dbe-widget-actions.dbe-force-visible { opacity:1; }
         .dbe-export-wrap { position:relative; }

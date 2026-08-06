@@ -60,9 +60,11 @@ export default function StatCard({
     <span className="kpi-stat-value flex items-center gap-1 text-xl font-semibold whitespace-nowrap text-slate-900 dark:text-white" style={valueStyle}>
       {value}
       {unit && <span className="text-xs font-medium opacity-70">{unit}</span>}
-      <span className={`kpi-stat-delta text-[0.6875rem] ml-1 ${deltaUp ? 'up text-emerald-600 dark:text-emerald-400' : 'down text-amber-600 dark:text-amber-400'}`}>
-        {deltaUp ? '▲' : '▼'} {delta}
-      </span>
+      {delta && (
+        <span className={`kpi-stat-delta text-[0.6875rem] ml-1 ${deltaUp ? 'up text-emerald-600 dark:text-emerald-400' : 'down text-amber-600 dark:text-amber-400'}`}>
+          {deltaUp ? '▲' : '▼'} {delta}
+        </span>
+      )}
     </span>
   );
 

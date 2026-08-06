@@ -14,7 +14,7 @@ export default function BarChart({
   title = '', unit = '', data = [], color = '#378ADD', height = 90, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
-  titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null,
+  titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -25,10 +25,20 @@ export default function BarChart({
   const total = values.reduce((sum, v) => sum + v, 0);
 
   const option = {
-    grid: { left: 28, right: 4, top: 8, bottom: 18 },
+    // Extra bottom margin only when the category axis has a title (categoryAxisLabel) — the
+    // default 18px is already tight for tick labels alone.
+    grid: { left: 28, right: 4, top: 8, bottom: categoryAxisLabel ? 32 : 18 },
     xAxis: {
       type: 'category',
       data: labels,
+      // Which column the tick labels actually represent — static (mapping.x_axis) unless
+      // drilling is active, in which case it's the CURRENT drill level's own dimension (see
+      // renderChartWidget.jsx's own xAxis resolution) — without this, a drilled chart's bare
+      // category labels ("2G"/"3G") give no clue whether that's a region, technology, etc.
+      name: categoryAxisLabel || undefined,
+      nameLocation: 'middle',
+      nameGap: 22,
+      nameTextStyle: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
       axisLabel: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined, interval: Math.max(0, Math.ceil(labels.length / 6) - 1) },
     },
     yAxis: {
@@ -53,7 +63,10 @@ export default function BarChart({
 
   return (
     <div className="kpi-bar-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={onPointClick ? { click: (p) => onPointClick(p.name) } : undefined} />
+      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
+        ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
+      } : undefined} />
       <TitleValueOverlay
         title={title}
         titleClassName="kpi-bar-title font-bold text-[0.6875rem]"

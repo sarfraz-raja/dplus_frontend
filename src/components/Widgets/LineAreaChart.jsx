@@ -16,7 +16,7 @@ export default function LineAreaChart({
   title = '', unit = '', data = [], color = '#378ADD', height = 90, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
-  titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null,
+  titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -27,11 +27,17 @@ export default function LineAreaChart({
   const latest = values.length ? values[values.length - 1] : 0;
 
   const option = {
-    grid: { left: 28, right: 4, top: 8, bottom: 18 },
+    grid: { left: 28, right: 4, top: 8, bottom: categoryAxisLabel ? 32 : 18 },
     xAxis: {
       type: 'category',
       data: labels,
       boundaryGap: false,
+      // Which column the tick labels actually represent — see BarChart.jsx's own comment on
+      // this same prop for why it can differ from mapping.x_axis once drilling is active.
+      name: categoryAxisLabel || undefined,
+      nameLocation: 'middle',
+      nameGap: 22,
+      nameTextStyle: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
       axisLabel: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined, interval: Math.max(0, Math.ceil(labels.length / 6) - 1) },
     },
     yAxis: {
@@ -67,7 +73,10 @@ export default function LineAreaChart({
 
   return (
     <div className="kpi-spark-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={onPointClick ? { click: (p) => onPointClick(p.name) } : undefined} />
+      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
+        ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
+      } : undefined} />
       <TitleValueOverlay
         title={title}
         titleClassName="kpi-spark-title font-bold text-[0.6875rem]"

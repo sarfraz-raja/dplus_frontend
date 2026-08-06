@@ -15,7 +15,7 @@ export default function HorizontalBarChart({
   title = '', unit = '', data = [], limit = 8, color = '#378ADD', height = 140, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
-  titlePosition = 'top-left', onPointClick = null,
+  titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -28,9 +28,20 @@ export default function HorizontalBarChart({
   const labels = ranked.map((d) => d.label);
 
   const option = {
-    grid: { left: 8, right: 12, top: 8, bottom: 4, containLabel: true },
+    grid: { left: 8, right: 12, top: categoryAxisLabel ? 20 : 8, bottom: 4, containLabel: true },
     xAxis: { type: 'value', axisLabel: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined } },
-    yAxis: { type: 'category', data: labels, axisLabel: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined } },
+    yAxis: {
+      type: 'category',
+      data: labels,
+      // Which column the tick labels actually represent — see BarChart.jsx's own comment on
+      // this same prop. Placed above the axis (this chart's category axis is vertical, on the
+      // left) rather than 'middle', which would rotate 90° and cramp the bar labels.
+      name: categoryAxisLabel || undefined,
+      nameLocation: 'end',
+      nameGap: 6,
+      nameTextStyle: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined, align: 'left' },
+      axisLabel: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
+    },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (v) => `${v} ${unit}` },
     series: [
       {
@@ -45,7 +56,10 @@ export default function HorizontalBarChart({
 
   return (
     <div className="kpi-hbar-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={onPointClick ? { click: (p) => onPointClick(p.name) } : undefined} />
+      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
+        ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
+      } : undefined} />
       <TitleValueOverlay
         title={title}
         titleClassName="kpi-hbar-title font-bold text-[0.6875rem]"

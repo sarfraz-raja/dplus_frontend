@@ -455,7 +455,7 @@ export async function getWidgetData(dashboardId, widgetId, { filters, drillPath 
   if (!Array.isArray(body?.columns) || !Array.isArray(body?.rows)) {
     throw new Error(`Unexpected response shape from POST /dashboard-builder/dashboards/{id}/widgets/{id}/data (see console).`);
   }
-  return { widget: body.widget, columns: body.columns, rows: body.rows };
+  return { widget: body.widget, columns: body.columns, rows: body.rows, drillDown: body.drill_down };
 }
 
 /**
@@ -548,6 +548,24 @@ export async function getWidgetDetail(id) {
     throw new Error(`Unexpected response shape from GET /dashboard-builder/widgets/${id} (see console).`);
   }
   return widget;
+}
+
+/**
+ * Duplicates a chart-library widget's full definition (name suffixed " (Copy)", datasource,
+ * chart_type, and the entire `mapping` object as-is — style/drill_down/label, and any future
+ * key, all carry over since nothing here reconstructs mapping field-by-field) as a brand-new,
+ * independent widget. The one place this logic lives — ChartLibrary.jsx's Charts-tab list,
+ * DashboardCanvasEditor.jsx's own "Your Charts" list, and its canvas-tile "Duplicate" button
+ * all call this instead of each re-implementing "fetch full detail, then create a new one".
+ */
+export async function duplicateWidget(id) {
+  const detail = await getWidgetDetail(id);
+  return createWidget({
+    name: `${detail.name} (Copy)`,
+    datasourceId: detail.datasource_id,
+    chartType: detail.chart_type,
+    mapping: detail.mapping || {},
+  });
 }
 
 /** Edits a widget's shared definition — reflected on every dashboard it's attached to. */
@@ -695,5 +713,5 @@ export async function getStandaloneWidgetData(id, { filters, drillPath } = {}) {
   if (!Array.isArray(body?.columns) || !Array.isArray(body?.rows)) {
     throw new Error(`Unexpected response shape from POST /dashboard-builder/widgets/${id}/data (see console).`);
   }
-  return { widget: body.widget, columns: body.columns, rows: body.rows };
+  return { widget: body.widget, columns: body.columns, rows: body.rows, drillDown: body.drill_down };
 }

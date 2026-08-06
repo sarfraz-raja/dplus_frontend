@@ -17,7 +17,7 @@ import TitleValueOverlay from './TitleValueOverlay';
 export default function FunnelChart({
   title = '', unit = '', data = [], height = 140, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null, seriesColors = null, palette = null,
-  titlePosition = 'top-left', onPointClick = null,
+  titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -52,7 +52,10 @@ export default function FunnelChart({
 
   return (
     <div className="kpi-funnel-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={onPointClick ? { click: (p) => onPointClick(p.name) } : undefined} />
+      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
+        ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
+      } : undefined} />
       <TitleValueOverlay
         title={title}
         titleClassName="kpi-funnel-title font-bold text-[0.6875rem]"

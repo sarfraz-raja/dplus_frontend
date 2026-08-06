@@ -23,18 +23,21 @@ const isShowHide = (field) => field.type === 'select' && field.options?.length =
 
 function ColorRow({ field, current, resolvedDefaults, onChange }) {
   const swatchValue = current || resolvedDefaults[field.key] || '#000000';
+  const isSet = !!current;
   return (
     <div className="dbe-style-row">
       <span className="dbe-style-row-label">{field.label}</span>
-      <div className="dbe-style-color-input">
-        <input type="color" value={swatchValue} onChange={(e) => onChange(field.key, e.target.value)} />
+      <label className={`dbe-style-color-pill${isSet ? ' set' : ''}`}>
+        <span className="dbe-style-color-swatch" style={{ background: swatchValue }}>
+          <input type="color" value={swatchValue} onChange={(e) => onChange(field.key, e.target.value)} />
+        </span>
         <input
           type="text"
           value={current || ''}
           placeholder={resolvedDefaults[field.key] || 'auto'}
           onChange={(e) => onChange(field.key, e.target.value)}
         />
-      </div>
+      </label>
     </div>
   );
 }
@@ -54,17 +57,17 @@ function SliderRow({ field, current, resolvedDefaults = {}, onChange }) {
   const numeric = current === '' || current == null ? fallback : Number(current);
   return (
     <div className="dbe-style-row">
-      <div className="dbe-style-row-label-line">
-        <span className="dbe-style-row-label">{field.label}</span>
+      <span className="dbe-style-row-label">{field.label}</span>
+      <div className="dbe-style-slider-line">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={numeric}
+          onChange={(e) => onChange(field.key, Number(e.target.value))}
+        />
         <span className="dbe-style-value-pill">{numeric}</span>
       </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={numeric}
-        onChange={(e) => onChange(field.key, Number(e.target.value))}
-      />
     </div>
   );
 }
@@ -284,20 +287,36 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
         .dbe-style-subsection summary::-webkit-details-marker { display:none; }
         .dbe-style-subsection summary::before { content:'▸'; font-size:9px; transition:transform .1s; }
         .dbe-style-subsection[open] summary::before { transform:rotate(90deg); }
-        .dbe-style-subsection-body { display:flex; flex-direction:column; gap:8px; padding:4px 6px 8px; }
-        .dbe-style-row { display:flex; flex-direction:column; gap:4px; }
-        .dbe-style-row-inline { flex-direction:row; align-items:center; justify-content:space-between; }
+        .dbe-style-subsection-body { display:flex; flex-direction:column; gap:10px; padding:4px 6px 8px; }
+        .dbe-style-row { display:flex; flex-direction:column; gap:5px; min-height:50px; justify-content:flex-start; }
+        .dbe-style-row-inline { flex-direction:row; align-items:center; justify-content:space-between; min-height:auto; }
         .dbe-style-row-label { font-size:11px; color:#475569; }
         [data-theme="dark"] .dbe-style-row-label { color:#cbd5e1; }
         .dbe-style-row-label-line { display:flex; align-items:center; justify-content:space-between; }
+        .dbe-style-slider-line { display:flex; align-items:center; gap:8px; }
+        .dbe-style-slider-line input[type="range"] { flex:1; height:6px; }
         .dbe-style-value-pill {
           font-size:10px; font-weight:600; color:#EC7D09; background:rgba(236,125,9,0.12);
-          border-radius:4px; padding:1px 6px; min-width:24px; text-align:center;
+          border-radius:4px; padding:2px 6px; min-width:24px; text-align:center; flex-shrink:0;
         }
         .dbe-style-row input[type="range"] { width:100%; accent-color:#EC7D09; }
-        .dbe-style-color-input { display:flex; align-items:center; gap:6px; }
-        .dbe-style-color-input input[type="color"] { width:26px; height:26px; padding:0; border:1px solid rgb(203 213 225); border-radius:6px; cursor:pointer; }
-        .dbe-style-color-input input[type="text"] { flex:1; min-width:0; font-size:11px; font-family:monospace; padding:4px 6px; border:1px solid rgb(203 213 225); border-radius:6px; }
+        .dbe-style-color-pill {
+          display:flex; align-items:center; gap:0; border:1px solid rgb(203 213 225); border-radius:6px;
+          overflow:hidden; background:#fff; transition:border-color .1s;
+        }
+        .dbe-style-color-pill:focus-within, .dbe-style-color-pill.set { border-color:#EC7D09; }
+        .dbe-style-color-swatch {
+          position:relative; width:26px; height:26px; flex-shrink:0; cursor:pointer;
+          border-right:1px solid rgb(203 213 225);
+          background-image: linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+          background-size: 8px 8px; background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+        }
+        .dbe-style-color-swatch input[type="color"] { position:absolute; inset:0; opacity:0; cursor:pointer; padding:0; border:none; }
+        .dbe-style-color-pill input[type="text"] {
+          flex:1; min-width:0; font-size:11px; font-family:monospace; padding:5px 8px; border:none; background:transparent;
+        }
+        .dbe-style-color-pill input[type="text"]:focus { outline:none; }
         .dbe-style-row select {
           width:100%; font-size:11px; padding:5px 6px; border:1px solid rgb(203 213 225); border-radius:6px; background:#fff;
         }

@@ -25,14 +25,7 @@ const STATUS_STYLES = {
     deleted:   'bg-slate-200 text-slate-400',
 };
 
-const ALLOWED_TRANSITIONS = {
-    draft:     ['active', 'deleted'],
-    active:    ['paused', 'completed', 'failed', 'deleted'],
-    paused:    ['active', 'deleted'],
-    completed: ['deleted'],
-    failed:    ['deleted'],
-    deleted:   [],
-};
+const ALL_STATUSES = ['draft', 'active', 'paused', 'completed', 'failed', 'deleted'];
 
 const STATUS_DOT = {
     draft:     'bg-slate-400',
@@ -134,6 +127,8 @@ const DetailsPopover = ({ item }) => {
                         { label: 'Output Format',   value: item.output_format?.toUpperCase() },
                         { label: 'Theme',           value: item.theme },
                         { label: 'Day of Week',     value: item.day_of_week },
+                        { label: 'Send Time',       value: item.send_time },
+                        { label: 'Last Status',     value: item.last_status },
                         { label: 'Run Count',       value: item.run_count ?? 0 },
                         { label: 'Failures',        value: item.failure_count ?? 0 },
                         { label: 'Last Run',        value: item.last_run_at },
@@ -213,7 +208,7 @@ const StatusDropdown = ({ item, isUpdating, onSelect }) => {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     const current = item.status;
-    const transitions = ALLOWED_TRANSITIONS[current] ?? [];
+    const transitions = ALL_STATUSES.filter((s) => s !== current);
 
     useEffect(() => {
         if (!open) return;
@@ -341,14 +336,26 @@ const XReportSchedulerList = () => {
             return (
                 <span className="flex items-center gap-1.5">
                     <DetailsPopover item={itm} />
-                    <button onClick={() => navigate(`/xalerts/report-scheduler/edit/${itm.id}`)}
-                        title="Edit"
-                        className="flex items-center justify-center w-7 h-7 rounded-md border border-blue-200 text-blue-500 bg-white hover:bg-blue-50 hover:border-blue-300 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                        </svg>
-                    </button>
+                    {itm.status !== 'deleted' ? (
+                        <button onClick={() => navigate(`/xalerts/report-scheduler/edit/${itm.id}`)}
+                            title="Edit"
+                            className="flex items-center justify-center w-7 h-7 rounded-md border border-blue-200 text-blue-500 bg-white hover:bg-blue-50 hover:border-blue-300 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </button>
+                    ) : (
+                        <button disabled
+                            title="Deleted schedulers cannot be edited"
+                            className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-200 text-slate-300 bg-slate-50 cursor-not-allowed">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                <line x1="3" y1="21" x2="21" y2="3"/>
+                            </svg>
+                        </button>
+                    )}
                     <button onClick={() => openDelete(itm)}
                         title="Delete"
                         className="flex items-center justify-center w-7 h-7 rounded-md border border-red-200 text-red-400 bg-white hover:bg-red-50 hover:border-red-300 transition-colors">

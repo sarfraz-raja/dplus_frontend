@@ -18,7 +18,7 @@ import TitleValueOverlay from './TitleValueOverlay';
 export default function WaterfallChart({
   title = '', unit = '', data = [], upColor = '#10B981', downColor = '#EF4444', height = 140, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
-  titlePosition = 'top-left', onPointClick = null,
+  titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -38,8 +38,18 @@ export default function WaterfallChart({
   });
 
   const option = {
-    grid: { left: 32, right: 4, top: 8, bottom: 24 },
-    xAxis: { type: 'category', data: labels, axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined, interval: 0, rotate: labels.length > 5 ? 30 : 0 } },
+    grid: { left: 32, right: 4, top: 8, bottom: categoryAxisLabel ? 38 : 24 },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      // Which column the tick labels actually represent — see BarChart.jsx's own comment on
+      // this same prop.
+      name: categoryAxisLabel || undefined,
+      nameLocation: 'middle',
+      nameGap: labels.length > 5 ? 36 : 22,
+      nameTextStyle: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
+      axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined, interval: 0, rotate: labels.length > 5 ? 30 : 0 },
+    },
     yAxis: { type: 'value', splitNumber: 2, axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined } },
     tooltip: {
       trigger: 'axis',
@@ -66,7 +76,10 @@ export default function WaterfallChart({
 
   return (
     <div className="kpi-waterfall-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={onPointClick ? { click: (p) => p.seriesName === 'Delta' && onPointClick(p.name) } : undefined} />
+      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        ...(onPointClick ? { click: (p) => p.seriesName === 'Delta' && onPointClick(p.name) } : {}),
+        ...(onPointContextMenu ? { contextmenu: (p) => { if (p.seriesName === 'Delta') { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } } : {}),
+      } : undefined} />
       <TitleValueOverlay
         title={title}
         titleClassName="kpi-waterfall-title font-bold text-[0.6875rem]"

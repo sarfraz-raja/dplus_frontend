@@ -66,6 +66,7 @@ const XReportSchedulerFormPage = () => {
     const [apiError, setApiError] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [loading, setLoading] = useState(isEdit);
+    const [originalStatus, setOriginalStatus] = useState(null);
 
     const { register, handleSubmit, control, setValue, watch, reset, formState: { errors } } = useForm({
         defaultValues: { source_type: 'v1_dashboard', theme: 'light' },
@@ -78,14 +79,23 @@ const XReportSchedulerFormPage = () => {
     useEffect(() => {
         if (!isEdit) return;
         dispatch(AlertConfigurationActions.getReportSchedulerById(id, (data) => {
+            if (data.status === 'deleted') {
+                navigate('/xalerts/report-scheduler');
+                return;
+            }
+            setOriginalStatus(data.status);
             setSourceType(data.source_type || 'v1_dashboard');
             setTheme(data.theme || 'light');
             // Convert datetime fields for datetime-local input (replace space with T)
             const toInputValue = (dt) => dt?.replace(/\//g, '-').replace(' ', 'T').slice(0, 16) || '';
+            // Fall back to deriving HH:MM from start_datetime if the API didn't send send_time
+            // (e.g. legacy records created before the field existed)
+            const timeFromStart = (dt) => toInputValue(dt).slice(11, 16);
             const normalized = {
                 ...data,
-                start_datetime: toInputValue(data.start_datetime),
+                start_datetime: toInputValue(data.start_datetime).slice(0, 10),
                 end_datetime:   toInputValue(data.end_datetime),
+                send_time:      data.send_time || timeFromStart(data.start_datetime),
             };
             reset(normalized);
             setLoading(false);
@@ -103,14 +113,27 @@ const XReportSchedulerFormPage = () => {
         setValue('theme', val);
     };
 
+    // Fields the form actually owns — never resend server-managed fields
+    // (id, status, run_count, last_run_at, next_run_at, failure_count, last_run_status,
+    // create_time, update_time) so an edit stays a true partial update and can't
+    // accidentally trip a status-transition guard or clobber run history.
+    const FORM_FIELDS = [
+        'report_name', 'source_type', 'source_id', 'theme', 'frequency', 'day_of_week',
+        'output_format', 'start_datetime', 'end_datetime', 'send_time',
+        'mail_subject', 'mail_recipients', 'mail_body',
+    ];
+
     const onSubmit = (data) => {
         setApiError('');
         setSubmitting(true);
+        const payload = {};
+        FORM_FIELDS.forEach((key) => { if (data[key] !== undefined) payload[key] = data[key]; });
+        if (isEdit && originalStatus) payload.last_status = originalStatus;
         const action = isEdit
-            ? AlertConfigurationActions.putReportScheduler(id, data,
+            ? AlertConfigurationActions.putReportScheduler(id, payload,
                 () => { setSubmitting(false); navigate('/xalerts/report-scheduler'); },
                 (msg) => { setSubmitting(false); setApiError(msg || 'Something went wrong.'); })
-            : AlertConfigurationActions.postReportScheduler(data,
+            : AlertConfigurationActions.postReportScheduler(payload,
                 () => { setSubmitting(false); navigate('/xalerts/report-scheduler'); },
                 (msg) => { setSubmitting(false); setApiError(msg || 'Something went wrong.'); });
         dispatch(action);
@@ -254,8 +277,8 @@ const XReportSchedulerFormPage = () => {
                                 {errors.output_format && <p className={errorCls}>{errors.output_format.message}</p>}
                             </div>
                             <div>
-                                <label className={labelCls}>Start Date & Time <span className="text-red-400">*</span></label>
-                                <input type="datetime-local" className={inputCls}
+                                <label className={labelCls}>Start Date <span className="text-red-400">*</span></label>
+                                <input type="date" className={inputCls}
                                     {...register('start_datetime', { required: 'Required' })} />
                                 {errors.start_datetime && <p className={errorCls}>{errors.start_datetime.message}</p>}
                             </div>
@@ -277,6 +300,11 @@ const XReportSchedulerFormPage = () => {
                                     {errors.day_of_week && <p className={errorCls}>{errors.day_of_week.message}</p>}
                                 </div>
                             )}
+                            <div>
+                                <label className={labelCls}>Send Time <span className="text-red-400">*</span></label>
+                                <input type="time" className={inputCls} {...register('send_time', { required: 'Required' })} />
+                                {errors.send_time && <p className={errorCls}>{errors.send_time.message}</p>}
+                            </div>
                         </div>
                     </Card>
                 </div>
@@ -336,6 +364,7 @@ const XReportSchedulerFormPage = () => {
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-5 flex flex-col">
+                            {isEdit && <SummaryRow label="Last Status" value={originalStatus} />}
                             <SummaryRow label="Report Name"   value={watched.report_name} />
                             <SummaryRow label="Source"        value={sourceLabel} />
                             <SummaryRow label="Source ID"     value={watched.source_id} />
@@ -345,6 +374,7 @@ const XReportSchedulerFormPage = () => {
                             <SummaryRow label="Start"         value={watched.start_datetime} />
                             <SummaryRow label="End"           value={watched.end_datetime} />
                             <SummaryRow label="Day of Week"   value={watched.day_of_week} />
+                            <SummaryRow label="Send Time"     value={watched.send_time} />
                             <SummaryRow label="Subject"       value={watched.mail_subject} />
                             <SummaryRow label="Recipients"    value={watched.mail_recipients} />
                             <SummaryRow label="Mail Body"     value={watched.mail_body} />

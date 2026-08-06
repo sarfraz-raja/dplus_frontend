@@ -28,7 +28,7 @@ import { baseassetUrl } from '../utils/url.js';
 
 const timezoneFallbacks = [
   'UTC',
-  'Africa/Blantyre',
+  'Africa/Libreville',
   'Asia/Kolkata',
   'Asia/Dubai',
   'Asia/Singapore',
@@ -46,7 +46,7 @@ const timezoneFallbacks = [
 ];
 const timezoneCodeMap = {
   UTC: 'UTC',
-  'Africa/Blantyre': 'CAT',
+  'Africa/Libreville': 'WAT',
   'Asia/Kolkata': 'IST',
   'Asia/Dubai': 'GST',
   'Asia/Singapore': 'SGT',
@@ -63,7 +63,7 @@ const timezoneCodeMap = {
   'Pacific/Auckland': 'NZST',
 };
 const timezoneNameMap = {
-  'Africa/Blantyre': 'CAT - Central Africa Time',
+  'Africa/Libreville': 'WAT - West Africa Time',
   UTC: 'Universal Time Coordinated',
   'Asia/Kolkata': 'IST - India Standard Time',
   'Asia/Dubai': 'Gulf Standard Time',
@@ -81,7 +81,7 @@ const timezoneNameMap = {
   'Pacific/Auckland': 'New Zealand Standard Time',
 };
 const TIMEZONE_STORAGE_KEY = 'dy3-header-timezone';
-const DEFAULT_TIMEZONE = import.meta.env.VITE_TIME_ZONE || 'Africa/Blantyre';
+const DEFAULT_TIMEZONE = import.meta.env.VITE_TIME_ZONE || 'Africa/Libreville';
 
 const formatTimezoneLabel = (value) => value.split('/').map((part) => part.replace(/_/g, ' ')).join(' / ');
 const getTimezoneOptions = () => {
@@ -374,6 +374,7 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle, isFullscreen
               {isSidebarOpen ? <PanelLeftClose className="h-[18px] w-[18px]" /> : <PanelLeftOpen className="h-[18px] w-[18px]" />}
             </button>
 
+            {/* Timezone clock — disabled, see feedback: caused confusion vs deployment env timezone. Not used elsewhere in the app.
             <div className="relative">
             <button
               type="button"
@@ -416,6 +417,7 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle, isFullscreen
               </div>
             ) : null}
             </div>
+            */}
           </div>
         </div>
 

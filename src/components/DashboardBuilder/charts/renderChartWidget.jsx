@@ -32,9 +32,30 @@ import VirtualizedTable from './VirtualizedTable';
  * these props it doesn't support (e.g. StatCard has no axis, PieChart has no axis, etc.) —
  * safe to pass regardless.
  */
-export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style = {}, onPointClick = null }) {
-  const xAxis = mapping.x_axis;
+export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style = {}, onPointClick = null, onPointContextMenu = null, comparison = undefined, drillDown = undefined }) {
+  // The backend swaps the row's actual grouping column to `drill_down.dimension` the moment
+  // a drill-down hierarchy is configured on this chart — not just once you've clicked to
+  // drill deeper (confirmed: a freshly-configured, never-yet-clicked drill hierarchy already
+  // returns rows keyed by the drill dimension, e.g. "region", not `mapping.x_axis`'s
+  // "starttime" — the two `columns` responses differ). `mapping.x_axis` alone is stale the
+  // instant drill_down.enabled is true, so every label built from it renders "undefined".
+  const xAxis = (drillDown?.enabled && drillDown.dimension) || mapping.x_axis;
   const yAxis = mapping.y_axis;
+  // "As of <timestamp>" — appended directly onto the axis title below (categoryAxisLabel),
+  // right beside the column name it's already showing, rather than a separate floating badge
+  // (tried first, then moved here per the conversation this was decided in — one label saying
+  // "this is column X, freshest reading Y" reads better than two disconnected pieces of UI).
+  // Only meaningful for LATEST (every other aggregation covers a whole range, not a single
+  // "as of" instant) — the single most recent latest_by value across whatever rows actually
+  // came back, so a grouped chart (LATEST + a dimension, one "latest" row per category) still
+  // shows one honest instant rather than picking an arbitrary row's.
+  const latestAsOf = mapping.aggregation === 'LATEST' && mapping.latest_by && rows.length
+    ? rows.reduce((max, r) => {
+      const v = r[mapping.latest_by];
+      return v != null && (max == null || String(v) > String(max)) ? v : max;
+    }, null)
+    : null;
+  const categoryAxisLabel = xAxis ? (latestAsOf != null ? `${xAxis} (As of ${latestAsOf})` : xAxis) : undefined;
   // Cross-filtering — `onPointClick` (from DashboardCanvasEditor's widget-level handler)
   // needs to know which column the clicked point actually came from. Wired for every
   // chart_type whose mapping has a real dimension column and whose click event reports back
@@ -57,6 +78,14 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
   // two apart either).
   const handlePointClick = onPointClick
     ? (label) => onPointClick({ column: xAxis, value: label === 'null' ? null : label })
+    : null;
+  // Right-click on a point — separate from handlePointClick above (which drives left-click
+  // cross-filter/drill-in); this instead opens the point-anchored "Drill down into X / Drill
+  // up" menu (DrillContextMenu, rendered by ChartLibraryWidgetView, which owns the actual
+  // open/closed menu state) rather than acting immediately. Same label/null-handling as
+  // handlePointClick, and wired for the identical chart_type set.
+  const handlePointContextMenu = onPointContextMenu
+    ? (label, x, y) => onPointContextMenu(label === 'null' ? null : label, x, y)
     : null;
   const {
     titleColor, titleWeight, titleSize, titleFont, titlePosition, bgColor,
@@ -85,21 +114,37 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
 
   switch (chartType) {
     case 'BAR':
-      return <BarChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} {...styleProps} />;
+      return <BarChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
     case 'AREA':
-      return <AreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} {...styleProps} />;
+      return <AreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
     case 'PIE':
-      return <PieChart title={name} data={seriesData()} height={height} donut={donut} showLegend={showLegend} onPointClick={handlePointClick} {...styleProps} />;
+      return <PieChart title={name} data={seriesData()} height={height} donut={donut} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
     case 'LINE':
-      return <LineAreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} {...styleProps} />;
+      return <LineAreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
     case 'KPI_CARD': {
       const rawValue = rows[0]?.[yAxis];
       const displayValue = typeof rawValue === 'number' ? String(round(rawValue)) : String(rawValue ?? '—');
+      // "Compare to" (mapping.compare_to/delta_format — see CHART_TYPE_FIELDS's KPI_CARD
+      // entry in ChartLibrary.jsx) — `comparison` is computed by DashboardCanvasEditor.jsx's
+      // own second-query effect (this component has no fetch of its own); `null` there means
+      // that fetch failed, `undefined` means compare_to isn't set (or this is the standalone
+      // ChartLibrary.jsx preview, which never runs the comparison fetch at all) — both cases
+      // fall through to no delta shown at all, same as before this feature existed.
+      const deltaFormat = mapping.delta_format || 'Percent';
+      const deltaText = comparison && comparison.delta != null
+        ? (deltaFormat === 'Number'
+          ? `${comparison.delta >= 0 ? '+' : ''}${round(comparison.delta)}`
+          : comparison.deltaPercent != null
+            ? `${comparison.deltaPercent >= 0 ? '+' : ''}${round(comparison.deltaPercent)}%`
+            : `${comparison.delta >= 0 ? '+' : ''}${round(comparison.delta)}`) // no prior-period value to divide by — fall back to the raw number even in Percent mode
+        : null;
       return (
         <StatCard
           label={name}
           value={displayValue}
           unit={unit}
+          delta={deltaText}
+          deltaUp={comparison?.deltaUp}
           bgColor={bgColor}
           bgGradient={bgGradient}
           valueTextColor={valueTextColor}
@@ -121,19 +166,26 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
           title={name}
           xLabel={xAxis}
           yLabel={yAxis}
-          data={rows.map((r) => ({ x: round(Number(r[xAxis]) || 0), y: round(Number(r[yAxis]) || 0) }))}
+          data={rows.map((r) => ({
+            x: round(Number(r[xAxis]) || 0),
+            y: round(Number(r[yAxis]) || 0),
+            // Optional — mapping.label (see CHART_TYPE_FIELDS's SCATTER entry in
+            // ChartLibrary.jsx) identifies which row a dot came from on hover; ScatterChart
+            // already reads `name` per point into its tooltip, this just populates it.
+            name: mapping.label ? String(r[mapping.label]) : undefined,
+          }))}
           height={height}
           {...styleProps}
         />
       );
     case 'HORIZONTAL_BAR':
-      return <HorizontalBarChart title={name} data={seriesData()} height={height} limit={20} onPointClick={handlePointClick} {...styleProps} />;
+      return <HorizontalBarChart title={name} data={seriesData()} height={height} limit={20} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
     case 'FUNNEL':
-      return <FunnelChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} {...styleProps} />;
+      return <FunnelChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
     case 'WATERFALL':
-      return <WaterfallChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} {...styleProps} />;
+      return <WaterfallChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
     case 'TREEMAP':
-      return <TreemapChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} {...styleProps} />;
+      return <TreemapChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
     case 'STACKED_BAR': {
       const seriesAxis = mapping.series;
       const categories = [...new Set(rows.map((r) => String(r[xAxis])))];
@@ -145,7 +197,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
           return match ? round(Number(match[yAxis]) || 0) : 0;
         }),
       }));
-      return <StackedBarChart title={name} categories={categories} series={series} height={height} showLegend={showLegend} onPointClick={handlePointClick} {...styleProps} />;
+      return <StackedBarChart title={name} categories={categories} series={series} height={height} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
     }
     case 'TABLE': {
       const cols = mapping.columns || [];
@@ -159,7 +211,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       );
     }
     case 'HEAT_MAP':
-      return <HeatStripChart title={name} unit={unit} data={seriesData()} colorFrom={colorFrom} colorTo={colorTo} height={height} onPointClick={handlePointClick} {...styleProps} />;
+      return <HeatStripChart title={name} unit={unit} data={seriesData()} colorFrom={colorFrom} colorTo={colorTo} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
     default:
       return <div className="text-xs text-slate-500">{rows.length} row(s) returned.</div>;
   }

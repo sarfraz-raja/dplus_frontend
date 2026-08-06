@@ -115,6 +115,13 @@ function buildRecordFromBackend(dashboard, attachedWidgets = [], prevRecord = nu
     layout,
     widgets,
     globalFilters: dashboard.global_filters || [],
+    // DashboardCanvasEditor.jsx re-fetches these directly via getDashboardData(backendId) on
+    // its own mount, so this local copy currently isn't read anywhere for the editor view —
+    // but this function's whole purpose is being the one place a backend response maps to
+    // our local shape, so leaving them out here would be a real gap the moment anything else
+    // (e.g. a dashboard-list thumbnail) ever reads theme straight off the local record.
+    theme: dashboard.theme && typeof dashboard.theme === 'object' ? dashboard.theme : null,
+    themeId: dashboard.theme_id || null,
     published: isPublished(dashboard),
     createdAt: dashboard.created_at || prevRecord?.createdAt || new Date().toISOString(),
     attachedChartIds: attachedWidgets.map((w) => w.id).filter((id) => id != null),
@@ -469,8 +476,25 @@ const DashboardBuilder = () => {
       // field — it rides along inside its own layout entry, since dashboard.layout is a
       // plain JSON array that already round-trips reliably via PATCH /dashboards/{id}
       // (unlike per-widget position, which is create-only — see attachRealCharts above).
-      // buildLocalLayoutAndWidgets reads it back out on the next load.
-      const layoutWithStyle = (layout || []).map((item) => ({ ...item, style: widgets[item.i]?.style || {} }));
+      // buildLocalLayoutAndWidgets reads it back out on the next load — but it always
+      // recomputes each widget's local id as the canonical `w_<backendWidgetId>` form, not
+      // whatever local id the editor currently has it under. A widget placed/duplicated THIS
+      // session still carries whatever transient id nextId() gave it (see
+      // DashboardCanvasEditor.jsx's addWidget/duplicateWidget) — saving the layout entry
+      // under THAT id, as this used to, means the next load's `w_<id>` lookup misses and
+      // silently drops style back to {} (this was a real, reproduced bug: a freshly
+      // duplicated widget's style showed correctly in the live editor but reverted after
+      // Save+reload, while an already-previously-saved widget's style survived fine, because
+      // its local id already happened to be in the canonical form from the prior load).
+      // Rekeying every entry to the canonical form here, at save time, means it's stable
+      // across the save+reload round-trip regardless of when the placement was created.
+      const layoutWithStyle = (layout || []).map((item) => {
+        const w = widgets[item.i];
+        const canonicalId = w?.dataSource?.type === 'chartLibrary' && w.dataSource.widgetId
+          ? `w_${w.dataSource.widgetId}`
+          : item.i;
+        return { ...item, i: canonicalId, style: w?.style || {} };
+      });
       let dashboard;
       let backendId = editingExisting?.backendId;
       if (backendId) {

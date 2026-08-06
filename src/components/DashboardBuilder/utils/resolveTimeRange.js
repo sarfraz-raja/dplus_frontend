@@ -3,7 +3,7 @@
 // override (see src/components/TopBar.jsx's own DEFAULT_TIMEZONE), so two viewers in
 // different personal timezones querying the same relative filter get the identical absolute
 // date window. Same fallback TopBar.jsx uses, for parity if the env var is ever unset.
-export const DEPLOYMENT_TIME_ZONE = import.meta.env.VITE_TIME_ZONE || 'Africa/Blantyre';
+export const DEPLOYMENT_TIME_ZONE = import.meta.env.VITE_TIME_ZONE || 'Africa/Libreville';
 
 // Reads the wall-clock calendar date/time in `timeZone` for a given instant, as plain numbers
 // — this is the standard no-dependency trick for timezone-aware calendar math (no moment-tz/
@@ -65,7 +65,11 @@ const UNIT_TO_MS_DAYS = { days: 1, weeks: 7 };
 function addCalendarUnits(naiveDate, amount, unit, direction) {
   const signed = direction === 'before' ? -amount : amount;
   const d = new Date(naiveDate);
-  if (unit === 'days' || unit === 'weeks') {
+  if (unit === 'hours') {
+    d.setUTCHours(d.getUTCHours() + signed);
+  } else if (unit === 'minutes') {
+    d.setUTCMinutes(d.getUTCMinutes() + signed);
+  } else if (unit === 'days' || unit === 'weeks') {
     d.setUTCDate(d.getUTCDate() + signed * (UNIT_TO_MS_DAYS[unit] || 1));
   } else if (unit === 'months') {
     d.setUTCMonth(d.getUTCMonth() + signed);
@@ -163,4 +167,132 @@ export function resolveFiltersForQuery(filters) {
   return (filters || []).map((f) => (
     f.operator === 'BETWEEN' ? { ...f, value: resolveTimeRangeValue(f.value) } : f
   ));
+}
+
+// A KPI_CARD's own per-card date filter (see CHART_TYPE_FIELDS's KPI_CARD entry in
+// ChartLibrary.jsx) — a tagged relative/thisPeriod spec, same shape FilterEditorModal.jsx's
+// dashboard-level filters already use, so it goes through the exact same resolveTimeRangeValue
+// resolution at request time. Deliberately built as a plain request-level filter (passed via
+// getWidgetData/getStandaloneWidgetData's own `filters` param), never written into the
+// widget's persisted `mapping.filters` — the backend applies `mapping.filters` values as
+// literal bound parameters with no resolution step of its own (confirmed with the backend
+// team), so a relative spec stored there would freeze at whatever concrete dates were true
+// the moment the chart was saved, never re-resolving to "7 days ago from today" on later
+// loads. Keeping it client-side/request-level, like every other relative filter in this app,
+// avoids that entirely.
+const KPI_DATE_FILTER_PRESETS = {
+  // `granularity: 'datetime'` on the two sub-day presets — without it, formatBoundary
+  // defaults to plain date-only strings ('YYYY-MM-DD'), which can't represent an hour-level
+  // window at all (both boundaries would just resolve to today's date, indistinguishable from
+  // "no filter"). The day/month+ presets don't need it — a date-only boundary is exactly the
+  // right precision for them, and DB timestamp columns compare fine against a bare date.
+  'Last hour': { mode: 'relative', amount: 1, unit: 'hours', direction: 'before', granularity: 'datetime' },
+  'Last 24 hours': { mode: 'relative', amount: 24, unit: 'hours', direction: 'before', granularity: 'datetime' },
+  'Last 7 days': { mode: 'relative', amount: 7, unit: 'days', direction: 'before' },
+  'Last 30 days': { mode: 'relative', amount: 30, unit: 'days', direction: 'before' },
+  'This month': { mode: 'thisPeriod', unit: 'month' },
+  'This quarter': { mode: 'thisPeriod', unit: 'quarter' },
+  'This year': { mode: 'thisPeriod', unit: 'year' },
+};
+
+export function buildDateFilterFromPreset(column, preset) {
+  const spec = KPI_DATE_FILTER_PRESETS[preset];
+  if (!column || !spec) return null;
+  return { column, operator: 'BETWEEN', value: spec };
+}
+
+// Shifts an already-resolved boundary string ('YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS', per
+// formatBoundary above) back by `ms` milliseconds — length tells us which format it is, no
+// granularity tag needed here since resolveFiltersForQuery has already baked that decision
+// into the string's own shape. Millisecond-based (not whole-day) so sub-day presets like
+// "1 hour ago" actually move the boundary — a date-only string has no sub-day precision to
+// shift in the first place, so this only has a visible effect on a datetime-granularity value,
+// same limitation formatBoundary itself already has.
+function shiftDateByMs(str, ms) {
+  if (!str) return str;
+  const isDateTime = str.length > 10;
+  const iso = isDateTime ? `${str.replace(' ', 'T')}Z` : `${str}T00:00:00Z`;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return str;
+  const shifted = new Date(d.getTime() - ms);
+  return isDateTime ? shifted.toISOString().slice(0, 19).replace('T', ' ') : shifted.toISOString().slice(0, 10);
+}
+
+const MS_PER_HOUR = 3600000;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
+const COMPARISON_PRESET_SHIFT_MS = {
+  '1 hour ago': MS_PER_HOUR,
+  '1 day ago': MS_PER_DAY,
+  '7 days ago': 7 * MS_PER_DAY,
+  '30 days ago': 30 * MS_PER_DAY,
+};
+
+// KPI_CARD's "Compare to" (see CHART_TYPE_FIELDS's KPI_CARD entry in ChartLibrary.jsx) needs
+// a second query against a shifted date window — the backend has no comparison-period concept
+// of its own (confirmed: getWidgetData/getStandaloneWidgetData only take `{filters,
+// drillPath}`), so this is computed client-side from whatever BETWEEN filter the widget
+// already has, reusing the same resolution this module already does for the live query.
+// Returns null when there's no BETWEEN filter to shift (nothing meaningful to compare
+// against) or `preset` is unset/'None'.
+export function buildComparisonFilters(filters, preset) {
+  if (!preset || preset === 'None') return null;
+  const resolved = resolveFiltersForQuery(filters);
+  let shiftedAny = false;
+  const next = resolved.map((f) => {
+    if (f.operator !== 'BETWEEN' || !Array.isArray(f.value) || f.value.length !== 2) return f;
+    const [from, to] = f.value;
+    if (!from || !to) return f;
+    const fromMs = Date.parse(from.length > 10 ? from.replace(' ', 'T') : `${from}T00:00:00`);
+    const toMs = Date.parse(to.length > 10 ? to.replace(' ', 'T') : `${to}T00:00:00`);
+    if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return f;
+    // "Previous period" shifts by the window's own exact length (the immediately preceding
+    // window of equal size, down to the millisecond — no longer rounded to whole days) — the
+    // fixed-span presets shift by that preset's own amount instead, keeping the window's own
+    // length unchanged (i.e. "the same N-hour/day window, N earlier").
+    const shiftMs = preset === 'Previous period' ? (toMs - fromMs) : COMPARISON_PRESET_SHIFT_MS[preset];
+    if (!shiftMs) return f;
+    shiftedAny = true;
+    return { ...f, value: [shiftDateByMs(from, shiftMs), shiftDateByMs(to, shiftMs)] };
+  });
+  return shiftedAny ? next : null;
+}
+
+// "Compare to: Custom" (mapping.compare_to === 'Custom', mapping.compare_custom_date — see
+// CHART_TYPE_FIELDS's KPI_CARD entry) — a user-picked cutoff date, for the cases the preset
+// shifts above can't express: most notably `aggregation === 'LATEST'`, which has no "current
+// window" to shift at all (its date_filter_column is deliberately hidden/cleared — see
+// LATEST_BY_FIELD's own comment — so buildComparisonFilters above has nothing to work with).
+//
+// Two distinct shapes, chosen by which args are given:
+// - `latestByColumn` set (LATEST aggregation): returns a `<=` cutoff on that column —
+//   "the latest reading at or before this date" — mirroring what the live LATEST query itself
+//   does (`ORDER BY latest_by DESC LIMIT 1`), just anchored at a past date instead of now.
+// - `filters` given instead (any other aggregation with its own date_filter_column/BETWEEN
+//   filter): keeps the SAME window length as the live query, just re-ends it at `customDate`
+//   instead of shifting by a fixed preset amount — "the same N-day window, ending on this
+//   date" rather than "N days before today".
+export function buildCustomComparisonFilters({ filters, customDate, latestByColumn }) {
+  if (!customDate) return null;
+  if (latestByColumn) {
+    return [{ column: latestByColumn, operator: '<=', value: customDate }];
+  }
+  const resolved = resolveFiltersForQuery(filters);
+  let shiftedAny = false;
+  const next = resolved.map((f) => {
+    if (f.operator !== 'BETWEEN' || !Array.isArray(f.value) || f.value.length !== 2) return f;
+    const [from, to] = f.value;
+    if (!from || !to) return f;
+    const fromMs = Date.parse(from.length > 10 ? from.replace(' ', 'T') : `${from}T00:00:00`);
+    const toMs = Date.parse(to.length > 10 ? to.replace(' ', 'T') : `${to}T00:00:00`);
+    const customMs = Date.parse(customDate.length > 10 ? customDate.replace(' ', 'T') : `${customDate}T00:00:00`);
+    if (Number.isNaN(fromMs) || Number.isNaN(toMs) || Number.isNaN(customMs)) return f;
+    const spanMs = toMs - fromMs;
+    const isDateTime = to.length > 10;
+    const newTo = new Date(customMs);
+    const newFrom = new Date(customMs - spanMs);
+    const fmt = (d) => (isDateTime ? d.toISOString().slice(0, 19).replace('T', ' ') : d.toISOString().slice(0, 10));
+    shiftedAny = true;
+    return { ...f, value: [fmt(newFrom), fmt(newTo)] };
+  });
+  return shiftedAny ? next : null;
 }
