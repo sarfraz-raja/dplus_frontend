@@ -15,6 +15,7 @@ export default function DataMappingFields({ dataShape, columns = [], value = {},
   const dimensionCols = columns.filter((c) => c.is_dimension);
   const measureCols = columns.filter((c) => c.is_measure);
   const filters = value.filters || [];
+  
 
   const setRole = (roleKey, columnName) => {
     const patch = { ...value, [roleKey]: columnName };
