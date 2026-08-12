@@ -252,7 +252,14 @@ const root = ReactDOM.createRoot(
 const _msalRedirectUrlCheck = () =>
   /[?&](code|error|error_description)=/.test(window.location.search + window.location.hash);
 
+const isMicrosoftAuthEnabled = import.meta.env.VITE_MICROSOFT_AUTH_ENABLED === 'true';
+
 (async () => {
+  if (!isMicrosoftAuthEnabled) {
+    renderApp();
+    return;
+  }
+
   try {
     const [{ PublicClientApplication }, { msalConfig }, { default: AuthActions }] =
       await Promise.all([

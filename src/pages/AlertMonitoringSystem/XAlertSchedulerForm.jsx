@@ -12,7 +12,9 @@ const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
 const errorCls = "text-xs text-red-500 mt-0.5";
 const textareaCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none h-20";
 
-const FREQ_OPTIONS = [5,10,15,20,25,30,35,40,45,50,55,60];
+const FREQ_OPTIONS = [5,10,15,30,60];
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => i);
+const pad2 = (n) => String(n).padStart(2, '0');
 
 const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }) => {
     const dispatch = useDispatch();
@@ -32,6 +34,7 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
                 if (lk === 'startat' || lk === 'endat') {
                     const d = moment(formValue[key], 'DD-MM-YYYY HH:mm:ss');
                     setValue(lk, d.isValid() ? d.format('YYYY-MM-DD') : formValue[key]);
+                    setValue(lk === 'startat' ? 'starthour' : 'endhour', d.isValid() ? d.hour() : 0);
                 } else {
                     setValue(lk, formValue[key]);
                 }
@@ -40,6 +43,15 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
     }, [formValue, resetting]);
 
     const onSubmit = (data) => {
+        const minute = Number(data.frequency) % 60;
+        if (data.startat) {
+            data.startat = `${moment(data.startat).format('DD-MM-YYYY')} ${pad2(data.starthour)}:${pad2(minute)}:00`;
+        }
+        if (data.endat) {
+            data.endat = `${moment(data.endat).format('DD-MM-YYYY')} ${pad2(data.endhour)}:${pad2(minute)}:00`;
+        }
+        delete data.starthour;
+        delete data.endhour;
         if (data.mailrecipients) {
             data.mailrecipients = data.mailrecipients.split(/[,;:]/).map(e => e.trim()).filter(Boolean).join(',');
         }
@@ -145,15 +157,29 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
                 {/* Start Date */}
                 <div>
                     <label className={labelCls}>Start Date <span className="text-red-400">*</span></label>
-                    <input type="date" className={inputCls} {...register('startat', { required: 'Required' })} />
+                    <div className="flex gap-2">
+                        <input type="date" className={`${inputCls} flex-[2]`} {...register('startat', { required: 'Required' })} />
+                        <select className={`${inputCls} flex-1 text-sm`} {...register('starthour', { required: 'Required' })}>
+                            <option value="">HH</option>
+                            {HOUR_OPTIONS.map(h => <option key={h} value={h}>{pad2(h)}</option>)}
+                        </select>
+                    </div>
                     {errors.startat && <p className={errorCls}>{errors.startat.message}</p>}
+                    {errors.starthour && <p className={errorCls}>{errors.starthour.message}</p>}
                 </div>
 
                 {/* End Date */}
                 <div>
                     <label className={labelCls}>End Date <span className="text-red-400">*</span></label>
-                    <input type="date" className={inputCls} {...register('endat', { required: 'Required' })} />
+                    <div className="flex gap-2">
+                        <input type="date" className={`${inputCls} flex-[2]`} {...register('endat', { required: 'Required' })} />
+                        <select className={`${inputCls} flex-1 text-sm`} {...register('endhour', { required: 'Required' })}>
+                            <option value="">HH</option>
+                            {HOUR_OPTIONS.map(h => <option key={h} value={h}>{pad2(h)}</option>)}
+                        </select>
+                    </div>
                     {errors.endat && <p className={errorCls}>{errors.endat.message}</p>}
+                    {errors.endhour && <p className={errorCls}>{errors.endhour.message}</p>}
                 </div>
 
                 {/* Assign User */}

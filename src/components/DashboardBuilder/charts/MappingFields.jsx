@@ -13,9 +13,13 @@ const LEVEL_RING_COLORS = ['#0EA5E9', '#8B5CF6', '#F59E0B', '#14B8A6', '#EC4899'
  * in-progress mapping object (keyed by field.key); `onChange(key, val)` updates one field.
  */
 export default function MappingFields({ fields = [], value = {}, onChange, columns = [], columnsLoading = false }) {
-  return (
-    <div className="flex flex-wrap gap-4 items-start">
-      {fields.map((field) => {
+  // Extracted so a 'group' field (below) can render its own nested fields through the exact
+  // same per-type logic, instead of duplicating it — a group is just a labeled box around a
+  // sub-list of ordinary fields, not a distinct rendering path.
+  // `groupChild` — true when called from the 'group' case below, so a field can stretch to
+  // fill its grid cell (`w-full`) instead of the fixed w-48/w-32 it uses standalone, where a
+  // narrower fixed width keeps unrelated top-level fields from spanning the whole panel.
+  const renderField = (field, groupChild = false) => {
         // A conditionally-relevant field (e.g. LATEST_BY_FIELD, only meaningful once
         // aggregation === 'LATEST' — see ChartLibrary.jsx) — hidden until its own condition
         // is met, rather than always showing and just disabling it, so the form doesn't grow
@@ -23,6 +27,30 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
         // this exact same check, so a hidden field never blocks Save either.
         if (field.showIf && !field.showIf(value)) return null;
         const current = value?.[field.key];
+        if (field.type === 'group') {
+          // Everything related to one concern sits together — e.g. a column picker and its
+          // title override, or Compare-to and its own date/delta-format fields — rendered as
+          // one visual block (matching how Superset groups "X Axis" / "Y Axis" as their own
+          // sections), instead of a related field landing wherever it happens to fall in the
+          // flat field list.
+          const visibleSubFields = field.fields.filter((f) => !f.showIf || f.showIf(value));
+          // A group whose every child is conditionally hidden (e.g. "Date Filter" once
+          // aggregation === 'LATEST' clears both its own fields) would otherwise render as a
+          // bare labeled box with nothing inside it — skip the whole group instead.
+          if (!visibleSubFields.length) return null;
+          return (
+            <div key={field.key} className="flex flex-col gap-2 p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 w-full">
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{field.label}</div>
+              {/* Equal-width columns (not flex-wrap's content-sized items) — Measure and
+                  Aggregation, or Compare-to and Delta format, end up the same width as each
+                  other instead of one field looking "bigger" purely because its label text
+                  or fixed width class happened to be wider. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                {visibleSubFields.map((f) => renderField(f, true))}
+              </div>
+            </div>
+          );
+        }
         if (field.type === 'column') {
           // `field.role` ('dimension' | 'measure' | 'date', set per-field in
           // CHART_TYPE_FIELDS) restricts the dropdown to columns actually flagged that way on
@@ -37,7 +65,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
             : field.role === 'date' ? columns.filter((c) => /date|time|timestamp/i.test(c.data_type || ''))
             : columns;
           return (
-            <label key={field.key} className="text-xs font-medium text-slate-600 w-48">
+            <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
               {field.label}
               <select
                 value={current || ''}
@@ -53,6 +81,23 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
             </label>
           );
         }
+        if (field.type === 'text') {
+          // A free-form label override (e.g. a custom axis title) — falls back to whatever
+          // the chart would otherwise derive on its own (the column name) when left blank,
+          // so this is purely optional, never a required rename.
+          return (
+            <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
+              {field.label}
+              <input
+                type="text"
+                value={current || ''}
+                placeholder={field.placeholder || ''}
+                onChange={(e) => onChange(field.key, e.target.value)}
+                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
+              />
+            </label>
+          );
+        }
         if (field.type === 'select') {
           // `field.options` may be a plain array or a `(mapping) => array` function — the
           // latter for options whose validity depends on another field's current value (e.g.
@@ -65,7 +110,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           const options = typeof field.options === 'function' ? field.options(value) : field.options;
           const selected = options.includes(current) ? current : field.default;
           return (
-            <label key={field.key} className="text-xs font-medium text-slate-600 w-32">
+            <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-32'}`}>
               {field.label}
               <select
                 value={selected}
@@ -74,6 +119,10 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
               >
                 {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
               </select>
+              {/* A short caption under the field (e.g. "Default: Africa/Blantyre") instead of
+                  baking that into the label itself — a long label wraps awkwardly onto two
+                  lines inside a grid cell and misaligns against the field beside it. */}
+              {field.hint && <span className="block mt-1 text-[10px] font-normal text-slate-400">{field.hint}</span>}
             </label>
           );
         }
@@ -89,7 +138,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           // inputs already use, keeping the stored value in the backend's own
           // 'YYYY-MM-DD HH:MM:SS' shape, not the native input's 'YYYY-MM-DDTHH:mm'.
           return (
-            <label key={field.key} className="text-xs font-medium text-slate-600 w-48">
+            <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
               {field.label}
               <input
                 type="datetime-local"
@@ -215,7 +264,11 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           );
         }
         return null;
-      })}
+  };
+
+  return (
+    <div className="flex flex-wrap gap-4 items-start">
+      {fields.map((field) => renderField(field))}
     </div>
   );
 }

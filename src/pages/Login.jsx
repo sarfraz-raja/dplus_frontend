@@ -316,6 +316,8 @@ import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserCircle2 } from 'lucide-react';
 import AuthActions from '../store/actions/auth-actions';
 import { useTheme } from '../context/ThemeContext.jsx';
 
+const isMicrosoftAuthEnabled = import.meta.env.VITE_MICROSOFT_AUTH_ENABLED === 'true';
+
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -613,30 +615,34 @@ const handleMicrosoftSSO = async () => {
               </button>
             </form>
 
-            <div className="flex items-center gap-3 mt-3">
-              <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-gray-200'}`} />
-              <span className={`text-[11px] uppercase tracking-[0.2em] ${isDark ? 'text-white/30' : 'text-gray-400'}`}>or</span>
-              <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-gray-200'}`} />
-            </div>
+            {isMicrosoftAuthEnabled ? (
+              <>
+                <div className="flex items-center gap-3 mt-3">
+                  <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-gray-200'}`} />
+                  <span className={`text-[11px] uppercase tracking-[0.2em] ${isDark ? 'text-white/30' : 'text-gray-400'}`}>or</span>
+                  <div className={`h-px flex-1 ${isDark ? 'bg-white/10' : 'bg-gray-200'}`} />
+                </div>
 
-            <button
-              type="button"
-              onClick={handleMicrosoftSSO}
-              disabled={ssoLoading}
-              className={`mt-3 w-full flex items-center justify-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold tracking-wide transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70 ${
-                isDark
-                  ? 'border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-white/20'
-                  : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300'
-              }`}
-            >
-              <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
-                <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
-                <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
-                <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
-                <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
-              </svg>
-              {ssoLoading ? 'Signing in...' : 'Sign in with Microsoft'}
-            </button>
+                <button
+                  type="button"
+                  onClick={handleMicrosoftSSO}
+                  disabled={ssoLoading}
+                  className={`mt-3 w-full flex items-center justify-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold tracking-wide transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70 ${
+                    isDark
+                      ? 'border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-white/20'
+                      : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300'
+                  }`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+                    <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                    <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                    <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                    <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                  </svg>
+                  {ssoLoading ? 'Signing in...' : 'Sign in with Microsoft'}
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </div>

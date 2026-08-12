@@ -13,6 +13,7 @@ import WaterfallChart from '../../Widgets/WaterfallChart';
 import TreemapChart from '../../Widgets/TreemapChart';
 import HeatStripChart from '../../Widgets/HeatStripChart';
 import VirtualizedTable from './VirtualizedTable';
+import { isTimeAxis, DEFAULT_TIME_AXIS_FORMAT } from './axisTypeUtils';
 
 /**
  * Maps a real backend chart_type + mapping + queried rows onto whichever existing themed
@@ -55,7 +56,15 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       return v != null && (max == null || String(v) > String(max)) ? v : max;
     }, null)
     : null;
-  const categoryAxisLabel = xAxis ? (latestAsOf != null ? `${xAxis} (As of ${latestAsOf})` : xAxis) : undefined;
+  // `mapping.x_axis_title`/`mapping.y_axis_title` (see X_AXIS_TITLE_FIELD/Y_AXIS_TITLE_FIELD
+  // in ChartLibrary.jsx) — an explicit opt-in only, never falls back to the raw column name
+  // (e.g. "starttime") the way it used to. A chart with no title set now shows no axis name
+  // at all, matching the "if not given, no need to display" call — an empty axis reads
+  // cleaner than a technical column name nobody chose to show.
+  const categoryAxisLabel = mapping.x_axis_title
+    ? (latestAsOf != null ? `${mapping.x_axis_title} (As of ${latestAsOf})` : mapping.x_axis_title)
+    : undefined;
+  const valueAxisLabel = mapping.y_axis_title || undefined;
   // Cross-filtering — `onPointClick` (from DashboardCanvasEditor's widget-level handler)
   // needs to know which column the clicked point actually came from. Wired for every
   // chart_type whose mapping has a real dimension column and whose click event reports back
@@ -113,14 +122,23 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
   };
 
   switch (chartType) {
-    case 'BAR':
-      return <BarChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
-    case 'AREA':
-      return <AreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
+    case 'BAR': {
+      const barTimeAxis = isTimeAxis(rows.map((r) => r[xAxis]));
+      return <BarChart title={name} data={seriesData()} isTimeAxis={barTimeAxis} dateFormat={mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT} timezone={mapping.x_axis_timezone} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} {...styleProps} />;
+    }
+    case 'AREA': {
+      const areaTimeAxis = isTimeAxis(rows.map((r) => r[xAxis]));
+      return <AreaChart title={name} data={seriesData()} isTimeAxis={areaTimeAxis} dateFormat={mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT} timezone={mapping.x_axis_timezone} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} {...styleProps} />;
+    }
     case 'PIE':
       return <PieChart title={name} data={seriesData()} height={height} donut={donut} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
-    case 'LINE':
-      return <LineAreaChart title={name} data={seriesData()} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
+    case 'LINE': {
+      // Raw (un-stringified) x-values, so a time-shaped column can be handed to LineAreaChart
+      // as real Date.parse-able values instead of already-flattened display labels.
+      const lineTimeAxis = isTimeAxis(rows.map((r) => r[xAxis]));
+      const lineData = rows.map((r) => ({ label: String(r[xAxis]), value: round(Number(r[yAxis]) || 0) }));
+      return <LineAreaChart title={name} data={lineData} isTimeAxis={lineTimeAxis} dateFormat={mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT} timezone={mapping.x_axis_timezone} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} {...styleProps} />;
+    }
     case 'KPI_CARD': {
       const rawValue = rows[0]?.[yAxis];
       const displayValue = typeof rawValue === 'number' ? String(round(rawValue)) : String(rawValue ?? '—');
@@ -164,8 +182,17 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       return (
         <ScatterChart
           title={name}
-          xLabel={xAxis}
-          yLabel={yAxis}
+          // `xLabel`/`yLabel` are the tooltip's own column identifiers — always shown (falls
+          // back to the raw column name) since a tooltip with no label at all ("+: 42") is
+          // just confusing, unlike the axis title below, which is a deliberate opt-in.
+          xLabel={mapping.x_axis_title || xAxis}
+          yLabel={mapping.y_axis_title || yAxis}
+          // The actual on-chart axis titles — mapping.x_axis_title/y_axis_title only, no
+          // column-name fallback (see categoryAxisLabel/valueAxisLabel's own comment above) —
+          // ScatterChart previously showed the raw column name unconditionally here, which is
+          // exactly the "why isn't Scatter handled like everything else" gap this closes.
+          xAxisLabel={mapping.x_axis_title || undefined}
+          yAxisLabel={mapping.y_axis_title || undefined}
           data={rows.map((r) => ({
             x: round(Number(r[xAxis]) || 0),
             y: round(Number(r[yAxis]) || 0),
@@ -179,11 +206,11 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
         />
       );
     case 'HORIZONTAL_BAR':
-      return <HorizontalBarChart title={name} data={seriesData()} height={height} limit={20} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
+      return <HorizontalBarChart title={name} data={seriesData()} height={height} limit={20} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} {...styleProps} />;
     case 'FUNNEL':
       return <FunnelChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
     case 'WATERFALL':
-      return <WaterfallChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
+      return <WaterfallChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} {...styleProps} />;
     case 'TREEMAP':
       return <TreemapChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
     case 'STACKED_BAR': {
@@ -197,7 +224,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
           return match ? round(Number(match[yAxis]) || 0) : 0;
         }),
       }));
-      return <StackedBarChart title={name} categories={categories} series={series} height={height} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
+      return <StackedBarChart title={name} categories={categories} series={series} height={height} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} {...styleProps} />;
     }
     case 'TABLE': {
       const cols = mapping.columns || [];

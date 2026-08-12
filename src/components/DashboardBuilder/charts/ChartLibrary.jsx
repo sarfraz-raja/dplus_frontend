@@ -1,6 +1,6 @@
 import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Plus, Play, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, LayoutGrid, Settings2, Palette } from 'lucide-react';
+import { Plus, Play, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, LayoutGrid, Settings2, Palette, AlertTriangle } from 'lucide-react';
 import MappingFields from './MappingFields';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
 import Button from '../../Button';
@@ -26,7 +26,8 @@ import {
 import { subscribeDatasourcesChanged } from '../../../store/actions/datasourceEvents';
 import { subscribeWidgetsChanged, notifyWidgetsChanged } from '../../../store/actions/widgetEvents';
 import { sortWidgetsByRecency, withDatasourceOnly } from './sortWidgets';
-import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
+import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset, DEPLOYMENT_TIME_ZONE } from '../utils/resolveTimeRange';
+import { TIME_AXIS_FORMAT_PRESETS, DEFAULT_TIME_AXIS_FORMAT, TIMEZONE_OPTIONS } from './axisTypeUtils';
 
 const AGGREGATIONS = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX', 'LATEST'];
 
@@ -44,6 +45,36 @@ const AGG_FIELD = { key: 'aggregation', label: 'Aggregation', type: 'select', op
 // no chart to drill within).
 const DRILL_DOWN_FIELD = { key: 'drill_down', label: 'Drill-down/Drill-up hierarchy (optional)', type: 'orderedColumns', optional: true };
 
+// Optional display-only overrides for the axis titles — a chart otherwise always shows the
+// picked column's own name (e.g. "starttime") as its axis label, which is rarely a title
+// worth showing to an end user as-is. Purely cosmetic (renderChartWidget.jsx falls back to
+// the column name whenever these are blank), never touches the actual mapping.x_axis/y_axis
+// column selection.
+const X_AXIS_TITLE_FIELD = { key: 'x_axis_title', label: 'X Axis title (optional)', type: 'text', optional: true, placeholder: 'Leave blank to hide' };
+const Y_AXIS_TITLE_FIELD = { key: 'y_axis_title', label: 'Y Axis title (optional)', type: 'text', optional: true, placeholder: 'Leave blank to hide' };
+
+// Only meaningful once the X Axis column actually turns out to be time-shaped at render time
+// (renderChartWidget.jsx's isTimeAxis check, run against the real data — this field has no way
+// to know that at config time) — harmlessly ignored otherwise, same permissive pattern every
+// other optional field here already follows. Two separate concerns, per the conversation these
+// were split out of: which *style* the same instant is written in (day-tier ordering, "MM-DD"
+// vs "DD MMM" ...) vs *which zone's clock* is being read out at all — see axisTypeUtils.js's
+// own doc comment on toAxisTimeValue for why the latter needs real zone math, not just a
+// different string template.
+// Only covers the day tier (e.g. "05-18" vs "18 May") — year/hour/minute/second stay fixed at
+// a plain 4-digit year and a 24-hour clock. Not an oversight: a year has no alternate "style"
+// to offer, and ECharts' time-axis template tokens have no AM/PM marker at all, so a 12-hour
+// toggle would just render "1:00" for both 1am and 1pm with no way to tell them apart — worse
+// than the unambiguous 24-hour clock this app's own timestamps already use everywhere else
+// (see resolveTimeRange.js's 'HH:MM:SS' convention).
+const X_AXIS_DATE_FORMAT_FIELD = { key: 'x_axis_date_format', label: 'Date format', type: 'select', options: Object.keys(TIME_AXIS_FORMAT_PRESETS), default: DEFAULT_TIME_AXIS_FORMAT, hint: 'Day-level ticks only' };
+// Defaults to DEPLOYMENT_TIME_ZONE (the same zone every relative filter — "Last 7 days" — is
+// already pinned to, see resolveTimeRange.js), but overridable per-widget: e.g. a chart built
+// for a specific region's ops team can show that region's local clock instead of the
+// deployment default, while every viewer of that one widget still sees identical numbers
+// regardless of their own browser timezone.
+const X_AXIS_TIMEZONE_FIELD = { key: 'x_axis_timezone', label: 'Timezone', type: 'select', options: TIMEZONE_OPTIONS, default: DEPLOYMENT_TIME_ZONE, hint: `Default: ${DEPLOYMENT_TIME_ZONE}` };
+
 // "LATEST" (aggregation: 'LATEST') needs a date/timestamp column to order by — the backend
 // requires mapping.latest_by whenever aggregation is LATEST (validate_widget_mapping rejects
 // its absence), translating to `SELECT DISTINCT ON (dims) ... ORDER BY dims, latest_by DESC`
@@ -60,15 +91,60 @@ const LATEST_BY_FIELD = {
 // flagged that way on the datasource (see MappingFields.jsx's 'column' case) — without it, a
 // numeric-only field like SCATTER's "X (measure)" would accept a text dimension column and
 // silently collapse every point to 0 (Number(textValue) is NaN).
+//
+// Shared X-Axis/Y-Axis grouped field set — every chart_type below whose mapping is a plain
+// {x_axis: dimension, y_axis: measure} pair (LINE's original shape) uses this exact same
+// layout, so the "X Axis"/"Y Axis" boxes, Aggregation-next-to-Measure ordering, and axis title
+// overrides stay consistent everywhere instead of drifting per chart_type. `xLabel`/`yLabel`
+// vary (e.g. PIE's "Category"/"Value" vs LINE's "Dimension"/"Measure") since the same
+// underlying x_axis/y_axis keys mean something slightly different per chart shape, but the
+// structure itself — group, Aggregation beside Measure, title field last — never does.
+// `showTitles` (default true) drops both title fields for chart_types with no rendered axis
+// at all (PIE/FUNNEL/TREEMAP — slices/stages/rectangles, not an x/y plot) — an axis title
+// input with nothing to attach to would just be dead weight in the config panel. `showTimeAxis`
+// (default false) additionally adds the Date format/Timezone fields — only the three
+// chart_types that actually support a `type: 'time'` x-axis (LINE/BAR/AREA — see
+// renderChartWidget.jsx's isTimeAxis wiring) opt into these; the others don't render a
+// continuous time axis at all (see the conversation on why HORIZONTAL_BAR/WATERFALL/
+// STACKED_BAR/HEAT_MAP were deliberately left out of time-axis support).
+function buildAxisFields(xLabel = 'Dimension', yLabel = 'Measure', showTitles = true, showTimeAxis = false) {
+  return [
+    { key: 'x_axis_group', label: 'X Axis', type: 'group', fields: [
+      { key: 'x_axis', label: xLabel, type: 'column', role: 'dimension' },
+      ...(showTitles ? [X_AXIS_TITLE_FIELD] : []),
+      ...(showTimeAxis ? [X_AXIS_DATE_FORMAT_FIELD, X_AXIS_TIMEZONE_FIELD] : []),
+    ] },
+    // Aggregation (and LATEST's own "latest by" column) only ever apply to the measure —
+    // `SELECT x_axis, AGG(y_axis) ... GROUP BY x_axis`, never the dimension itself — so both
+    // live inside the Y Axis group, matching Superset's own layout (Aggregation sits under
+    // Metrics, not Dimensions) instead of standing alone between the two groups where it read
+    // as ambiguous about which axis it modified.
+    { key: 'y_axis_group', label: 'Y Axis', type: 'group', fields: [
+      // Aggregation right next to Measure (both wrap onto the same row, group's flex-wrap
+      // container) — it's a direct modifier of the measure column, not the title, so it reads
+      // as "SUM of cs_traffic" sitting together rather than looking related to the title field.
+      { key: 'y_axis', label: yLabel, type: 'column', role: 'measure' },
+      AGG_FIELD,
+      LATEST_BY_FIELD,
+      ...(showTitles ? [Y_AXIS_TITLE_FIELD] : []),
+    ] },
+  ];
+}
+
 const CHART_TYPE_FIELDS = {
-  LINE: [{ key: 'x_axis', label: 'X Axis (dimension)', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Y Axis (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
-  BAR: [{ key: 'x_axis', label: 'X Axis (dimension)', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Y Axis (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
-  AREA: [{ key: 'x_axis', label: 'X Axis (dimension)', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Y Axis (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
-  PIE: [{ key: 'x_axis', label: 'Category', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Value (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
+  LINE: [...buildAxisFields('Dimension', 'Measure', true, true), DRILL_DOWN_FIELD],
+  BAR: [...buildAxisFields('Dimension', 'Measure', true, true), DRILL_DOWN_FIELD],
+  AREA: [...buildAxisFields('Dimension', 'Measure', true, true), DRILL_DOWN_FIELD],
+  PIE: [...buildAxisFields('Category', 'Value (measure)', false), DRILL_DOWN_FIELD],
   KPI_CARD: [
-    { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
-    AGG_FIELD,
-    LATEST_BY_FIELD,
+    // Measure + Aggregation grouped together, same reasoning as buildAxisFields' Y Axis
+    // group above — Aggregation is a direct modifier of the measure column, so it sits right
+    // beside it rather than floating loose in the panel.
+    { key: 'measure_group', label: 'Measure', type: 'group', fields: [
+      { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
+      AGG_FIELD,
+      LATEST_BY_FIELD,
+    ] },
     // Own date range, independent of whatever the dashboard's global filters happen to have
     // set (matches how Superset's "Big Number" — the direct equivalent of this chart_type —
     // requires its own Time Range rather than relying solely on a dashboard-level filter).
@@ -79,9 +155,13 @@ const CHART_TYPE_FIELDS = {
     // Hidden under LATEST — a date range would risk excluding the very row LATEST's own
     // `ORDER BY latest_by DESC LIMIT 1` is trying to find (the exact "filter finds nothing"
     // failure LATEST exists to sidestep — see the conversation this was decided in), so the
-    // two are kept mutually exclusive rather than left to silently combine badly.
-    { key: 'date_filter_column', label: 'Date filter column (optional)', type: 'column', role: 'date', optional: true, showIf: (m) => m.aggregation !== 'LATEST' },
-    { key: 'date_filter_range', label: 'Date filter range', type: 'select', options: ['Last hour', 'Last 24 hours', 'Last 7 days', 'Last 30 days', 'This month', 'This quarter', 'This year'], default: 'Last 7 days', showIf: (m) => m.aggregation !== 'LATEST' },
+    // two are kept mutually exclusive rather than left to silently combine badly. Grouped
+    // together — MappingFields.jsx skips rendering this whole group once both children are
+    // hidden under LATEST, instead of leaving a bare "Date Filter" label with nothing in it.
+    { key: 'date_filter_group', label: 'Date Filter', type: 'group', fields: [
+      { key: 'date_filter_column', label: 'Column (optional)', type: 'column', role: 'date', optional: true, showIf: (m) => m.aggregation !== 'LATEST' },
+      { key: 'date_filter_range', label: 'Range', type: 'select', options: ['Last hour', 'Last 24 hours', 'Last 7 days', 'Last 30 days', 'This month', 'This quarter', 'This year'], default: 'Last 7 days', showIf: (m) => m.aggregation !== 'LATEST' },
+    ] },
     // No backend comparison-period concept exists (confirmed — getWidgetData/
     // getStandaloneWidgetData only take {filters, drillPath}) — 'None' (default) means no
     // second query runs at all; any other preset triggers a second, date-shifted query (see
@@ -94,22 +174,40 @@ const CHART_TYPE_FIELDS = {
     // (its own date_filter_column is hidden/cleared, see LATEST_BY_FIELD's comment), so they'd
     // otherwise just silently do nothing (or accidentally piggyback on an unrelated dashboard
     // filter). Narrowed to None/Custom under LATEST — Custom's own `<=` cutoff shape doesn't
-    // need a window at all (see buildCustomComparisonFilters).
-    {
-      key: 'compare_to', label: 'Compare to', type: 'select', default: 'None',
-      options: (m) => (m.aggregation === 'LATEST' ? ['None', 'Custom'] : ['None', 'Previous period', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom']),
-    },
-    // Only meaningful shape for LATEST (no "current window" to shift — see
-    // buildCustomComparisonFilters's own doc comment) and for any other aggregation where the
-    // preset shifts (Previous period/7/30 days ago) aren't the comparison point actually
-    // wanted — a fixed cutoff date instead of "N days before now".
-    { key: 'compare_custom_date', label: 'Compare to date/time', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' },
-    { key: 'delta_format', label: 'Delta format', type: 'select', options: ['Percent', 'Number'], default: 'Percent' },
+    // need a window at all (see buildCustomComparisonFilters). Grouped with its own
+    // conditional date/format fields — everything about "what is this compared against" in
+    // one block, same reasoning as Date Filter above.
+    { key: 'comparison_group', label: 'Comparison', type: 'group', fields: [
+      {
+        key: 'compare_to', label: 'Compare to', type: 'select', default: 'None',
+        options: (m) => (m.aggregation === 'LATEST' ? ['None', 'Custom'] : ['None', 'Previous period', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom']),
+      },
+      // Only meaningful shape for LATEST (no "current window" to shift — see
+      // buildCustomComparisonFilters's own doc comment) and for any other aggregation where
+      // the preset shifts (Previous period/7/30 days ago) aren't the comparison point
+      // actually wanted — a fixed cutoff date instead of "N days before now".
+      { key: 'compare_custom_date', label: 'Compare to date/time', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' },
+      { key: 'delta_format', label: 'Delta format', type: 'select', options: ['Percent', 'Number'], default: 'Percent' },
+    ] },
   ],
-  GAUGE: [{ key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD],
+  GAUGE: [{ key: 'measure_group', label: 'Measure', type: 'group', fields: [
+    { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
+    AGG_FIELD,
+    LATEST_BY_FIELD,
+  ] }],
   SCATTER: [
-    { key: 'x_axis', label: 'X (measure)', type: 'column', role: 'measure' },
-    { key: 'y_axis', label: 'Y (measure)', type: 'column', role: 'measure' },
+    // Both axes are plain measures here (no dimension/aggregation at all — each dot is one
+    // row's raw X/Y pair), so these groups are just the column picker + title override, same
+    // "X Axis"/"Y Axis" box pattern as every other chart_type, minus Aggregation, which
+    // doesn't apply to a raw per-row scatter axis.
+    { key: 'x_axis_group', label: 'X Axis', type: 'group', fields: [
+      { key: 'x_axis', label: 'X (measure)', type: 'column', role: 'measure' },
+      X_AXIS_TITLE_FIELD,
+    ] },
+    { key: 'y_axis_group', label: 'Y Axis', type: 'group', fields: [
+      { key: 'y_axis', label: 'Y (measure)', type: 'column', role: 'measure' },
+      Y_AXIS_TITLE_FIELD,
+    ] },
     // Scatter has no dimension axis by design (each dot is one row's X/Y measure pair) — this
     // is purely for identifying a dot on hover (e.g. which region/date/cell it came from),
     // wired into ScatterChart's own `name` per point + tooltip (see renderChartWidget.jsx's
@@ -117,17 +215,23 @@ const CHART_TYPE_FIELDS = {
     { key: 'label', label: 'Label (dimension, optional)', type: 'column', role: 'dimension', optional: true },
   ],
   TABLE: [{ key: 'columns', label: 'Columns to display', type: 'multiColumn' }],
-  HEAT_MAP: [{ key: 'x_axis', label: 'X Axis (dimension)', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Y Axis (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
-  HORIZONTAL_BAR: [{ key: 'x_axis', label: 'Category (dimension)', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Y Axis (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
-  FUNNEL: [{ key: 'x_axis', label: 'Stage (dimension)', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Value (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
-  WATERFALL: [{ key: 'x_axis', label: 'Step (dimension)', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Delta (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
-  TREEMAP: [{ key: 'x_axis', label: 'Category (dimension)', type: 'column', role: 'dimension' }, { key: 'y_axis', label: 'Value (measure)', type: 'column', role: 'measure' }, AGG_FIELD, LATEST_BY_FIELD, DRILL_DOWN_FIELD],
+  HEAT_MAP: [...buildAxisFields('Dimension', 'Measure'), DRILL_DOWN_FIELD],
+  HORIZONTAL_BAR: [...buildAxisFields('Category', 'Y Axis (measure)'), DRILL_DOWN_FIELD],
+  FUNNEL: [...buildAxisFields('Stage', 'Value (measure)', false), DRILL_DOWN_FIELD],
+  WATERFALL: [...buildAxisFields('Step', 'Delta (measure)'), DRILL_DOWN_FIELD],
+  TREEMAP: [...buildAxisFields('Category', 'Value (measure)', false), DRILL_DOWN_FIELD],
   STACKED_BAR: [
-    { key: 'x_axis', label: 'Category (dimension)', type: 'column', role: 'dimension' },
-    { key: 'series', label: 'Series (grouping dimension)', type: 'column', role: 'dimension' },
-    { key: 'y_axis', label: 'Y Axis (measure)', type: 'column', role: 'measure' },
-    AGG_FIELD,
-    LATEST_BY_FIELD,
+    { key: 'x_axis_group', label: 'X Axis', type: 'group', fields: [
+      { key: 'x_axis', label: 'Category', type: 'column', role: 'dimension' },
+      { key: 'series', label: 'Series (grouping dimension)', type: 'column', role: 'dimension' },
+      X_AXIS_TITLE_FIELD,
+    ] },
+    { key: 'y_axis_group', label: 'Y Axis', type: 'group', fields: [
+      { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
+      AGG_FIELD,
+      LATEST_BY_FIELD,
+      Y_AXIS_TITLE_FIELD,
+    ] },
     DRILL_DOWN_FIELD,
   ],
 };
@@ -401,7 +505,12 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     // CHART_TYPE_FIELDS, so it isn't caught by the allowedKeys check at all and needs its
     // own explicit carve-out). Anything not in the new type's own field list (e.g.
     // `aggregation` when switching to SCATTER, which has none) is correctly dropped.
-    const allowedKeys = new Set((CHART_TYPE_FIELDS[type] || []).map((f) => f.key));
+    // A 'group' field (see X_AXIS_TITLE_FIELD/Y_AXIS_TITLE_FIELD's grouping in LINE) has its
+    // own key (e.g. 'x_axis_group') that's never an actual mapping key — only the fields
+    // nested inside it are, so those need flattening in here too, or every grouped field
+    // (x_axis, x_axis_title, ...) would look "not allowed" and get dropped on every type
+    // change even when switching between two chart_types that both group the same fields.
+    const allowedKeys = new Set((CHART_TYPE_FIELDS[type] || []).flatMap((f) => (f.type === 'group' ? f.fields.map((sub) => sub.key) : [f.key])));
     setChartType(type);
     setMapping((prev) => Object.fromEntries(
       Object.entries(prev).filter(([k]) => allowedKeys.has(k) || k === 'style'),
@@ -443,8 +552,14 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   };
 
   const fields = CHART_TYPE_FIELDS[chartType] || [];
+  // A 'group' field (see buildAxisFields/KPI_CARD's grouped sections in CHART_TYPE_FIELDS) has
+  // its own key (e.g. 'x_axis_group') that's never actually written into mapping — only the
+  // fields nested inside it are — so it needs flattening here too, same as onChartTypeChange's
+  // allowedKeys above, or every grouped field would look permanently unfilled (mapping['x_axis_
+  // group'] is always undefined) and Save would never enable for any chart_type using a group.
+  const flatFields = fields.flatMap((f) => (f.type === 'group' ? f.fields : [f]));
   const canSave = name.trim() && datasourceId
-    && fields.every((f) => {
+    && flatFields.every((f) => {
       // A conditionally-hidden field (e.g. latest_by, only relevant when aggregation ===
       // 'LATEST' — see LATEST_BY_FIELD's showIf) never blocks Save while it isn't shown;
       // MappingFields.jsx applies the exact same showIf check to decide what to render, so
@@ -579,19 +694,34 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     }
   };
 
+  // Purely cosmetic mapping fields — never sent to the backend as part of the query itself,
+  // only read client-side by renderChartWidget (categoryAxisLabel/valueAxisLabel) off the
+  // live `mapping` prop the preview below is already passed directly. That means an axis
+  // title already re-renders on every keystroke with zero backend round trip — re-saving +
+  // re-querying for it (see the auto-refresh effect below) is pure waste, and on a free-text
+  // field triggers exactly the "auto-saves on every character" chatter this comment is
+  // sitting next to fix. Any future purely-display-only mapping field belongs in this list.
+  const COSMETIC_MAPPING_KEYS = ['x_axis_title', 'y_axis_title', 'x_axis_date_format', 'x_axis_timezone'];
+  const queryRelevantMapping = JSON.stringify(
+    Object.fromEntries(Object.entries(mapping).filter(([k]) => !COSMETIC_MAPPING_KEYS.includes(k))),
+  );
+
   // Auto-refresh — once a widget has been explicitly Previewed at least once
   // (hasPreviewedRef), every later edit to what actually drives the query
   // (mapping/chartType/datasourceId — NOT `name`, which stays purely local until an explicit
   // Save or the next auto-save sweeps it in as a side effect) re-runs Preview shortly after
   // the user stops changing things, so the chart never sits mismatched against the current
   // form state waiting for a manual re-click. Debounced (600ms) so a quick sequence of edits
-  // (e.g. picking X axis then Y axis) only triggers one request, not one per field.
+  // (e.g. picking X axis then Y axis) only triggers one request, not one per field. Keyed off
+  // `queryRelevantMapping` (not `mapping` itself) so cosmetic-only edits — see above — don't
+  // trigger this at all; the title still shows instantly via the live `mapping` prop, it just
+  // doesn't force a save+requery to do it.
   useEffect(() => {
     if (!hasPreviewedRef.current || !canSave) return undefined;
     const t = setTimeout(() => { runPreview(true); }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapping, chartType, datasourceId]);
+  }, [queryRelevantMapping, chartType, datasourceId]);
 
   // Saves and hands the widget id back to the dashboard that requested it (see the
   // `prefill` effect above) instead of previewing — the chart gets placed on that
@@ -634,7 +764,14 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // first (unlike `remove` above, which only acts on whatever's currently loaded there).
   const deleteFromList = (widget) => setPendingConfirm({
     title: 'Delete Chart',
-    message: `Delete "${widget.name}"? This removes it from the Chart Library and from any dashboard it's placed on.`,
+    // `widget.dashboard_count` — a real field on listWidgets()' own summary rows (the exact
+    // row `widget` here is), so this needs no extra fetch, unlike the datasource-delete usage
+    // check above (which has no equivalent count field and has to fetch+filter widgets
+    // itself). ConfirmModal renders `message` inside a plain <p>, so this stays a string
+    // rather than the richer icon+box treatment the datasource version uses.
+    message: widget.dashboard_count
+      ? `Delete "${widget.name}"? It's used on ${widget.dashboard_count} dashboard${widget.dashboard_count === 1 ? '' : 's'} — deleting it will remove it from all of them.`
+      : `Delete "${widget.name}"? This removes it from the Chart Library and from any dashboard it's placed on.`,
     run: async () => {
       try {
         await deleteWidget(widget.id);
@@ -823,27 +960,42 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
               <Trash2 size={12} /> Delete
             </button>
           )}
-          {editingId && confirmingDelete && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-600">Delete this widget?</span>
-              <button
-                type="button"
-                onClick={remove}
-                disabled={deleting}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 disabled:opacity-50"
-              >
-                {deleting ? 'Deleting…' : 'Yes, delete'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(false)}
-                disabled={deleting}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+          {editingId && confirmingDelete && (() => {
+            // `dashboard_count` — a real field on listWidgets()' own summary rows now (no
+            // extra call needed, unlike the datasource-delete usage check above, which had to
+            // fetch+filter a whole separate list since datasources have no such field). Just
+            // looked up from the already-loaded `widgets` state by id.
+            const count = widgets.find((w) => w.id === editingId)?.dashboard_count || 0;
+            return (
+              <div className="flex flex-col gap-1.5">
+                {count > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <AlertTriangle size={13} className="text-amber-500 shrink-0" />
+                    Used on {count} dashboard{count === 1 ? '' : 's'} — deleting it will remove it from all of them.
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600">Delete this widget?</span>
+                  <button
+                    type="button"
+                    onClick={remove}
+                    disabled={deleting}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting…' : 'Yes, delete'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
           <button
             type="button"
             onClick={handleNewWidgetClick}

@@ -3,7 +3,7 @@ import ReactECharts from 'echarts-for-react';
 import { useTheme } from '../../context/ThemeContext';
 import { chartTokens } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
-import TitleValueOverlay from './TitleValueOverlay';
+import { POSITION_TEXT_ALIGN } from './titlePositions';
 
 /**
  * Radial gauge for percentage-style KPIs (RNA, Radio Network Availability, etc).
@@ -47,19 +47,26 @@ export default function GaugeCard({
   };
 
   return (
-    <div className="kpi-gauge-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
-      <TitleValueOverlay
-        title={title}
-        titleClassName="kpi-gauge-title text-xs font-bold"
-        titleStyle={{
-          color: titleColor || subColor,
-          fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
-          fontSize: titleSize ? `${titleSize}px` : undefined,
-          fontFamily: titleFont || undefined,
-        }}
-        titlePosition={titlePosition}
-      />
+    <div className="kpi-gauge-card h-full box-border flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
+      {title && (
+        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
+          <span
+            className="kpi-gauge-title text-xs font-bold block truncate"
+            style={{
+              color: titleColor || subColor,
+              fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
+              fontSize: titleSize ? `${titleSize}px` : undefined,
+              fontFamily: titleFont || undefined,
+              textAlign: POSITION_TEXT_ALIGN[titlePosition] || 'left',
+            }}
+          >
+            {title}
+          </span>
+        </div>
+      )}
+      <div className="flex-1 min-h-0">
+        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
+      </div>
     </div>
   );
 }

@@ -128,7 +128,6 @@ const DetailsPopover = ({ item }) => {
                         { label: 'Theme',           value: item.theme },
                         { label: 'Day of Week',     value: item.day_of_week },
                         { label: 'Send Time',       value: item.send_time },
-                        { label: 'Last Status',     value: item.last_status },
                         { label: 'Run Count',       value: item.run_count ?? 0 },
                         { label: 'Failures',        value: item.failure_count ?? 0 },
                         { label: 'Last Run',        value: item.last_run_at },
@@ -204,25 +203,82 @@ const DetailsPopover = ({ item }) => {
     );
 };
 
+const STATUS_MENU_W = 148;
+
 const StatusDropdown = ({ item, isUpdating, onSelect }) => {
     const [open, setOpen] = useState(false);
-    const ref = useRef(null);
+    const [pos, setPos]   = useState({ top: 0, left: 0 });
+    const btnRef          = useRef(null);
+    const menuRef         = useRef(null);
     const current = item.status;
     const transitions = ALL_STATUSES.filter((s) => s !== current);
 
+    const calcPos = useCallback(() => {
+        if (!btnRef.current) return;
+        const vw   = window.innerWidth;
+        const vh   = window.innerHeight;
+        const rect = btnRef.current.getBoundingClientRect();
+        const gap  = 6;
+        const menuH = 34 + transitions.length * 28 + 12;
+
+        let left = rect.left;
+        if (left + STATUS_MENU_W > vw - 8) left = vw - 8 - STATUS_MENU_W;
+
+        const fitsBelow = rect.bottom + gap + menuH <= vh - 8;
+        const top = fitsBelow ? rect.bottom + gap : rect.top - gap - menuH;
+
+        setPos({ top, left });
+    }, [transitions.length]);
+
+    const toggle = () => {
+        if (!open) calcPos();
+        setOpen((v) => !v);
+    };
+
     useEffect(() => {
         if (!open) return;
-        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [open]);
+        const close  = (e) => { if (!btnRef.current?.contains(e.target) && !menuRef.current?.contains(e.target)) setOpen(false); };
+        const reflow = () => calcPos();
+        document.addEventListener('mousedown', close);
+        window.addEventListener('resize', reflow);
+        window.addEventListener('scroll', reflow, true);
+        return () => {
+            document.removeEventListener('mousedown', close);
+            window.removeEventListener('resize', reflow);
+            window.removeEventListener('scroll', reflow, true);
+        };
+    }, [open, calcPos]);
+
+    const menu = open && (
+        <div
+            ref={menuRef}
+            style={{ top: pos.top, left: pos.left, width: STATUS_MENU_W, position: 'fixed', zIndex: 9999 }}
+            className="bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 overflow-hidden"
+        >
+            <p className="px-3 pt-0.5 pb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
+                Change status
+            </p>
+            {transitions.map((s) => (
+                <button
+                    key={s}
+                    type="button"
+                    onClick={() => { setOpen(false); onSelect(s); }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors ${TRANSITION_HOVER[s] || 'hover:bg-slate-50'}`}
+                >
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[s] || 'bg-slate-400'}`} />
+                    <span className="capitalize">{s}</span>
+                </button>
+            ))}
+        </div>
+    );
 
     return (
-        <div ref={ref} className="relative inline-flex">
+        <div className="inline-flex">
             <button
+                ref={btnRef}
                 type="button"
                 disabled={isUpdating || transitions.length === 0}
-                onClick={() => setOpen((v) => !v)}
+                onClick={toggle}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all
                     ${STATUS_STYLES[current] || 'bg-slate-100 text-slate-500 border-slate-200'}
                     ${transitions.length > 0 && !isUpdating ? 'cursor-pointer hover:shadow-sm hover:brightness-95 border-transparent' : 'border-transparent cursor-default'}
@@ -235,25 +291,7 @@ const StatusDropdown = ({ item, isUpdating, onSelect }) => {
                     : transitions.length > 0 && <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 ml-0.5"><polyline points="6 9 12 15 18 9"/></svg>
                 }
             </button>
-
-            {open && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[148px] bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 overflow-hidden">
-                    <p className="px-3 pt-0.5 pb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
-                        Change status
-                    </p>
-                    {transitions.map((s) => (
-                        <button
-                            key={s}
-                            type="button"
-                            onClick={() => { setOpen(false); onSelect(s); }}
-                            className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors ${TRANSITION_HOVER[s] || 'hover:bg-slate-50'}`}
-                        >
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[s] || 'bg-slate-400'}`} />
-                            <span className="capitalize">{s}</span>
-                        </button>
-                    ))}
-                </div>
-            )}
+            {createPortal(menu, document.body)}
         </div>
     );
 };

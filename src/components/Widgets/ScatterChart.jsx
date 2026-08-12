@@ -3,7 +3,8 @@ import ReactECharts from 'echarts-for-react';
 import { useTheme } from '../../context/ThemeContext';
 import { chartTokens, FONT_WEIGHT_CSS } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
-import TitleValueOverlay from './TitleValueOverlay';
+import { POSITION_TEXT_ALIGN } from './titlePositions';
+import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 
 /**
  * Scatter chart for correlating two KPIs (e.g. RSRP vs throughput per cell). Paired
@@ -13,7 +14,7 @@ import TitleValueOverlay from './TitleValueOverlay';
  * `dataShape: 'series'`.
  */
 export default function ScatterChart({
-  title = '', xLabel = '', yLabel = '', unit = '', data = [], color = '#378ADD', height = 140, isDark: isDarkProp = null,
+  title = '', xLabel = '', yLabel = '', xAxisLabel = null, yAxisLabel = null, unit = '', data = [], color = '#378ADD', height = 140, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
   titlePosition = 'top-left',
 }) {
@@ -24,9 +25,20 @@ export default function ScatterChart({
   const points = data.map((d) => [d.x, d.y, d.name]);
 
   const option = {
-    grid: { left: 36, right: 12, top: 12, bottom: 28, containLabel: false },
-    xAxis: { type: 'value', name: xLabel, nameLocation: 'middle', nameGap: 20, nameTextStyle: { fontSize: 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined }, axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined } },
-    yAxis: { type: 'value', name: yLabel, nameTextStyle: { fontSize: 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined }, axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined } },
+    // Extra left margin only when the Y axis has its own title — see axisTitle.js's own doc
+    // comment (previously a fixed 36 regardless, from when this axis unconditionally showed
+    // the raw column name).
+    grid: { left: gridMarginForVerticalTitle(yAxisLabel, 24, 42), right: 12, top: 12, bottom: xAxisLabel ? 28 : 20, containLabel: false },
+    xAxis: {
+      type: 'value',
+      ...buildAxisTitle(xAxisLabel, { axisTextSize, axisTextColor, axisTextWeight, axisTextFont, gap: 20 }),
+      axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
+    },
+    yAxis: {
+      type: 'value',
+      ...buildAxisTitle(yAxisLabel, { axisTextSize, axisTextColor, axisTextWeight, axisTextFont, vertical: true }),
+      axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
+    },
     tooltip: {
       trigger: 'item',
       formatter: (p) => `${p.data[2] ?? ''}<br/>${xLabel}: ${p.data[0]}<br/>${yLabel}: ${p.data[1]} ${unit}`,
@@ -42,14 +54,26 @@ export default function ScatterChart({
   };
 
   return (
-    <div className="kpi-scatter-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
-      <TitleValueOverlay
-        title={title}
-        titleClassName="kpi-scatter-title font-bold text-[0.6875rem]"
-        titleStyle={{ color: titleColor || subColor, fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined, fontSize: titleSize ? `${titleSize}px` : undefined, fontFamily: titleFont || undefined }}
-        titlePosition={titlePosition}
-      />
+    <div className="kpi-scatter-card h-full box-border flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
+      {title && (
+        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
+          <span
+            className="kpi-scatter-title font-bold text-[0.6875rem] block truncate"
+            style={{
+              color: titleColor || subColor,
+              fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
+              fontSize: titleSize ? `${titleSize}px` : undefined,
+              fontFamily: titleFont || undefined,
+              textAlign: POSITION_TEXT_ALIGN[titlePosition] || 'left',
+            }}
+          >
+            {title}
+          </span>
+        </div>
+      )}
+      <div className="flex-1 min-h-0">
+        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
+      </div>
     </div>
   );
 }

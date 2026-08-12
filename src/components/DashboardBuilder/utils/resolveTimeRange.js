@@ -9,7 +9,10 @@ export const DEPLOYMENT_TIME_ZONE = import.meta.env.VITE_TIME_ZONE || 'Africa/Li
 // — this is the standard no-dependency trick for timezone-aware calendar math (no moment-tz/
 // date-fns-tz in this project's deps, and this repo runs offline so adding one is non-trivial,
 // see the "new libraries" discussion for this module).
-function zonedParts(date, timeZone) {
+// Exported so axisTypeUtils.js can reuse the exact same zone-math instead of re-deriving it —
+// see that module's own toAxisTimeValue for why a chart axis needs this too (a configurable
+// per-widget "display timezone," defaulting to DEPLOYMENT_TIME_ZONE).
+export function zonedParts(date, timeZone) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     year: 'numeric', month: '2-digit', day: '2-digit',

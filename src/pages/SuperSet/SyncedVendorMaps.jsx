@@ -5,11 +5,18 @@ import { useDispatch, useSelector } from "react-redux";
 import DeckGL from "@deck.gl/react";
 import { ScatterplotLayer } from "@deck.gl/layers";
 import Map from "react-map-gl";
-import MapActions from "../../store/actions/map-actions"; // 
+import MapActions from "../../store/actions/map-actions"; //
 
 // 🔹 Mapbox token from Vite
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
-// const MAPBOX_TOKEN = ""; 
+// const MAPBOX_TOKEN = "";
+
+// Shares the same VITE_OFFLINE_MAPS_ENABLED flag as TelecomMap.jsx / DegradedCellsMap.jsx.
+// Offline mode has no local PMTiles wiring here yet — this only swaps the online style
+// out for a blank style so it doesn't silently call Mapbox while "offline" is intended.
+const IS_OFFLINE_MODE = import.meta.env.VITE_OFFLINE_MAPS_ENABLED !== 'false';
+const ONLINE_MAP_STYLE = "mapbox://styles/mapbox/light-v10";
+const OFFLINE_MAP_STYLE = { version: 8, sources: {}, layers: [] };
 
 
 const SyncedVendorMaps = () => {
@@ -141,7 +148,7 @@ console.log("Airtel Data:", airtelData);
         >
           <Map
             mapboxApiAccessToken={MAPBOX_TOKEN}
-            mapStyle="mapbox://styles/mapbox/light-v10"
+            mapStyle={IS_OFFLINE_MODE ? OFFLINE_MAP_STYLE : ONLINE_MAP_STYLE}
           />
         </DeckGL>
       </div>
@@ -185,7 +192,7 @@ console.log("Airtel Data:", airtelData);
         >
           <Map
             mapboxApiAccessToken={MAPBOX_TOKEN}
-            mapStyle="mapbox://styles/mapbox/light-v10"
+            mapStyle={IS_OFFLINE_MODE ? OFFLINE_MAP_STYLE : ONLINE_MAP_STYLE}
           />
         </DeckGL>
       </div>

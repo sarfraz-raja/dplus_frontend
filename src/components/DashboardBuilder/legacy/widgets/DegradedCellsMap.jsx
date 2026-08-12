@@ -3,24 +3,29 @@ import Map, { Marker } from 'react-map-gl/maplibre';
 import { Layers } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-// --- Online basemap (disabled) ---------------------------------------------
+// --- Online/offline mode ----------------------------------------------------
+// Shares the same VITE_OFFLINE_MAPS_ENABLED flag as TelecomMap.jsx so both the main
+// GIS engine map and this KPI dashboard widget switch together.
+const IS_OFFLINE_MODE = import.meta.env.VITE_OFFLINE_MAPS_ENABLED !== 'false';
+
+// --- Online basemap ----------------------------------------------------------
 // Free CARTO raster basemap, no API key required — same tile source pattern used
 // elsewhere in this app (see GeoDrillDownPage.jsx). Requires outbound internet access
 // to basemaps.cartocdn.com, which isn't available in every environment this runs in.
-// const MAP_STYLE = {
-//   version: 8,
-//   sources: {
-//     'carto-dark': {
-//       type: 'raster',
-//       tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
-//       tileSize: 256,
-//       attribution: '© CARTO © OpenStreetMap',
-//     },
-//   },
-//   layers: [{ id: 'carto-dark-layer', type: 'raster', source: 'carto-dark' }],
-// };
+const ONLINE_MAP_STYLE = {
+  version: 8,
+  sources: {
+    'carto-dark': {
+      type: 'raster',
+      tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+      tileSize: 256,
+      attribution: '© CARTO © OpenStreetMap',
+    },
+  },
+  layers: [{ id: 'carto-dark-layer', type: 'raster', source: 'carto-dark' }],
+};
 
-// --- Offline basemap (active) -----------------------------------------------
+// --- Offline basemap ---------------------------------------------------------
 // Same local PMTiles source TelecomMap.jsx uses for its "Offline Dark" style — the
 // `pmtiles://` protocol is already registered globally in main.jsx, so no extra setup
 // is needed here beyond pointing the vector source at the local .pmtiles file.
@@ -79,6 +84,7 @@ export default function DegradedCellsMap({ rows = [] }) {
   // file (the checked-in style JSON defaults to Protomaps' remote demo bucket).
   const [offlineStyle, setOfflineStyle] = useState(null);
   useEffect(() => {
+    if (!IS_OFFLINE_MODE) return undefined;
     let cancelled = false;
     setOfflineStyle(null);
     fetch(`/styles/${activeStyleOption.file}`)
@@ -119,7 +125,9 @@ export default function DegradedCellsMap({ rows = [] }) {
     return () => observer.disconnect();
   }, []);
 
-  if (!offlineStyle) {
+  const mapStyle = IS_OFFLINE_MODE ? offlineStyle : ONLINE_MAP_STYLE;
+
+  if (IS_OFFLINE_MODE && !offlineStyle) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--kpi-text-sub)', fontSize: '0.75rem' }}>
         Loading map…
@@ -137,7 +145,7 @@ export default function DegradedCellsMap({ rows = [] }) {
           if (bounds) e.target.fitBounds(bounds, { padding: 40, maxZoom: 14, duration: 0 });
         }}
         initialViewState={initialViewState}
-        mapStyle={offlineStyle}
+        mapStyle={mapStyle}
         style={{ width: '100%', height: '100%', borderRadius: 'var(--border-radius-md, 8px)' }}
         attributionControl={false}
       >

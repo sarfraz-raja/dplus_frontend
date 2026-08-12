@@ -154,13 +154,55 @@ export async function deleteDatasource(id) {
 }
 
 /**
+ * Edits a datasource's own name/description and, optionally, its underlying source (schema+
+ * table for a TABLE/VIEW datasource, or sql_query for a QUERY one) — NOT its source_type,
+ * which can't be switched through this endpoint (a table-backed datasource can only be
+ * repointed at a different table, not converted to a query-backed one, and vice versa).
+ * `source` is `{sqlQuery}` or `{schemaName, tableName}`, same shape registerDatasource takes
+ * (see sourceBody) — pass `{}` (or omit `source`) to only change name/description without
+ * touching the underlying query/table at all.
+ *
+ * If the source actually changes, the backend re-validates it (same safe-SELECT/existence
+ * checks as POST /datasources) and re-syncs columns the same way refresh-schema does (keeps
+ * manual per-column overrides, adds new columns, drops removed ones) — so the response
+ * includes the possibly-updated column list, same shape getDatasourceDetail/
+ * refreshDatasourceSchema already return.
+ */
+export async function updateDatasource(id, { name, description, ...source } = {}) {
+  const res = await Api.patch({
+    url: `${Urls.dashboardBuilder_datasources}/${id}`,
+    data: {
+      ...(name !== undefined ? { name } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(Object.keys(source).length ? sourceBody(source) : {}),
+    },
+  });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status === 409) {
+    throw new Error(`A datasource named "${name}" already exists — pick a different name.`);
+  }
+  if (res.status === 422) {
+    throw new Error("No columns could be discovered from this query/table — check it returns at least one row.");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Updating datasource ${id} failed with status ${res.status}.`);
+  }
+  const body = res.data?.data;
+  if (!body?.datasource) {
+    throw new Error(`Unexpected response shape from PATCH /dashboard-builder/datasources/${id} (see console).`);
+  }
+  return { datasource: body.datasource, columns: body.columns || [] };
+}
+
+/**
  * Re-discovers columns from the datasource's underlying table/query and syncs the stored
  * column list — per the API doc: updates data_type/ordinal_position for columns that still
  * exist (keeps manual overrides like display_name), adds newly-found columns, removes ones
- * no longer present. This does NOT change the datasource's own name/sql_query — there is no
- * endpoint for that (see the "how is editing working" discussion — a datasource's query is
- * fixed once registered; only its *discovered schema* can be re-synced, via this call, or
- * individual columns' metadata edited via updateDatasourceColumn, not yet implemented).
+ * no longer present. Unlike updateDatasource above, this never changes the query/table
+ * itself — only re-syncs the *discovered schema* for whatever it already points to.
  *
  * Same response shape as getDatasourceDetail ({datasource, columns}), so a caller can just
  * feed the result straight back into the same state that fetch already populates.

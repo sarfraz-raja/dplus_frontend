@@ -67,15 +67,17 @@ const DashboardBuilder = lazy(() => import('../pages/DashboardBuilder'));
 const GPLAuditEricsson = lazy(() => import('../pages/Ericsson/GPLAuditEricsson'));
 const CompareEricsson = lazy(() => import('../pages/Ericsson/CompareEricsson'));
 
+const isGeoDrilldownEnabled = import.meta.env.VITE_GEO_DRILLDOWN_ENABLED === 'true';
+
 export const Sidebar_content = {
     temp: [],
     GlobalUrl: [
-        {
+        ...(isGeoDrilldownEnabled ? [{
             name: "Geo Drill-Down",
             link: "/geo-drilldown",
             subMenu: [],
             component: <GeoDrillDownPage />,
-        }, {
+        }] : []), {
             name: "Not Found",
             link: "*",
             subMenu: [],

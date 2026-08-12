@@ -3,7 +3,7 @@ import ReactECharts from 'echarts-for-react';
 import { useTheme } from '../../context/ThemeContext';
 import { chartTokens, FONT_WEIGHT_CSS } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
-import TitleValueOverlay from './TitleValueOverlay';
+import { POSITION_TEXT_ALIGN } from './titlePositions';
 
 /**
  * Horizontal ranked-list bar chart — "Top N sites by traffic," worst-performing cells,
@@ -15,7 +15,7 @@ export default function HorizontalBarChart({
   title = '', unit = '', data = [], limit = 8, color = '#378ADD', height = 140, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
-  titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
+  titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null, valueAxisLabel = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -29,7 +29,17 @@ export default function HorizontalBarChart({
 
   const option = {
     grid: { left: 8, right: 12, top: categoryAxisLabel ? 20 : 8, bottom: 4, containLabel: true },
-    xAxis: { type: 'value', axisLabel: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined } },
+    xAxis: {
+      type: 'value',
+      // This chart's category axis is the vertical one (yAxis, below) — the measure sits
+      // horizontally, so the Y-Axis-title override (valueAxisLabel — see renderChartWidget.jsx,
+      // still keyed off mapping.y_axis_title/the measure column) lands here instead.
+      name: valueAxisLabel || undefined,
+      nameLocation: 'end',
+      nameGap: 6,
+      nameTextStyle: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
+      axisLabel: { fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
+    },
     yAxis: {
       type: 'category',
       data: labels,
@@ -55,17 +65,29 @@ export default function HorizontalBarChart({
   };
 
   return (
-    <div className="kpi-hbar-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
-        ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
-        ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
-      } : undefined} />
-      <TitleValueOverlay
-        title={title}
-        titleClassName="kpi-hbar-title font-bold text-[0.6875rem]"
-        titleStyle={{ color: titleColor || subColor, fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined, fontSize: titleSize ? `${titleSize}px` : undefined, fontFamily: titleFont || undefined }}
-        titlePosition={titlePosition}
-      />
+    <div className="kpi-hbar-card h-full box-border flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
+      {title && (
+        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
+          <span
+            className="kpi-hbar-title font-bold text-[0.6875rem] block truncate"
+            style={{
+              color: titleColor || subColor,
+              fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
+              fontSize: titleSize ? `${titleSize}px` : undefined,
+              fontFamily: titleFont || undefined,
+              textAlign: POSITION_TEXT_ALIGN[titlePosition] || 'left',
+            }}
+          >
+            {title}
+          </span>
+        </div>
+      )}
+      <div className="flex-1 min-h-0">
+        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+          ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
+          ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
+        } : undefined} />
+      </div>
     </div>
   );
 }

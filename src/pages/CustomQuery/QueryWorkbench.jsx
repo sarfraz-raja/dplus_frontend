@@ -266,6 +266,8 @@ const PG_KEYWORDS = new Set([
     'JSONB','SERIAL','BIGSERIAL','SMALLINT','BIGINT','REAL','CHAR','EXTRACT',
     'NOW','NULLIF','GREATEST','LEAST','ROW','ROWS','FOLLOWING','PRECEDING',
     'UNBOUNDED','CURRENT','TIES','ONLY','RANGE','IF','RETURN',
+    'CURRENT_DATE','CURRENT_TIMESTAMP','CURRENT_TIME','CURRENT_USER',
+    'CURRENT_ROLE','CURRENT_CATALOG','CURRENT_SCHEMA','SESSION_USER','LOCALTIME','LOCALTIMESTAMP',
 ]);
 
 const quotePostgresIdentifiers = (sql) => {
@@ -518,6 +520,8 @@ const QueryWorkbench = () => {
             quotePostgresIdentifiers(applyDatetimeParams(activeQuery)),
             limit
         );
+        const dtKeywordsUsed = finalQuery.match(/\b(CURRENT_DATE|CURRENT_TIMESTAMP|CURRENT_TIME|CURRENT_USER|CURRENT_ROLE|CURRENT_CATALOG|CURRENT_SCHEMA|SESSION_USER|LOCALTIME|LOCALTIMESTAMP|NOW)\b/gi) || [];
+        console.log('🕒 Datetime keywords in query (no client input — resolved server-side by Postgres at execution time):', dtKeywordsUsed);
         console.log('📊 Query being sent to backend:', { dbServer: server, queries: finalQuery, limit });
         return { dbServer: server, queries: finalQuery };
     };
@@ -874,7 +878,7 @@ const QueryWorkbench = () => {
                         <div className="flex-1 flex justify-end">
                             {hasResults && (rowsClipped
                                 ? <span className="text-[11px] text-amber-700 font-medium">Showing first 1,000 rows — use ⬇ Export As for full data</span>
-                                : <span className="text-[11px] text-slate-500">{rows.length.toLocaleString()} row{rows.length !== 1 ? 's' : ''} returned</span>
+                                : <span className="text-[11px] text-slate-500">{rows.length.toLocaleString()} row{rows.length !== 1 ? 's' : ''} returned · {columns.length.toLocaleString()} column{columns.length !== 1 ? 's' : ''}</span>
                             )}
                         </div>
                     </div>
@@ -902,14 +906,22 @@ const QueryWorkbench = () => {
                     )}
                     {hasResults && (
                         <>
-                            {allRows.length === 0 ? (
+                            {columns.length === 0 ? (
                                 <div className="flex items-center justify-center h-full text-slate-400 text-sm select-none">
                                     No data found — query returned 0 rows
                                 </div>
                             ) : (
                                 <Table headers={columns} className="min-w-full text-left text-sm">
                                     <tbody>
-                                        {rows.map((row, idx) => (
+                                        {allRows.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={columns.length} className="p-0 select-none">
+                                                    <div className="sticky left-0 w-fit px-4 py-6 text-left text-xs text-slate-400 whitespace-nowrap">
+                                                        No data found — query returned 0 rows
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : rows.map((row, idx) => (
                                             <tr
                                                 key={idx}
                                                 className="border-b border-white/40 transition-colors text-slate-700"

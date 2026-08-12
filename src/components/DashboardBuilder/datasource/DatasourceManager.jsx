@@ -1,7 +1,7 @@
 import React, { useEffect, useImperativeHandle, useState } from 'react';
 import { Database, Play, Trash2, Plus, RefreshCw, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import FormModal from '../../FormModal';
-import { previewDatasource, registerDatasource, listDatasources, getDatasourceDetail, deleteDatasource, refreshDatasourceSchema, updateDatasourceColumn, sampleDatasource, listWidgets } from '../../../store/actions/dashboardBuilder-actions';
+import { previewDatasource, registerDatasource, listDatasources, getDatasourceDetail, deleteDatasource, updateDatasource, refreshDatasourceSchema, updateDatasourceColumn, sampleDatasource, listWidgets } from '../../../store/actions/dashboardBuilder-actions';
 import { notifyDatasourcesChanged } from '../../../store/actions/datasourceEvents';
 
 // The API doc's example column JSON doesn't show an explicit id field (only column_name,
@@ -46,6 +46,18 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  // Unsaved-changes tracking for an EXISTING datasource being edited (updateDatasource) —
+  // separate from the create-flow's own `saving`/`saveError`, which `save()` below still
+  // owns for a brand-new datasource. Only meaningful while editingId is set; a `!!editingId`
+  // guard on the Save button below keeps it irrelevant otherwise.
+  const [editDirty, setEditDirty] = useState(false);
+  // Fields start locked (read-only) whenever an existing datasource is loaded — an explicit
+  // "Edit" click is required before Name/Schema/Table/Query become editable, so viewing a
+  // datasource's config never risks accidentally typing into a live field. `editSnapshot`
+  // captures the values at the moment editing starts, so "Cancel edit" can revert exactly to
+  // what was actually saved rather than whatever's left half-typed.
+  const [editingFields, setEditingFields] = useState(false);
+  const [editSnapshot, setEditSnapshot] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
@@ -119,6 +131,8 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
     setColumnError(null);
     setSample(null);
     setSampleError(null);
+    setEditingFields(false);
+    setEditSnapshot(null);
     setDetailLoading(true);
     try {
       // listDatasources() only returns {id, name, source_type} — the full column metadata
@@ -133,6 +147,7 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
       setTableName(datasource.table_name || '');
       setPreviewResult({ columns, sampleRows: [] });
       setPreviewError(null);
+      setEditDirty(false);
     } catch (err) {
       setPreviewResult(null);
       setPreviewError(err.message);
@@ -182,6 +197,58 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
     } finally {
       setSaving(false);
     }
+  };
+
+  // Edits an EXISTING datasource — name/description always, plus the underlying source
+  // (sql_query, or schema_name+table_name) if it changed, via updateDatasource. Unlike
+  // `save()` above (create-only), this never touches editingId (already set) and refreshes
+  // the columns table from the response, since a changed source re-syncs columns server-side
+  // (same diff logic as refresh-schema — see updateDatasource's own doc comment).
+  const saveEdits = async () => {
+    if (!editingId || !name.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const { columns } = await updateDatasource(editingId, { name: name.trim(), ...currentSource() });
+      setPreviewResult({ columns, sampleRows: [] });
+      setEditDirty(false);
+      // Locks the fields back up on success — same "read-only until deliberately unlocked"
+      // state editDatasource itself starts in, so a save doesn't leave live-editable fields
+      // sitting open for a further accidental edit.
+      setEditingFields(false);
+      setEditSnapshot(null);
+      await refreshList();
+      notifyDatasourcesChanged();
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Unlocks Name/Schema/Table/Query for editing — snapshots the current (saved) values first,
+  // including previewResult (the Columns table), so "Cancel edit" below can revert exactly to
+  // them. Needed for previewResult specifically because the new Preview button (see the
+  // edit-mode toolbar) overwrites it with the dry-run's columns — which have no real
+  // column_id yet — so without reverting it too, cancelling after a Preview would leave the
+  // Columns table stuck showing those non-editable dry-run columns instead of the real saved
+  // ones.
+  const startEditingFields = () => {
+    setEditSnapshot({ name, sourceMode, sqlQuery, schemaName, tableName, previewResult });
+    setEditingFields(true);
+  };
+  const cancelEditingFields = () => {
+    if (editSnapshot) {
+      setName(editSnapshot.name);
+      setSourceMode(editSnapshot.sourceMode);
+      setSqlQuery(editSnapshot.sqlQuery);
+      setSchemaName(editSnapshot.schemaName);
+      setTableName(editSnapshot.tableName);
+      setPreviewResult(editSnapshot.previewResult);
+    }
+    setEditingFields(false);
+    setEditSnapshot(null);
+    setEditDirty(false);
   };
 
   const remove = async () => {
@@ -282,16 +349,18 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => { setName(e.target.value); if (editingId) setEditDirty(true); }}
                 placeholder="e.g. Active Users"
-                disabled={!!editingId}
+                disabled={!!editingId && !editingFields}
                 className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm disabled:bg-slate-50 disabled:text-slate-400"
               />
             </label>
             {/* Query-backed vs table-backed — mutually exclusive per the API doc, same
                 two-segment pill toggle QueryWorkbench uses for its own SQL Mode/Visual
-                Builder switch. Disabled while viewing an existing datasource (read-only,
-                just reflects its real source_type — see editDatasource). */}
+                Builder switch. Always disabled once a datasource exists — updateDatasource
+                can repoint a table-backed datasource at a different table (or a query-backed
+                one at a different query), but can't convert between the two kinds; the
+                fields below it (name, query/schema/table) ARE editable, per-kind. */}
             <div className="flex rounded-lg border border-slate-200 overflow-hidden shrink-0 mt-4">
               <button
                 type="button"
@@ -320,10 +389,10 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
               SQL Query
               <textarea
                 value={sqlQuery}
-                onChange={(e) => setSqlQuery(e.target.value)}
+                onChange={(e) => { setSqlQuery(e.target.value); if (editingId) setEditDirty(true); }}
                 placeholder="select * from telecom.users"
                 rows={4}
-                disabled={!!editingId}
+                disabled={!!editingId && !editingFields}
                 className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm font-mono disabled:bg-slate-50 disabled:text-slate-400"
               />
             </label>
@@ -334,9 +403,9 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
                 <input
                   type="text"
                   value={schemaName}
-                  onChange={(e) => setSchemaName(e.target.value)}
+                  onChange={(e) => { setSchemaName(e.target.value); if (editingId) setEditDirty(true); }}
                   placeholder="e.g. telecom"
-                  disabled={!!editingId}
+                  disabled={!!editingId && !editingFields}
                   className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </label>
@@ -345,9 +414,9 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
                 <input
                   type="text"
                   value={tableName}
-                  onChange={(e) => setTableName(e.target.value)}
+                  onChange={(e) => { setTableName(e.target.value); if (editingId) setEditDirty(true); }}
                   placeholder="e.g. users"
-                  disabled={!!editingId}
+                  disabled={!!editingId && !editingFields}
                   className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </label>
@@ -375,26 +444,39 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
             {editingId && confirmingDelete && (
               <div className="flex flex-col gap-1.5">
                 {usageLoading && <span className="text-xs text-slate-400">Checking which charts use this datasource…</span>}
-                {!usageLoading && usageWidgets?.length > 0 && (
-                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 max-w-md">
-                    <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
-                    <div className="flex flex-col gap-1.5 min-w-0">
-                      <div className="text-xs font-semibold text-amber-800">
-                        Used by {usageWidgets.length} chart{usageWidgets.length === 1 ? '' : 's'} — deleting this datasource will break {usageWidgets.length === 1 ? 'it' : 'them'} on every dashboard {usageWidgets.length === 1 ? "it's" : "they're"} placed on.
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {usageWidgets.slice(0, 8).map((w) => (
-                          <span key={w.id} className="text-[11px] font-medium bg-white border border-amber-200 rounded-full px-2 py-0.5 text-amber-700">
-                            {w.name}
-                          </span>
-                        ))}
-                        {usageWidgets.length > 8 && (
-                          <span className="text-[11px] text-amber-600 px-1 py-0.5">+{usageWidgets.length - 8} more</span>
-                        )}
+                {!usageLoading && usageWidgets?.length > 0 && (() => {
+                  // `w.dashboard_count` — a real field on listWidgets()' own summary rows now
+                  // (no extra per-widget fetch needed). Summed across the affected charts —
+                  // an upper bound on distinct dashboards, not a deduped count (a dashboard
+                  // with two charts from this datasource would count twice here), since
+                  // getting the true distinct number would mean fetching each chart's own
+                  // `dashboards` list (getWidgetDetail, one call per chart) just for this
+                  // warning — worded as "dashboard placement(s)" below to stay honest about
+                  // that rather than implying it's deduplicated.
+                  const dashboardPlacements = usageWidgets.reduce((sum, w) => sum + (w.dashboard_count || 0), 0);
+                  return (
+                    <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 max-w-md">
+                      <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                      <div className="flex flex-col gap-1.5 min-w-0">
+                        <div className="text-xs font-semibold text-amber-800">
+                          Used by {usageWidgets.length} chart{usageWidgets.length === 1 ? '' : 's'}
+                          {dashboardPlacements > 0 && <> across {dashboardPlacements} dashboard placement{dashboardPlacements === 1 ? '' : 's'}</>}
+                          {' '}— deleting this datasource will break {usageWidgets.length === 1 ? 'it' : 'them'} everywhere {usageWidgets.length === 1 ? "it's" : "they're"} placed.
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {usageWidgets.slice(0, 8).map((w) => (
+                            <span key={w.id} className="text-[11px] font-medium bg-white border border-amber-200 rounded-full px-2 py-0.5 text-amber-700">
+                              {w.name}{w.dashboard_count ? ` (${w.dashboard_count})` : ''}
+                            </span>
+                          ))}
+                          {usageWidgets.length > 8 && (
+                            <span className="text-[11px] text-amber-600 px-1 py-0.5">+{usageWidgets.length - 8} more</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-600">Delete this datasource?</span>
                   <button
@@ -435,6 +517,49 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
               >
                 {saving ? 'Saving…' : 'Save datasource'}
               </button>
+            )}
+            {editingId && !confirmingDelete && !editingFields && (
+              <button
+                type="button"
+                onClick={startEditingFields}
+                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50"
+              >
+                Edit
+              </button>
+            )}
+            {editingId && !confirmingDelete && editingFields && (
+              <>
+                {/* Same dry-run runPreview()/canPreview the create-flow's own Preview button
+                    uses — previewDatasource() never persists anything, so it's exactly as
+                    safe to run here against the currently-typed (not-yet-saved) query/table
+                    as it is before a datasource exists at all. Lets you confirm a schema/
+                    table/query change actually resolves before committing to Save changes. */}
+                <button
+                  type="button"
+                  onClick={runPreview}
+                  disabled={previewing || !canPreview}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#0b1830] disabled:opacity-50"
+                >
+                  <Play size={12} /> {previewing ? 'Previewing…' : 'Preview'}
+                </button>
+                {editDirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
+                <button
+                  type="button"
+                  onClick={cancelEditingFields}
+                  disabled={saving}
+                  className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200 bg-white disabled:opacity-50"
+                >
+                  Cancel edit
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEdits}
+                  disabled={!name.trim() || !editDirty || saving}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#EC7D09] disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Save changes'}
+                </button>
+              </>
             )}
           </div>
 

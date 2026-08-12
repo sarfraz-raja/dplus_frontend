@@ -3,7 +3,8 @@ import ReactECharts from 'echarts-for-react';
 import { useTheme } from '../../context/ThemeContext';
 import { chartTokens, FONT_WEIGHT_CSS } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
-import TitleValueOverlay from './TitleValueOverlay';
+import { POSITION_TEXT_ALIGN } from './titlePositions';
+import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 
 /**
  * Waterfall chart — cumulative breakdown of what's driving a KPI change (e.g. what
@@ -18,7 +19,7 @@ import TitleValueOverlay from './TitleValueOverlay';
 export default function WaterfallChart({
   title = '', unit = '', data = [], upColor = '#10B981', downColor = '#EF4444', height = 140, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
-  titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
+  titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null, valueAxisLabel = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -38,19 +39,20 @@ export default function WaterfallChart({
   });
 
   const option = {
-    grid: { left: 32, right: 4, top: 8, bottom: categoryAxisLabel ? 38 : 24 },
+    grid: { left: gridMarginForVerticalTitle(valueAxisLabel, 32, 46), right: 4, top: 8, bottom: categoryAxisLabel ? 38 : 24 },
     xAxis: {
       type: 'category',
       data: labels,
       // Which column the tick labels actually represent — see BarChart.jsx's own comment on
       // this same prop.
-      name: categoryAxisLabel || undefined,
-      nameLocation: 'middle',
-      nameGap: labels.length > 5 ? 36 : 22,
-      nameTextStyle: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
+      ...buildAxisTitle(categoryAxisLabel, { axisTextSize: axisTextSize || 8, axisTextColor, axisTextWeight, axisTextFont, gap: labels.length > 5 ? 36 : 22 }),
       axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined, interval: 0, rotate: labels.length > 5 ? 30 : 0 },
     },
-    yAxis: { type: 'value', splitNumber: 2, axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined } },
+    yAxis: {
+      type: 'value', splitNumber: 2,
+      ...buildAxisTitle(valueAxisLabel, { axisTextSize: axisTextSize || 8, axisTextColor, axisTextWeight, axisTextFont, vertical: true }),
+      axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
+    },
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
@@ -75,17 +77,29 @@ export default function WaterfallChart({
   };
 
   return (
-    <div className="kpi-waterfall-card h-full box-border relative rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
-      <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
-        ...(onPointClick ? { click: (p) => p.seriesName === 'Delta' && onPointClick(p.name) } : {}),
-        ...(onPointContextMenu ? { contextmenu: (p) => { if (p.seriesName === 'Delta') { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } } : {}),
-      } : undefined} />
-      <TitleValueOverlay
-        title={title}
-        titleClassName="kpi-waterfall-title font-bold text-[0.6875rem]"
-        titleStyle={{ color: titleColor || subColor, fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined, fontSize: titleSize ? `${titleSize}px` : undefined, fontFamily: titleFont || undefined }}
-        titlePosition={titlePosition}
-      />
+    <div className="kpi-waterfall-card h-full box-border flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
+      {title && (
+        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
+          <span
+            className="kpi-waterfall-title font-bold text-[0.6875rem] block truncate"
+            style={{
+              color: titleColor || subColor,
+              fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
+              fontSize: titleSize ? `${titleSize}px` : undefined,
+              fontFamily: titleFont || undefined,
+              textAlign: POSITION_TEXT_ALIGN[titlePosition] || 'left',
+            }}
+          >
+            {title}
+          </span>
+        </div>
+      )}
+      <div className="flex-1 min-h-0">
+        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+          ...(onPointClick ? { click: (p) => p.seriesName === 'Delta' && onPointClick(p.name) } : {}),
+          ...(onPointContextMenu ? { contextmenu: (p) => { if (p.seriesName === 'Delta') { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } } : {}),
+        } : undefined} />
+      </div>
     </div>
   );
 }

@@ -132,6 +132,7 @@ function resolveWidgetProps(widget, ctx) {
     bgGradientFrom: dashboardBgGradientFrom, bgGradientTo: dashboardBgGradientTo,
     valueDecimals: dashboardValueDecimals,
     widgetId, onPointClick: onWidgetPointClick, onDrillUp: onWidgetDrillUp,
+    onPointCrossFilter: onWidgetPointCrossFilter,
   } = ctx || {};
   // For a real (chartLibrary) widget, its own definition — edited via the Charts tab,
   // stored in dataSource.mapping.style — is the base default for EVERY placement of that
@@ -368,6 +369,16 @@ function resolveWidgetProps(widget, ctx) {
         onPointClick: (extraStyle.crossFilterSource === 'on' || resolved.drillDown?.enabled) && onWidgetPointClick
           ? (point) => onWidgetPointClick(widgetId, point)
           : undefined,
+        // Whether THIS placement also has cross-filter configured, regardless of the
+        // drill-priority check above — lets ChartLibraryWidgetView's right-click menu offer
+        // "Cross-filter by this point" as an explicit alternative even on a widget where
+        // left-click's default action is drilling (see onPointCrossFilter below and
+        // handleWidgetPointCrossFilterRef in this file, which bypasses the drill-first check
+        // handleWidgetPointClickRef applies to left-click).
+        crossFilterEnabled: extraStyle.crossFilterSource === 'on',
+        onPointCrossFilter: extraStyle.crossFilterSource === 'on' && onWidgetPointCrossFilter
+          ? (point) => onWidgetPointCrossFilter(widgetId, point)
+          : undefined,
         style: {
           titleColor: finalTitleColor, titleWeight: finalTitleWeight, titleSize: finalTitleSize, titleFont: finalTitleFont, titlePosition: finalTitlePosition, bgColor: finalBgColor, bgGradient: finalBgGradient, palette: finalPalette, ...valueText, ...axisText,
           donut: extraStyle.donut === 'donut',
@@ -466,7 +477,7 @@ const WidgetContent = React.memo(function WidgetContent({
   palette, accentColor, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
   bgGradientFrom, bgGradientTo, valueDecimals,
   mockDataCache, datasources, chartLibraryEntry, comparisonEntry,
-  widgetId, onPointClick, onDrillUp,
+  widgetId, onPointClick, onDrillUp, onPointCrossFilter,
 }) {
   const Comp = WIDGET_TYPE_REGISTRY[widget.type]?.component;
   if (!Comp) return null;
@@ -483,7 +494,7 @@ const WidgetContent = React.memo(function WidgetContent({
     chartLibraryData: widget.dataSource?.widgetId && chartLibraryEntry
       ? { [widget.dataSource.widgetId]: { ...chartLibraryEntry, comparison: comparisonEntry } }
       : {},
-    widgetId, onPointClick, onDrillUp,
+    widgetId, onPointClick, onDrillUp, onPointCrossFilter,
   });
   return <Comp {...props} />;
 });
@@ -955,7 +966,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // opened in the Charts tab) just to remove or copy it from the shared library.
   const deleteChartFromList = (widget) => setPendingConfirm({
     title: 'Delete Chart',
-    message: `Delete "${widget.name}"? This removes it from the Chart Library and from any dashboard it's placed on.`,
+    // `widget.dashboard_count` — a real field on listWidgets()' own summary rows (the exact
+    // row `widget` here is), same as ChartLibrary.jsx's own deleteFromList — no extra fetch.
+    message: widget.dashboard_count
+      ? `Delete "${widget.name}"? It's used on ${widget.dashboard_count} dashboard${widget.dashboard_count === 1 ? '' : 's'} — deleting it will remove it from all of them.`
+      : `Delete "${widget.name}"? This removes it from the Chart Library and from any dashboard it's placed on.`,
     run: async () => {
       try {
         await deleteChartLibraryWidget(widget.id);
@@ -1335,20 +1350,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // there would defeat WidgetContent's React.memo (the same perf issue already fixed once
   // this session for Table widgets) — while this still always reads the latest
   // widgets/dashboardFilters/activeCrossFilter via closure.
-  const handleWidgetPointClickRef = useRef(() => {});
-  handleWidgetPointClickRef.current = async (sourceWidgetId, { column, value }) => {
+  // The actual cross-filter action (match sibling widgets on {column, value}, toggle off on a
+  // repeat click of the same point) — factored out of handleWidgetPointClickRef so both
+  // left-click's drill-first default AND the right-click menu's explicit "Cross-filter by this
+  // point" entry can trigger it. A widget with only cross-filter configured reaches this
+  // straight from left-click (handleWidgetPointClickRef below); a widget with BOTH drill-down
+  // and cross-filter configured can only reach this via the menu (handleWidgetPointCrossFilterRef),
+  // since left-click there is claimed by drilling — the "manual priority" the user asked for.
+  const doCrossFilterForPoint = async (sourceWidgetId, { column, value }) => {
     const sourceWidget = widgets[sourceWidgetId];
     if (!sourceWidget?.dataSource) return;
-    // Drilling takes priority over cross-filtering — a widget only ever wires onPointClick
-    // for cross-filtering OR drilling (see resolveWidgetProps' 'chartLibrary' case), never
-    // both interpretations of the same click, so this check is really "which mode is this
-    // widget in right now", not a tie-break.
-    const backendWidgetId = sourceWidget.dataSource.widgetId;
-    const entry = backendWidgetId ? chartLibraryData[backendWidgetId] : undefined;
-    if (entry?.drillDown?.enabled && entry?.drillDown?.has_next_level) {
-      await fetchDrilledWidget(backendWidgetId, [...(entry.drillDown.path || []), value]);
-      return;
-    }
     const clickId = `${sourceWidgetId}:${column}:${value}`;
     // Clicking the same point again clears the cross-filter — matches Power BI/Superset's
     // click-to-toggle convention.
@@ -1382,9 +1393,36 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     await applyCrossFilterTo(targetIds, { column, operator: '=', value });
     setActiveCrossFilter({ clickId, sourceWidgetId, column, value, label: String(value), targetIds });
   };
+
+  const handleWidgetPointClickRef = useRef(() => {});
+  handleWidgetPointClickRef.current = async (sourceWidgetId, { column, value }) => {
+    const sourceWidget = widgets[sourceWidgetId];
+    if (!sourceWidget?.dataSource) return;
+    // Left-click's default action: drilling wins when this widget can still drill further —
+    // matches the pre-existing behavior so nothing regresses for dashboards that only have one
+    // of the two features configured. When a widget has BOTH configured, this is what makes
+    // left-click "the drill button" and pushes cross-filter to the right-click menu instead
+    // (stableOnPointCrossFilter below) — the explicit, user-requested choice mechanism, rather
+    // than cross-filter being silently unreachable.
+    const backendWidgetId = sourceWidget.dataSource.widgetId;
+    const entry = backendWidgetId ? chartLibraryData[backendWidgetId] : undefined;
+    if (entry?.drillDown?.enabled && entry?.drillDown?.has_next_level) {
+      await fetchDrilledWidget(backendWidgetId, [...(entry.drillDown.path || []), value]);
+      return;
+    }
+    await doCrossFilterForPoint(sourceWidgetId, { column, value });
+  };
   // The actual prop passed down — stable across every render (empty dep array), so it never
   // breaks WidgetContent's memoization; always delegates to the freshest ref above.
   const stableOnPointClick = useCallback((widgetId, point) => handleWidgetPointClickRef.current(widgetId, point), []);
+
+  // Explicit cross-filter trigger from the right-click point menu — bypasses the drill-first
+  // check above entirely, so a widget configured for both features can still be cross-filtered
+  // even though left-click on it drills. Same ref-then-stable-callback split as
+  // handleWidgetPointClickRef/stableOnPointClick, for the same WidgetContent-memoization reason.
+  const handleWidgetPointCrossFilterRef = useRef(() => {});
+  handleWidgetPointCrossFilterRef.current = doCrossFilterForPoint;
+  const stableOnPointCrossFilter = useCallback((widgetId, point) => handleWidgetPointCrossFilterRef.current(widgetId, point), []);
   // Explicit clear affordance (the clear-chip) — same effect as re-clicking the same point.
   const clearCrossFilter = () => {
     if (!activeCrossFilter) return;
@@ -1636,6 +1674,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             widgetId={l.i}
             onPointClick={stableOnPointClick}
             onDrillUp={stableOnDrillUp}
+            onPointCrossFilter={stableOnPointCrossFilter}
           />
         </div>
       </div>

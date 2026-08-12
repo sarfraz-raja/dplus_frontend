@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useDispatch } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -23,6 +23,87 @@ const SOURCE_TYPES = [
 ];
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const STATUS_OPTIONS = ['draft', 'active', 'paused', 'completed', 'failed', 'deleted'];
+
+const STATUS_STYLES = {
+    draft:     'bg-slate-100 text-slate-600',
+    active:    'bg-green-100 text-green-700',
+    paused:    'bg-yellow-100 text-yellow-700',
+    completed: 'bg-blue-100 text-blue-700',
+    failed:    'bg-red-100 text-red-700',
+    deleted:   'bg-slate-200 text-slate-400',
+};
+
+const STATUS_DOT = {
+    draft:     'bg-slate-400',
+    active:    'bg-green-500',
+    paused:    'bg-yellow-400',
+    completed: 'bg-blue-500',
+    failed:    'bg-red-500',
+    deleted:   'bg-slate-300',
+};
+
+const TRANSITION_HOVER = {
+    draft:     'hover:bg-slate-50 hover:text-slate-700',
+    active:    'hover:bg-green-50 hover:text-green-700',
+    paused:    'hover:bg-yellow-50 hover:text-yellow-700',
+    completed: 'hover:bg-blue-50 hover:text-blue-700',
+    failed:    'hover:bg-red-50 hover:text-red-700',
+    deleted:   'hover:bg-red-50 hover:text-red-500',
+};
+
+const StatusPicker = ({ value, originalStatus, onChange }) => {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    const options = STATUS_OPTIONS.filter((s) => s !== value);
+
+    return (
+        <div ref={ref} className="relative w-full">
+            <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                className={`w-full flex items-center justify-between gap-1.5 border rounded-md px-2 py-1 sm:px-2.5 sm:py-1.5 lg:px-2 lg:py-1 text-xs font-semibold transition-colors cursor-pointer hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-orange-400
+                    ${STATUS_STYLES[value] || 'bg-slate-100 text-slate-500'} border-transparent
+                    ${value && value !== originalStatus ? 'ring-1 ring-amber-400' : ''}
+                `}
+            >
+                <span className="inline-flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[value] || 'bg-slate-400'}`} />
+                    <span className="capitalize">{value || '—'}</span>
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-60 shrink-0"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+
+            {open && (
+                <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[148px] w-full bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 overflow-hidden">
+                    <p className="px-3 pt-0.5 pb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
+                        Change status
+                    </p>
+                    {options.map((s) => (
+                        <button
+                            key={s}
+                            type="button"
+                            onClick={() => { setOpen(false); onChange(s); }}
+                            className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors ${TRANSITION_HOVER[s] || 'hover:bg-slate-50'}`}
+                        >
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[s] || 'bg-slate-400'}`} />
+                            <span className="capitalize">{s}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const isVersioned = () => true; // all source types need source_id + theme
 
@@ -114,9 +195,10 @@ const XReportSchedulerFormPage = () => {
     };
 
     // Fields the form actually owns — never resend server-managed fields
-    // (id, status, run_count, last_run_at, next_run_at, failure_count, last_run_status,
+    // (id, run_count, last_run_at, next_run_at, failure_count, last_run_status,
     // create_time, update_time) so an edit stays a true partial update and can't
-    // accidentally trip a status-transition guard or clobber run history.
+    // clobber run history. `status` is included on edit — the user can change it
+    // directly in the form now; if left untouched it's just resent as-is (a no-op).
     const FORM_FIELDS = [
         'report_name', 'source_type', 'source_id', 'theme', 'frequency', 'day_of_week',
         'output_format', 'start_datetime', 'end_datetime', 'send_time',
@@ -128,7 +210,7 @@ const XReportSchedulerFormPage = () => {
         setSubmitting(true);
         const payload = {};
         FORM_FIELDS.forEach((key) => { if (data[key] !== undefined) payload[key] = data[key]; });
-        if (isEdit && originalStatus) payload.last_status = originalStatus;
+        if (isEdit) payload.status = data.status || originalStatus;
         const action = isEdit
             ? AlertConfigurationActions.putReportScheduler(id, payload,
                 () => { setSubmitting(false); navigate('/xalerts/report-scheduler'); },
@@ -305,6 +387,25 @@ const XReportSchedulerFormPage = () => {
                                 <input type="time" className={inputCls} {...register('send_time', { required: 'Required' })} />
                                 {errors.send_time && <p className={errorCls}>{errors.send_time.message}</p>}
                             </div>
+                            {isEdit && (
+                                <div>
+                                    <label className={labelCls}>
+                                        Status <span className="text-red-400">*</span>
+                                        {originalStatus && (
+                                            <span className={`ml-1 normal-case font-semibold ${watched.status !== originalStatus ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                (current: {originalStatus})
+                                            </span>
+                                        )}
+                                    </label>
+                                    <input type="hidden" {...register('status', { required: 'Required' })} />
+                                    <StatusPicker
+                                        value={watched.status}
+                                        originalStatus={originalStatus}
+                                        onChange={(s) => setValue('status', s, { shouldValidate: true })}
+                                    />
+                                    {errors.status && <p className={errorCls}>{errors.status.message}</p>}
+                                </div>
+                            )}
                         </div>
                     </Card>
                 </div>
@@ -364,7 +465,7 @@ const XReportSchedulerFormPage = () => {
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-5 flex flex-col">
-                            {isEdit && <SummaryRow label="Last Status" value={originalStatus} />}
+                            {isEdit && <SummaryRow label="Status" value={watched.status} />}
                             <SummaryRow label="Report Name"   value={watched.report_name} />
                             <SummaryRow label="Source"        value={sourceLabel} />
                             <SummaryRow label="Source ID"     value={watched.source_id} />

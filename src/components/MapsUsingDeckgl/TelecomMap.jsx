@@ -649,8 +649,8 @@ const TelecomMap = ({ operator, mapKey = null, geojsonLayer = null, fullscreenRo
   // const [forceOffline, setForceOffline] = useState(false);
   // Derived: use offline PMTiles if truly offline OR user manually forced it
   // const isOfflineMode = forceOffline || !isOnline;
-  // Always offline — online CDN basemaps disabled
-  const isOfflineMode = true;
+  // Set app-wide via VITE_OFFLINE_MAPS_ENABLED (defaults to offline when unset)
+  const isOfflineMode = import.meta.env.VITE_OFFLINE_MAPS_ENABLED !== 'false';
   // Holds the fetched+patched OpenFreeMap style object used when in offline mode
   const [offlineMapStyle, setOfflineMapStyle] = useState(null);
   const mapStylePickerRef = useRef(null);
@@ -3684,7 +3684,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
             }}
             mapStylePickerOpen={mapStylePickerOpen}
             setMapStylePickerOpen={setMapStylePickerOpen}
-            isOnline={false /* always offline — orange dot and satellite option hidden */}
+            isOnline={!isOfflineMode /* controls orange dot and satellite option visibility */}
           />
 
           <div className="flex items-center justify-end gap-3">
