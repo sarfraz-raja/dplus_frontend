@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { toDateTimeLocalInput, fromDateTimeLocalInput } from '../utils/resolveTimeRange';
+import PaletteEditor from '../themes/PaletteEditor';
 
 // One accent per drill-down depth (cycles if a hierarchy ever goes deeper than 5 levels) —
 // purely a visual "which ring is this" cue in the orderedColumns editor below, distinct from
@@ -12,7 +14,33 @@ const LEVEL_RING_COLORS = ['#0EA5E9', '#8B5CF6', '#F59E0B', '#14B8A6', '#EC4899'
  * generic style-field renderer, applied to mapping fields instead. `value` is the
  * in-progress mapping object (keyed by field.key); `onChange(key, val)` updates one field.
  */
-export default function MappingFields({ fields = [], value = {}, onChange, columns = [], columnsLoading = false }) {
+// `styleValue`/`onStyleChange` — a second, parallel value/setter pair for the one field type
+// ('palette') that actually belongs to mapping.style, not the mapping object every other field
+// here reads/writes. Kept separate rather than writing style keys into `value` alongside real
+// mapping keys — mapping and style are two different persisted objects (see ChartLibrary.jsx's
+// own mapping/mapping.style split), and blurring that here would make `value` no longer equal
+// to what actually gets saved as the widget's own mapping.
+export default function MappingFields({ fields = [], value = {}, onChange, columns = [], columnsLoading = false, styleValue = {}, onStyleChange }) {
+  // Collapse state per group (keyed by field.key) — groups start expanded (matches every
+  // group having something worth configuring the moment a chart_type is picked), a user can
+  // fold away one they've already finished (e.g. X Axis) to focus on the one they're still
+  // working on, same "focus what's active" reasoning as the Data/Style/Charts tab strip above
+  // this in ChartLibrary.jsx. Local to this render tree, not part of `value` — purely a view
+  // preference, never persisted into the saved mapping.
+  const [collapsedGroups, setCollapsedGroups] = useState({});
+  const toggleGroup = (key) => setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  // "Required" here means "this deliberately shapes the query/chart" — broader than just
+  // ChartLibrary.jsx's `canSave` (which only blocks Save on an unfilled column/multiColumn
+  // picker with no default at all). A `select` with a `default` (e.g. Aggregation, Date
+  // format) still silently picks a real behavior the moment it's left untouched — that's a
+  // real, consequential choice, not a no-op, so it earns the same "*" as a field with no
+  // fallback. `field.optional: true` is the one deliberate opt-out: a field whose blank/unset
+  // state is itself a legitimate "do nothing" (e.g. Truncate Y Axis unchecked = no truncation,
+  // an axis title left blank = fall back to the column name) rather than a defaulted choice.
+  const isRequiredField = (field) => !field.optional;
+  const FieldLabel = ({ field }) => (
+    <>{field.label}{isRequiredField(field) && <span className="text-red-500"> *</span>}</>
+  );
   // Extracted so a 'group' field (below) can render its own nested fields through the exact
   // same per-type logic, instead of duplicating it — a group is just a labeled box around a
   // sub-list of ordinary fields, not a distinct rendering path.
@@ -38,16 +66,25 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           // aggregation === 'LATEST' clears both its own fields) would otherwise render as a
           // bare labeled box with nothing inside it — skip the whole group instead.
           if (!visibleSubFields.length) return null;
+          const isCollapsed = !!collapsedGroups[field.key];
           return (
-            <div key={field.key} className="flex flex-col gap-2 p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 w-full">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{field.label}</div>
-              {/* Equal-width columns (not flex-wrap's content-sized items) — Measure and
-                  Aggregation, or Compare-to and Delta format, end up the same width as each
-                  other instead of one field looking "bigger" purely because its label text
-                  or fixed width class happened to be wider. */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-                {visibleSubFields.map((f) => renderField(f, true))}
-              </div>
+            <div key={field.key} className="flex flex-col gap-2 p-3 rounded-xl border border-slate-200 bg-white w-full">
+              <button
+                type="button"
+                onClick={() => toggleGroup(field.key)}
+                className="flex items-center justify-between text-xs font-semibold text-[#EC7D09] uppercase tracking-wide"
+              >
+                {field.label}
+                {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              </button>
+              {/* Stacked one-per-row, full width — every sub-field gets its own line at full
+                  panel width instead of packed two-to-a-row, matching the target layout: each
+                  control reads clearly on its own rather than competing for a half-width cell. */}
+              {!isCollapsed && (
+                <div className="flex flex-col gap-2">
+                  {visibleSubFields.map((f) => renderField(f, true))}
+                </div>
+              )}
             </div>
           );
         }
@@ -66,12 +103,12 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
             : columns;
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
-              {field.label}
+              <FieldLabel field={field} />
               <select
                 value={current || ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 disabled={!options.length}
-                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
+                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
               >
                 <option value="">{columnsLoading ? 'Loading…' : options.length ? 'Select column' : 'No matching columns'}</option>
                 {options.map((c) => (
@@ -81,19 +118,30 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
             </label>
           );
         }
+        if (field.type === 'palette') {
+          // Reads/writes `styleValue`/`onStyleChange`, not `value`/`onChange` — see this
+          // component's own doc comment on why a style-tree field can't just be another key on
+          // the mapping object every other field type here belongs to.
+          return (
+            <div key={field.key} className="flex flex-col gap-1.5 w-full">
+              <div className="text-xs font-medium text-slate-600">{field.label}</div>
+              <PaletteEditor value={styleValue?.[field.key] || []} onChange={(next) => onStyleChange?.(field.key, next)} />
+            </div>
+          );
+        }
         if (field.type === 'text') {
           // A free-form label override (e.g. a custom axis title) — falls back to whatever
           // the chart would otherwise derive on its own (the column name) when left blank,
           // so this is purely optional, never a required rename.
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
-              {field.label}
+              <FieldLabel field={field} />
               <input
                 type="text"
                 value={current || ''}
                 placeholder={field.placeholder || ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
-                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
+                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
               />
             </label>
           );
@@ -107,21 +155,115 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           // the now-narrowed list (e.g. switching to LATEST after "Previous period" was
           // already picked), so the select never silently keeps a now-meaningless value
           // selected/hidden from view.
-          const options = typeof field.options === 'function' ? field.options(value) : field.options;
-          const selected = options.includes(current) ? current : field.default;
+          // Each entry is either a plain string (value === displayed label, the common case)
+          // or a `{ value, label }` pair — the latter lets a field show a richer label (e.g.
+          // a live-rendered preview like "MMM DD | May 18") while the stored mapping value
+          // stays the plain preset key (see X_AXIS_DATE_FORMAT_FIELD in ChartLibrary.jsx).
+          const rawOptions = typeof field.options === 'function' ? field.options(value) : field.options;
+          const options = rawOptions.map((opt) => (typeof opt === 'object' ? opt : { value: opt, label: opt }));
+          const selected = options.some((opt) => opt.value === current) ? current : field.default;
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-32'}`}>
-              {field.label}
+              <FieldLabel field={field} />
               <select
                 value={selected}
                 onChange={(e) => onChange(field.key, e.target.value)}
-                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
+                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
               >
-                {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
               {/* A short caption under the field (e.g. "Default: Africa/Blantyre") instead of
                   baking that into the label itself — a long label wraps awkwardly onto two
                   lines inside a grid cell and misaligns against the field beside it. */}
+              {field.hint && <span className="block mt-1 text-[10px] font-normal text-slate-400">{field.hint}</span>}
+            </label>
+          );
+        }
+        if (field.type === 'checkbox') {
+          // Groups render one field per row now (see the 'group' case above), not packed
+          // two-to-a-row — so a checkbox no longer needs to fake a label-height spacer to
+          // line up against a sibling field's baseline; it can just sit at its own natural
+          // height like every other stacked row.
+          return (
+            <div key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-32'}`}>
+              <label className="flex items-center gap-1.5 h-[30px]">
+                <input type="checkbox" checked={!!current} onChange={(e) => onChange(field.key, e.target.checked)} />
+                <FieldLabel field={field} />
+              </label>
+            </div>
+          );
+        }
+        if (field.type === 'number') {
+          // Blank means "unset" (no bound) — distinct from 0, which is a real value an axis
+          // bound genuinely might need (e.g. Min: 0 to pin the baseline).
+          // `field.warnIf(mapping)` (e.g. Y_AXIS_MAX_FIELD's own "Min must be less than Max" —
+          // see ChartLibrary.jsx) surfaces *why* a value silently has no effect: the chart
+          // components themselves (resolveTruncatedBounds in axisTypeUtils.js) already drop
+          // an invalid min>max pair back to Auto rather than passing it to ECharts, but that
+          // fallback is invisible without this — a truncation bound that "does nothing" reads
+          // as a bug, not as a validation failure, unless the reason is shown right here.
+          const warning = field.warnIf?.(value);
+          return (
+            <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-32'}`}>
+              <FieldLabel field={field} />
+              <input
+                type="number"
+                value={current === undefined || current === null ? '' : current}
+                placeholder={field.placeholder || 'auto'}
+                onChange={(e) => onChange(field.key, e.target.value === '' ? undefined : Number(e.target.value))}
+                className={`mt-1 w-full px-2.5 py-1.5 rounded-lg border text-xs ${warning ? 'border-amber-400' : 'border-slate-200'}`}
+              />
+              {warning && <span className="block mt-1 text-[10px] font-normal text-amber-600">{warning}</span>}
+            </label>
+          );
+        }
+        if (field.type === 'numberUnit') {
+          // A number + unit select rendered as one combined control (e.g. "Tick every [47]
+          // [hours ▾]") instead of two separately-labeled fields that happen to sit next to
+          // each other — reads as a single concept with one label, not two unrelated ones.
+          // Writes to two mapping keys (field.key for the number, field.unitKey for the unit)
+          // since the stored mapping is still a flat key/value bag; only the rendering merges
+          // them into one control.
+          const currentUnit = value?.[field.unitKey] ?? field.unitDefault;
+          // Per-unit ceiling (field.unitMax, e.g. hours -> 23) — past that point the value is
+          // really "the next unit up" (24 hours is 1 day), not a bigger custom interval, so it
+          // gets clamped rather than accepted as-is. Applied on every change (typing past the
+          // input's own `max` attribute isn't blocked by the browser, only the spinner arrows
+          // respect it), not just as a visual `max` hint.
+          const maxForUnit = field.unitMax?.[currentUnit];
+          const commitValue = (raw) => {
+            if (raw === '') return onChange(field.key, undefined);
+            const n = Number(raw);
+            onChange(field.key, maxForUnit != null ? Math.min(n, maxForUnit) : n);
+          };
+          return (
+            <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
+              <FieldLabel field={field} />
+              <div className="mt-1 flex gap-1.5">
+                <input
+                  type="number"
+                  min={field.min ?? 1}
+                  max={maxForUnit}
+                  value={current === undefined || current === null ? '' : current}
+                  placeholder={field.placeholder || 'Auto'}
+                  onChange={(e) => commitValue(e.target.value)}
+                  className="w-1/2 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
+                />
+                <select
+                  value={currentUnit}
+                  onChange={(e) => {
+                    onChange(field.unitKey, e.target.value);
+                    // Re-clamp the existing number against the *new* unit's own ceiling — e.g.
+                    // "40" typed while on "hours" (clamped to 23) should re-clamp to 6 on
+                    // switching to "days", not silently keep showing a since-invalid 23.
+                    const newMax = field.unitMax?.[e.target.value];
+                    if (current != null && newMax != null && current > newMax) onChange(field.key, newMax);
+                  }}
+                  className="w-1/2 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
+                >
+                  {field.unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
               {field.hint && <span className="block mt-1 text-[10px] font-normal text-slate-400">{field.hint}</span>}
             </label>
           );
@@ -139,12 +281,12 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           // 'YYYY-MM-DD HH:MM:SS' shape, not the native input's 'YYYY-MM-DDTHH:mm'.
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
-              {field.label}
+              <FieldLabel field={field} />
               <input
                 type="datetime-local"
                 value={toDateTimeLocalInput(current)}
                 onChange={(e) => onChange(field.key, fromDateTimeLocalInput(e.target.value))}
-                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
+                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
               />
             </label>
           );
@@ -173,7 +315,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           const addLevel = (colName) => { if (colName) onChange(field.key, [...levels, colName]); };
           return (
             <div key={field.key} className="flex flex-col gap-1.5 w-full">
-              <div className="text-xs font-medium text-slate-600">{field.label}</div>
+              {field.label && <div className="text-xs font-medium text-slate-600"><FieldLabel field={field} /></div>}
               {levels.length === 0 && (
                 <div className="text-xs text-slate-400">No drill-down levels — this chart won't be drillable.</div>
               )}
@@ -219,7 +361,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                 value=""
                 onChange={(e) => addLevel(e.target.value)}
                 disabled={!availableCols.length}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-500"
+                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-500"
               >
                 <option value="">{availableCols.length ? '+ Add drill-down level…' : 'No more columns to add'}</option>
                 {availableCols.map((c) => (
@@ -238,7 +380,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           return (
             <div key={field.key} className="flex flex-col gap-1.5 w-full">
               <div className="flex items-center justify-between">
-                <div className="text-xs font-medium text-slate-600">{field.label}</div>
+                <div className="text-xs font-medium text-slate-600"><FieldLabel field={field} /></div>
                 {columns.length > 0 && (
                   <button
                     type="button"

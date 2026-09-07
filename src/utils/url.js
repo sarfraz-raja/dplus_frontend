@@ -54,7 +54,14 @@ export const Urls={
     powerBI_tokenCreator:"/powerBI/tokenCreator",
     alertConfiguration_configureAlert:"/alertConfiguration/configureAlert",
     alertConfiguration_schedulerAlert:"/alertConfiguration/schedulerAlert",
+    /** group_blueprint.py — registered without prefix */
+    groups:"/groups",
+    groupMembers: (groupId) => `/groups/${groupId}/members`,
+    /** Existing endpoint reused for the group member picker — returns dropdown-ready {id,label,username} rows */
+    tickets_users:"/tickets/users",
     report_scheduler: "/xalerts/report-scheduler",
+    report_scheduler_send_now: "/xalerts/report-scheduler/send-now",
+    dashboard_tabs: (dashboardId) => `/xalerts/dashboard/${dashboardId}/tabs`,
     mtandaoComplaints:"/mtandaoComplaints",
     isonForm:"/isonForm",
     nokiaprepost:"/nokiaprepost",
@@ -77,6 +84,10 @@ export const Urls={
     // dashboard (a plain field on the dashboard, not a join table, since a dashboard can only
     // bind one theme at a time — unlike widgets, which are many-per-dashboard).
     dashboardBuilder_themes:"/dashboard-builder/themes", // POST (create) / GET (list)
+    // Slicers (interactive filters) — /dashboards/{id}/slicers for create+list (scoped to a
+    // dashboard, mirroring the widgets join pattern above), /slicers/{id} for update/delete/
+    // refresh-values on an individual slicer (its own standalone resource once created).
+    dashboardBuilder_slicers:"/dashboard-builder/slicers",
 
     proRules:"/proRules",
     proRulesOutput:"/proRulesOutput",

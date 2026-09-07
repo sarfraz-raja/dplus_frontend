@@ -9,7 +9,7 @@ import TitleValueOverlay from './TitleValueOverlay';
  * `color` is used for the light-mode tint.
  */
 export default function StatCard({
-  label = '', fullName = '', value = '', unit = '', delta = '', deltaUp = true, icon = null, color = '#378ADD',
+  label = '', fullName = '', value = '', unit = '', delta = '', deltaUp = true, deltaTooltip = '', icon = null, color = '#378ADD',
   darkGradient = null, isDark: isDarkProp = null, bgColor = null, bgGradient = null, valueTextColor = null, valueTextSize = null,
   titleColor = null, titleWeight = null, titleSize = null, titleFont = null,
   titlePosition = 'top-left', valuePosition = 'top-right',
@@ -33,10 +33,9 @@ export default function StatCard({
           ? `${sheen}, linear-gradient(135deg, ${darkGradient[0]}, ${darkGradient[1]})`
           : `${sheen}, linear-gradient(135deg, #22273C, #22273C)`)
       : `${sheen}, linear-gradient(135deg, ${color}33, ${color}08)`);
-  const border = isDark ? 'rgba(255,255,255,0.10)' : `${color}44`;
   // `color` (accent) drives the icon (both themes — previously stuck on a fixed white in
-  // dark mode, making Accent color invisible there once a shade gradient was picked) plus
-  // the border/shade fallback. `valueTextColor`, when set, controls only the value number —
+  // dark mode, making Accent color invisible there once a shade gradient was picked).
+  // `valueTextColor`, when set, controls only the value number —
   // the delta line keeps its semantic green(up)/amber(down) tint always, so it can't get
   // flattened into one color by a Value text color pick.
   const valueStyle = {
@@ -61,7 +60,10 @@ export default function StatCard({
       {value}
       {unit && <span className="text-xs font-medium opacity-70">{unit}</span>}
       {delta && (
-        <span className={`kpi-stat-delta text-[0.6875rem] ml-1 ${deltaUp ? 'up text-emerald-600 dark:text-emerald-400' : 'down text-amber-600 dark:text-amber-400'}`}>
+        <span
+          className={`kpi-stat-delta kpi-tooltip text-[0.6875rem] ml-1 ${deltaUp ? 'up text-emerald-600 dark:text-emerald-400' : 'down text-amber-600 dark:text-amber-400'}`}
+          data-tooltip={deltaTooltip || undefined}
+        >
           {deltaUp ? '▲' : '▼'} {delta}
         </span>
       )}
@@ -71,7 +73,7 @@ export default function StatCard({
   return (
     <div
       className="kpi-stat-card relative h-full box-border rounded-lg"
-      style={{ background, border: `0.5px solid ${border}` }}
+      style={{ background }}
     >
       <TitleValueOverlay title={titleNode} titlePosition={titlePosition} value={valueNode} valuePosition={valuePosition} />
     </div>

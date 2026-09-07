@@ -23,12 +23,29 @@ function geoFetch(url) {
 }
 
 /** Light/voyager map style */
+const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY;
+const CARTO_KEY_PARAM = CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : '';
+// OpenStreetMap keyless fallback used while CARTO required a key we didn't
+// have yet. Now that VITE_CARTO_API_KEY is set, CARTO is back in use below.
+// Uncomment to fall back to OSM again if the CARTO key stops working.
+// const MAP_STYLE = {
+//   version: 8,
+//   sources: {
+//     "osm": {
+//       type: "raster",
+//       tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+//       tileSize: 256,
+//       attribution: "© OpenStreetMap Contributors",
+//     },
+//   },
+//   layers: [{ id: "osm-layer", type: "raster", source: "osm" }],
+// };
 const MAP_STYLE = {
   version: 8,
   sources: {
     "carto-voyager": {
       type: "raster",
-      tiles: ["https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png"],
+      tiles: [`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png${CARTO_KEY_PARAM}`],
       tileSize: 256,
       attribution: "© CARTO © OpenStreetMap",
     },

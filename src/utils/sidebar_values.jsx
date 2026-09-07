@@ -28,6 +28,7 @@ const DBConfig = lazy(() => import('../pages/CustomQuery/DBConfig'));
 const QueryWorkbench = lazy(() => import('../pages/CustomQuery/QueryWorkbench'));
 const XAlertConfigure = lazy(() => import('../pages/AlertMonitoringSystem/XAlertConfigure'));
 const XAlertScheduler = lazy(() => import('../pages/AlertMonitoringSystem/XAlertScheduler'));
+const GroupManagement = lazy(() => import('../pages/AlertMonitoringSystem/GroupManagement'));
 const XReportSchedulerList = lazy(() => import('../pages/AlertMonitoringSystem/XReportSchedulerList'));
 const ISONForm = lazy(() => import('../pages/iSON/iSonForm'));
 const UserManagement = lazy(() => import('../pages/Admin/UserManagement/UserManagement'));
@@ -421,6 +422,11 @@ export const Sidebar_content = {
                 link: "/admin/zoom-settings",
                 subMenu: [],
                 component: <ZoomSettingsManager />,
+            }, {
+                name: "Group Management",
+                link: "/admin/groups",
+                subMenu: [],
+                component: <GroupManagement />,
             }],
         },
     ]

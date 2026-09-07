@@ -4,6 +4,19 @@
   border-radius: 0 !important;
 }
 
+/* Fallback so scrollbars stay thin even when html[data-theme] isn't set yet */
+::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+}
+
+/* Firefox doesn't support ::-webkit-scrollbar at all — without this it renders its
+   native (thicker) scrollbar, which can pick up the OS accent color unstyled. */
+* {
+  scrollbar-width: thin !important;
+  scrollbar-color: #ec7d09 #f5f5f5 !important;
+}
+
 /* Thin scrollbar for all scrollbars inside Planned Neighbors panel — width only, colors from theme */
 .neighbours-panel *::-webkit-scrollbar,
 .neighbours-panel::-webkit-scrollbar {
@@ -126,8 +139,8 @@ html[data-theme="dark"] body {
 
 html[data-theme="light"] ::-webkit-scrollbar {
   background-color: #f1f1f1;
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 html[data-theme="light"] ::-webkit-scrollbar-track {
@@ -149,8 +162,8 @@ html[data-theme="light"] ::-webkit-scrollbar-track:hover {
 
 html[data-theme="dark"] ::-webkit-scrollbar {
   background-color: #1b0027;
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 html[data-theme="dark"] ::-webkit-scrollbar-track {

@@ -9,15 +9,29 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 const IS_OFFLINE_MODE = import.meta.env.VITE_OFFLINE_MAPS_ENABLED !== 'false';
 
 // --- Online basemap ----------------------------------------------------------
-// Free CARTO raster basemap, no API key required — same tile source pattern used
-// elsewhere in this app (see GeoDrillDownPage.jsx). Requires outbound internet access
-// to basemaps.cartocdn.com, which isn't available in every environment this runs in.
+const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY;
+const CARTO_KEY_PARAM = CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : '';
+// OpenStreetMap keyless fallback used while CARTO required a key we didn't
+// have yet. Now that VITE_CARTO_API_KEY is set, CARTO is back in use below.
+// Uncomment to fall back to OSM again if the CARTO key stops working.
+// const ONLINE_MAP_STYLE = {
+//   version: 8,
+//   sources: {
+//     'osm': {
+//       type: 'raster',
+//       tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+//       tileSize: 256,
+//       attribution: '© OpenStreetMap Contributors',
+//     },
+//   },
+//   layers: [{ id: 'osm-layer', type: 'raster', source: 'osm' }],
+// };
 const ONLINE_MAP_STYLE = {
   version: 8,
   sources: {
     'carto-dark': {
       type: 'raster',
-      tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+      tiles: [`https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png${CARTO_KEY_PARAM}`],
       tileSize: 256,
       attribution: '© CARTO © OpenStreetMap',
     },

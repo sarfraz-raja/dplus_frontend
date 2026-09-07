@@ -242,6 +242,8 @@ function gisLiveDraftLabelOffsetPx(vp, lastPoint, cursorPoint, draftPoints) {
 }
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY;
+const CARTO_KEY_PARAM = CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : '';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ONLINE MAP STYLES (require internet)
@@ -253,20 +255,39 @@ const MAP_STYLES = {
   //   tiles: ['https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}@2x.png'],
   //   attribution: '© Stadia Maps © OpenStreetMap'
   // },
+  // OpenStreetMap keyless fallback used while CARTO required a key we didn't
+  // have yet. Now that VITE_CARTO_API_KEY is set, CARTO is back in use below.
+  // Uncomment these four to fall back to OSM again if the CARTO key stops working.
+  // outdoors: {
+  //   tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+  //   attribution: '© OpenStreetMap Contributors'
+  // },
   outdoors: {
-    tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'], // ← use voyager as fallback
+    tiles: [`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png${CARTO_KEY_PARAM}`], // ← use voyager as fallback
     attribution: '© CARTO © OpenStreetMap'
   },
+  // voyager: {
+  //   tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+  //   attribution: '© OpenStreetMap Contributors'
+  // },
   voyager: {
-    tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],  // ← @2x
+    tiles: [`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png${CARTO_KEY_PARAM}`],  // ← @2x
     attribution: '© CARTO © OpenStreetMap'
   },
+  // light: {
+  //   tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+  //   attribution: '© OpenStreetMap Contributors'
+  // },
   light: {
-    tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
+    tiles: [`https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png${CARTO_KEY_PARAM}`],
     attribution: '© CARTO © OpenStreetMap'
   },
+  // dark: {
+  //   tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+  //   attribution: '© OpenStreetMap Contributors'
+  // },
   dark: {
-    tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+    tiles: [`https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png${CARTO_KEY_PARAM}`],
     attribution: '© CARTO © OpenStreetMap'
   },
   osm: {

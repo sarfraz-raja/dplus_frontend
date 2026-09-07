@@ -64,6 +64,20 @@ const timeAgo = (dateStr) => {
 
 const EMPTY_FILTER = { priorities: [], time: "all" };
 
+// Confirmed field: ticketing.tickets.source_alert_id (UUID, set by create_or_update_alert_ticket()
+// in ticket_management.py). NOTE: GET /tickets/ticket_list's SELECT list does not currently
+// include t.source_alert_id, so this will never be truthy until that's added server-side —
+// the other keys below are kept only as a fallback in case the field gets renamed/aliased.
+const isAutoCreatedTicket = (ticket) => {
+  if (!ticket) return false;
+  if (ticket.source_alert_id || ticket.sourceAlertId) return true;
+  if (ticket.alert_id || ticket.alertid || ticket.alertId) return true;
+  const marker = String(ticket.source ?? ticket.origin ?? ticket.created_via ?? ticket.createdVia ?? "").toLowerCase();
+  if (marker === "alert" || marker === "automated" || marker === "system") return true;
+  if (ticket.is_auto || ticket.isAuto || ticket.automated) return true;
+  return false;
+};
+
 export default function TicketsPage() {
   const [tickets, setTickets]             = useState([]);
   const [loading, setLoading]             = useState(true);
@@ -81,19 +95,27 @@ export default function TicketsPage() {
     open: true, inprogress: true, resolved: true,
   });
 
-  const fetchTickets = async () => {
+  const fetchTickets = async (silent = false) => {
     try {
+      if (!silent) setLoading(true);
       const res = await Api.get({ url: "/tickets/ticket_list" });
       setTickets(res?.data?.data || []);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to fetch tickets");
+      if (!silent) toast.error("Failed to fetch tickets");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  useEffect(() => { fetchTickets(); }, []);
+  useEffect(() => {
+    fetchTickets();
+    // Alert-driven tickets are created server-side by a cron job (runs every minute),
+    // not by any action the user takes here — poll so new/re-occurred tickets show up
+    // without requiring a manual page reload. Silent so it doesn't flash the loader/toast.
+    const pollId = setInterval(() => fetchTickets(true), 30000);
+    return () => clearInterval(pollId);
+  }, []);
 
   const handleFieldUpdate = async (ticketId, field, newValue) => {
     const ticket = tickets.find((t) => t.id === ticketId);
@@ -192,8 +214,22 @@ export default function TicketsPage() {
         <div className="p-3">
           {/* Ticket ID + priority */}
           <div className="flex items-center justify-between mb-1.5">
-            <span className="font-mono text-[10px] text-gray-400 font-medium tracking-wide">{ticket.ticket_id}</span>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border leading-none"
+            <span className="flex items-center gap-1 min-w-0">
+              <span className="font-mono text-[10px] text-gray-400 font-medium tracking-wide truncate">{ticket.ticket_id}</span>
+              {isAutoCreatedTicket(ticket) && (
+                <span
+                  title="Automatically created by an alert"
+                  className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0"
+                  style={{ background: "#eef2ff", color: "#4338ca", borderColor: "#c7d2fe" }}
+                >
+                  <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13 2 3 14h7l-1 8 10-12h-7z" />
+                  </svg>
+                  Auto
+                </span>
+              )}
+            </span>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border leading-none shrink-0"
               style={{ background: priStyle.bg, color: priStyle.text, borderColor: priStyle.border }}>
               {ticket.priority}
             </span>
@@ -270,15 +306,24 @@ export default function TicketsPage() {
             <p className="text-[10px] sm:text-xs text-slate-400 font-medium tracking-wide hidden sm:block">Track and manage telecom network issues</p>
           </div>
         </div>
-        <button onClick={() => setOpenModal(true)}
-          className="px-3 sm:px-4 py-2 text-white rounded-lg hover:opacity-90 focus:outline-none transition-opacity flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium"
-          style={{ background: "#EC7D09" }}>
-          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span className="hidden sm:inline">Create Ticket</span>
-          <span className="sm:hidden">New</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => fetchTickets()} title="Refresh"
+            className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors">
+            <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button onClick={() => setOpenModal(true)}
+            className="px-3 sm:px-4 py-2 text-white rounded-lg hover:opacity-90 focus:outline-none transition-opacity flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium"
+            style={{ background: "#EC7D09" }}>
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="hidden sm:inline">Create Ticket</span>
+            <span className="sm:hidden">New</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}

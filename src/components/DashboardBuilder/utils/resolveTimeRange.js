@@ -248,11 +248,7 @@ export function buildComparisonFilters(filters, preset) {
     const fromMs = Date.parse(from.length > 10 ? from.replace(' ', 'T') : `${from}T00:00:00`);
     const toMs = Date.parse(to.length > 10 ? to.replace(' ', 'T') : `${to}T00:00:00`);
     if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return f;
-    // "Previous period" shifts by the window's own exact length (the immediately preceding
-    // window of equal size, down to the millisecond — no longer rounded to whole days) — the
-    // fixed-span presets shift by that preset's own amount instead, keeping the window's own
-    // length unchanged (i.e. "the same N-hour/day window, N earlier").
-    const shiftMs = preset === 'Previous period' ? (toMs - fromMs) : COMPARISON_PRESET_SHIFT_MS[preset];
+    const shiftMs = COMPARISON_PRESET_SHIFT_MS[preset];
     if (!shiftMs) return f;
     shiftedAny = true;
     return { ...f, value: [shiftDateByMs(from, shiftMs), shiftDateByMs(to, shiftMs)] };
@@ -260,25 +256,44 @@ export function buildComparisonFilters(filters, preset) {
   return shiftedAny ? next : null;
 }
 
-// "Compare to: Custom" (mapping.compare_to === 'Custom', mapping.compare_custom_date — see
-// CHART_TYPE_FIELDS's KPI_CARD entry) — a user-picked cutoff date, for the cases the preset
-// shifts above can't express: most notably `aggregation === 'LATEST'`, which has no "current
-// window" to shift at all (its date_filter_column is deliberately hidden/cleared — see
-// LATEST_BY_FIELD's own comment — so buildComparisonFilters above has nothing to work with).
+// "Compare to: Custom" (mapping.compare_to === 'Custom' — see SINGLE_VALUE_COMPARISON_GROUP
+// in ChartLibrary.jsx) — for the cases the preset shifts above can't express: most notably
+// `aggregation === 'LATEST'`, which has no "current window" to shift at all (its
+// date_filter_column is deliberately hidden/cleared — see LATEST_BY_FIELD's own comment — so
+// buildComparisonFilters above has nothing to work with).
 //
-// Two distinct shapes, chosen by which args are given:
+// Three distinct shapes, chosen by which args are given:
 // - `latestByColumn` set (LATEST aggregation): returns a `<=` cutoff on that column —
 //   "the latest reading at or before this date" — mirroring what the live LATEST query itself
-//   does (`ORDER BY latest_by DESC LIMIT 1`), just anchored at a past date instead of now.
-// - `filters` given instead (any other aggregation with its own date_filter_column/BETWEEN
-//   filter): keeps the SAME window length as the live query, just re-ends it at `customDate`
-//   instead of shifting by a fixed preset amount — "the same N-day window, ending on this
-//   date" rather than "N days before today".
-export function buildCustomComparisonFilters({ filters, customDate, latestByColumn }) {
-  if (!customDate) return null;
+//   does (`ORDER BY latest_by DESC LIMIT 1`), just anchored at a past date instead of now. The
+//   one shape where a single instant is genuinely all that's meaningful (no window to speak of).
+// - `customFrom`/`customTo` both set (every other aggregation's current, preferred UI):
+//   the user's own explicit comparison window, applied directly — no inference at all about
+//   what window length "should" apply, unlike the legacy shape below.
+// - `customDate` alone (legacy — pre-dates compare_custom_from/_to, kept for any already-saved
+//   mapping that still has only this field set): keeps the SAME window length as the live
+//   query, just re-ends it at `customDate` — "the same N-day window, ending on this date".
+export function buildCustomComparisonFilters({ filters, customDate, customFrom, customTo, latestByColumn }) {
   if (latestByColumn) {
+    if (!customDate) return null;
     return [{ column: latestByColumn, operator: '<=', value: customDate }];
   }
+  // Explicit from/to range (see SINGLE_VALUE_COMPARISON_GROUP's compare_custom_from/_to in
+  // ChartLibrary.jsx) — the user picks the exact comparison window directly, rather than this
+  // module inferring a same-length window from wherever the live query's own window happens
+  // to end. Only the BETWEEN filter that matches the widget's own date_filter_column gets
+  // replaced (there's normally exactly one); every other filter passes through untouched.
+  if (customFrom && customTo) {
+    const resolved = resolveFiltersForQuery(filters);
+    let replacedAny = false;
+    const next = resolved.map((f) => {
+      if (f.operator !== 'BETWEEN' || !Array.isArray(f.value) || f.value.length !== 2) return f;
+      replacedAny = true;
+      return { ...f, value: [customFrom, customTo] };
+    });
+    return replacedAny ? next : null;
+  }
+  if (!customDate) return null;
   const resolved = resolveFiltersForQuery(filters);
   let shiftedAny = false;
   const next = resolved.map((f) => {

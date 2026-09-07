@@ -149,17 +149,29 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
+import GroupManagementActions from '../../store/actions/groupManagement-actions';
 import FormModal from '../../components/FormModal';
 
 const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
 const errorCls = "text-xs text-red-500 mt-0.5";
 
+const ASSIGNMENT_TYPES = [
+    { value: 'SELF', label: 'Self' },
+    { value: 'ALL', label: 'All' },
+    { value: 'GROUP', label: 'Group' },
+    { value: 'USER', label: 'User' },
+];
+
 const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
 
     const dispatch = useDispatch()
     const userList = useSelector((state) => state?.customQuery?.usersList)
     const [confirmBlankPassword, setConfirmBlankPassword] = useState(null)
+    const [assignType, setAssignType] = useState('SELF') // SELF | ALL | GROUP | USER
+    const [groupId, setGroupId] = useState('')
+    const [userId, setUserId] = useState('')
+    const [groupList, setGroupList] = useState([])
 
     const {
         register,
@@ -170,7 +182,16 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
     } = useForm()
 
     useEffect(() => {
+        dispatch(GroupManagementActions.getGroups((data) => {
+            setGroupList((data ?? []).map((g) => ({ value: g.id, label: g.group_name })))
+        }))
+    }, [])
+
+    useEffect(() => {
         reset({})
+        setAssignType('SELF')
+        setGroupId('')
+        setUserId('')
         if (!resetting) {
             Object.keys(formValue).forEach((key) => {
                 if (key === 'password') return
@@ -178,22 +199,54 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
             })
             // API never returns the real password (masked as "********"), so leave it blank on edit
             setValue('password', '')
-            // API returns userid (lowercase) but field is registered as userId — handle both
-            const userIdValue = formValue.userId ?? formValue.userid ?? formValue.user_id
-            if (userIdValue) {
-                setValue('userId', userIdValue)
+            // Visibility follows the same SELF/ALL/GROUP/USER scheme as the Alert Scheduler,
+            // so a server assigned to a group/all is still selectable by every member — not
+            // just the single owner who created it. Fall back to the legacy single userId
+            // field (still USER-scoped) for records saved before this rework.
+            const incomingType = (formValue.assignment_type || '').toUpperCase()
+            const legacyUserId = formValue.userId ?? formValue.userid ?? formValue.user_id
+            if (incomingType === 'USER' && formValue.assigned_user_id) {
+                setAssignType('USER')
+                setUserId(formValue.assigned_user_id)
+            } else if (incomingType === 'GROUP' && formValue.group_id) {
+                setAssignType('GROUP')
+                setGroupId(formValue.group_id)
+            } else if (incomingType === 'ALL') {
+                setAssignType('ALL')
+            } else if (incomingType === 'SELF') {
+                setAssignType('SELF')
+            } else if (formValue.group_id) {
+                setAssignType('GROUP')
+                setGroupId(formValue.group_id)
+            } else if (legacyUserId) {
+                setAssignType('USER')
+                setUserId(legacyUserId)
             } else if (formValue.name && userList?.length) {
                 const match = userList.find((u) => u.label === formValue.name)
-                if (match) setValue('userId', match.value)
+                if (match) {
+                    setAssignType('USER')
+                    setUserId(match.value)
+                }
             }
         }
     }, [formValue, resetting, userList])
 
+    const applyAssignment = (data) => {
+        data.assignment_type = assignType
+        data.group_id = assignType === 'GROUP' ? groupId : null
+        data.assigned_user_id = assignType === 'USER' ? userId : null
+        // Keep legacy single-owner field in sync for USER scope so any not-yet-updated
+        // backend consumers of userId still work.
+        data.userId = assignType === 'USER' ? userId : null
+        return data
+    }
+
     const onTableViewTest = (data) => {
-        dispatch(CustomQueryActions.testDBConfig(true, data, () => {}))
+        dispatch(CustomQueryActions.testDBConfig(true, applyAssignment(data), () => {}))
     }
 
     const submitConfig = (data) => {
+        data = applyAssignment(data)
         if (data.uniqueid) {
             delete data.name
             dispatch(CustomQueryActions.postDBConfig(true, data, () => {
@@ -297,19 +350,41 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
                     {errors.password && <p className={errorCls}>{errors.password.message}</p>}
                 </div>
 
-                {/* User — full width */}
+                {/* Visible To — SELF/ALL/GROUP/USER, same scheme as the Alert Scheduler */}
                 <div className="col-span-2">
-                    <label className={labelCls}>Assign User <span className="text-red-400">*</span></label>
-                    <select
-                        className={inputCls}
-                        {...register('userId', { required: 'Required' })}
-                    >
-                        <option value="">Select user</option>
-                        {userList?.map((u) => (
-                            <option key={u.value} value={u.value}>{u.label}</option>
+                    <label className={labelCls}>Visible To <span className="text-red-400">*</span></label>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2">
+                        {ASSIGNMENT_TYPES.map((t) => (
+                            <label key={t.value} className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="assignType"
+                                    value={t.value}
+                                    checked={assignType === t.value}
+                                    onChange={() => setAssignType(t.value)}
+                                    className="accent-orange-500"
+                                />
+                                {t.label}
+                            </label>
                         ))}
-                    </select>
-                    {errors.userId && <p className={errorCls}>{errors.userId.message}</p>}
+                    </div>
+
+                    {assignType === 'GROUP' && (
+                        <select className={inputCls} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                            <option value="">Select group</option>
+                            {groupList.map((g) => (
+                                <option key={g.value} value={g.value}>{g.label}</option>
+                            ))}
+                        </select>
+                    )}
+                    {assignType === 'USER' && (
+                        <select className={inputCls} value={userId} onChange={(e) => setUserId(e.target.value)}>
+                            <option value="">Select user</option>
+                            {userList?.map((u) => (
+                                <option key={u.value} value={u.value}>{u.label}</option>
+                            ))}
+                        </select>
+                    )}
                 </div>
 
             </div>

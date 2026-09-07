@@ -4,7 +4,7 @@ import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, P
 import 'react-grid-layout/css/styles.css';
 import Button from '../../Button';
 import ConfirmModal from '../../ConfirmModal';
-import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor } from '../widgetConfig/widgetTypeRegistry';
+import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields } from '../widgetConfig/widgetTypeRegistry';
 import MOCK_DATA_SOURCES from '../legacy/mock/mockDataSources';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
 import PaletteEditor from '../themes/PaletteEditor';
@@ -21,14 +21,18 @@ import {
   duplicateWidget as duplicateChartLibraryWidgetDef,
   getDatasourceDetail as getChartDatasourceDetail, getDashboardData, getWidgetData, updateDashboard, listDatasources as listBackendDatasources,
   listThemes as listBackendThemes, getThemeDetail,
+  createSlicer, listSlicers, updateSlicer, refreshSlicerValues, deleteSlicer,
 } from '../../../store/actions/dashboardBuilder-actions';
 import { subscribeWidgetsChanged, notifyWidgetsChanged } from '../../../store/actions/widgetEvents';
 import CHART_TYPE_META, { MOCK_TYPE_TO_CHART_TYPE } from '../charts/chartTypeMeta';
 import ChartListItem from '../charts/ChartListItem';
+import ChartListSearchBar from '../charts/ChartListSearchBar';
+import useChartListFilter from '../charts/useChartListFilter';
 import WidgetCreateWizard from '../charts/WidgetCreateWizard';
 import DASHBOARD_STYLE_FIELDS from '../themes/dashboardStyleFields';
 import FilterPanel from '../filters/FilterPanel';
 import FiltersToggleButton from '../filters/FiltersToggleButton';
+import AddSlicerModal from '../filters/AddSlicerModal';
 import { sortWidgetsByRecency, withDatasourceOnly } from '../charts/sortWidgets';
 import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
 
@@ -53,15 +57,15 @@ const nextId = () => `w${Date.now()}_${uid++}`;
 // breakpoint via COLS_BY_BREAKPOINT, but rowHeight/margin stay constant) — kept as one
 // constant so per-widget pixel heights (for chart components that need an explicit height
 // prop) stay in sync with the actual grid math.
-// rowHeight/margin[1] set the vertical resize step: 24px (20 + 4) — fine enough that a
-// widget's grid cell can land close to its actual content height instead of being stuck
-// between two coarse 48px increments.
-// rowHeight/margin[1] set the vertical resize step: 6px (5 + 1) — halved again from the
-// previous 12px so widgets can be resized in even smaller, more precise increments.
+// rowHeight/margin[1] set the vertical resize step: 15px (5 + 10) — margin[1] bumped from
+// 1 to 10 so stacked widgets get a visible gap instead of nearly touching (this was reading
+// as cramped once dashboards got embedded elsewhere, e.g. Insights Engine — see
+// EmbeddedDashboard.jsx). Still fine-grained enough for precise resizing; only the inter-row
+// gap grew, not the resize step's coarseness in any way that matters visually.
 // cols:144 (12x the visual 12-column layout) gives a much finer horizontal resize step —
 // colWidth = containerWidth / cols, so more columns means each x/w unit is fewer pixels.
 // margin[0] stays 8 (unchanged) so same-row card-to-card gaps don't shift.
-const GRID_CONFIG = { cols: 144, rowHeight: 5, margin: [8, 1] };
+const GRID_CONFIG = { cols: 144, rowHeight: 5, margin: [8, 10] };
 
 // Below ~900px, a plain GridLayout just shrinks colWidth instead of reflowing — every
 // widget keeps its desktop column-span and squeezes into unreadable slivers, and (in an
@@ -132,7 +136,7 @@ function resolveWidgetProps(widget, ctx) {
     bgGradientFrom: dashboardBgGradientFrom, bgGradientTo: dashboardBgGradientTo,
     valueDecimals: dashboardValueDecimals,
     widgetId, onPointClick: onWidgetPointClick, onDrillUp: onWidgetDrillUp,
-    onPointCrossFilter: onWidgetPointCrossFilter,
+    onPointCrossFilter: onWidgetPointCrossFilter, editable,
   } = ctx || {};
   // For a real (chartLibrary) widget, its own definition — edited via the Charts tab,
   // stored in dataSource.mapping.style — is the base default for EVERY placement of that
@@ -230,11 +234,13 @@ function resolveWidgetProps(widget, ctx) {
   const finalTitleFont = style.titleFont || dashboardTitleFont;
   const finalTitlePosition = style.titlePosition || dashboardTitlePosition;
   // Resolved series/slice palette for multi-series chart types (Pie/Stacked Bar/Funnel/
-  // Treemap) — a bound Theme's own `palette` (if set) wins, falling back to the app-wide
-  // static CHART_PALETTE default, same override order every other style field here uses.
-  // Always resolves to a real array (never undefined) so each chart component's explicit
-  // per-index color assignment always has something to cycle through.
-  const finalPalette = dashboardPalette || CHART_PALETTE;
+  // Treemap/BAR_SERIES) — this widget's own `style.palette` (the "Series colors" style field —
+  // see PALETTE_FIELD in widgetTypeRegistry.js) wins first, then a bound Theme's own `palette`
+  // (if set), then the app-wide static CHART_PALETTE default — same override order every other
+  // style field here uses (widget > dashboard theme > static default). Always resolves to a
+  // real array (never undefined) so each chart component's explicit per-index color assignment
+  // always has something to cycle through.
+  const finalPalette = (Array.isArray(style.palette) && style.palette.length > 0 && style.palette) || dashboardPalette || CHART_PALETTE;
   // Chart widgets need an explicit pixel height (ECharts doesn't fill a resizable
   // container on its own) — leave room for the widget's own title row + chrome.
   const chartHeight = pixelHeight ? Math.max(60, pixelHeight - 40) : undefined;
@@ -333,7 +339,13 @@ function resolveWidgetProps(widget, ctx) {
       // part of chartLibrary's own static styleFields (that's a per-widgetType concept;
       // these depend on which real chart_type this instance is bound to), so they're
       // resolved separately here and merged into the style object passed down.
-      const extraFields = CHART_TYPE_EXTRA_STYLE_FIELDS[resolved.chartType] || [];
+      // BAR/AREA/LINE/HORIZONTAL_BAR swap in STACKED_BAR's own field set (legend, no accent)
+      // once mapping.series is set — see chartLibraryStyleFieldsFor's own `hasSeries` doc
+      // comment, this mirrors the same branch so the "Legend" override this style panel
+      // exposes actually takes effect on the multi-series render below, not just the panel's
+      // own UI.
+      const hasSeriesGrouping = ['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR'].includes(resolved.chartType) && !!resolved.mapping?.series;
+      const extraFields = hasSeriesGrouping ? seriesExtraStyleFields(resolved.chartType) : (CHART_TYPE_EXTRA_STYLE_FIELDS[resolved.chartType] || []);
       // Uses `baseStyle` (chart's own saved mapping.style, then this placement's widget.style
       // on top — see baseStyle above), not just `widget.style` alone — otherwise a color/
       // donut/legend/unit edit made in the Chart Library's own Style tab would only ever seed
@@ -345,6 +357,10 @@ function resolveWidgetProps(widget, ctx) {
         picked: resolved.picked, chartType: resolved.chartType, mapping: resolved.mapping,
         rows: resolved.rows, loading: resolved.loading, error: resolved.error,
         name: title, height: chartHeight,
+        // Editing/config surfaces only — a saved dashboard being viewed (editable=false, e.g.
+        // EmbeddedDashboard) shouldn't show this "fix your Min/Max" hint since there's no
+        // control there to act on it.
+        showWarnings: editable !== false,
         // The backend's own drill_down.{enabled,has_next_level,hierarchy,path,level} for this
         // widget's current (possibly already-drilled) response — drives the breadcrumb and
         // whether a click drills vs. cross-filters (see handleWidgetPointClickRef's own check
@@ -383,7 +399,13 @@ function resolveWidgetProps(widget, ctx) {
           titleColor: finalTitleColor, titleWeight: finalTitleWeight, titleSize: finalTitleSize, titleFont: finalTitleFont, titlePosition: finalTitlePosition, bgColor: finalBgColor, bgGradient: finalBgGradient, palette: finalPalette, ...valueText, ...axisText,
           donut: extraStyle.donut === 'donut',
           showLegend: extraStyle.showLegend !== 'hide',
+          showDataPoints: extraStyle.showDataPoints !== 'hide',
           unit: extraStyle.unit,
+          numberFormat: extraStyle.numberFormat,
+          // GAUGE only (see CHART_TYPE_EXTRA_STYLE_FIELDS's GAUGE entry) — defaults true
+          // (`!== 'no'`) so every already-saved gauge keeps its original "%" suffix unless
+          // explicitly switched off for a non-percentage measure.
+          showPercent: extraStyle.showPercent !== 'no',
           // Same fallback chain as finalColor above (mock-widget path) — the chart's own
           // accent/gradient field wins, else the dashboard-level accentColor, else each
           // Widgets/*.jsx component's own hardcoded default.
@@ -477,10 +499,17 @@ const WidgetContent = React.memo(function WidgetContent({
   palette, accentColor, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
   bgGradientFrom, bgGradientTo, valueDecimals,
   mockDataCache, datasources, chartLibraryEntry, comparisonEntry,
-  widgetId, onPointClick, onDrillUp, onPointCrossFilter,
+  widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable,
+  slicer, onSlicerChange, onSlicerRefresh, slicerBusy,
 }) {
   const Comp = WIDGET_TYPE_REGISTRY[widget.type]?.component;
   if (!Comp) return null;
+  // Slicers aren't chart/mock-data widgets — resolveWidgetProps' whole cascade (dataSource
+  // resolution, style-field resolution, cross-filter wiring) doesn't apply to them, so they
+  // skip straight to their own dedicated props instead.
+  if (widget.type === 'slicer') {
+    return <Comp slicer={slicer} onChange={onSlicerChange} onRefresh={onSlicerRefresh} busy={slicerBusy} />;
+  }
   // `comparisonEntry` (KPI_CARD's "Compare to") merged onto chartLibraryEntry here, inside
   // WidgetContent's own render — not at the call site below — so React.memo still compares
   // the two incoming prop references (chartLibraryEntry/comparisonEntry) rather than a fresh
@@ -494,10 +523,16 @@ const WidgetContent = React.memo(function WidgetContent({
     chartLibraryData: widget.dataSource?.widgetId && chartLibraryEntry
       ? { [widget.dataSource.widgetId]: { ...chartLibraryEntry, comparison: comparisonEntry } }
       : {},
-    widgetId, onPointClick, onDrillUp, onPointCrossFilter,
+    widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable,
   });
   return <Comp {...props} />;
 });
+
+// Chart types whose mapping is "one aggregated measure, no dimension axis" — the same
+// single-value shape KPI_CARD and GAUGE both share (see SINGLE_VALUE_DATE_FILTER_GROUP/
+// SINGLE_VALUE_COMPARISON_GROUP in ChartLibrary.jsx) — so both opt into the exact same
+// own-date-filter and "compare to" fetch effects below.
+const SINGLE_VALUE_CHART_TYPES = new Set(['KPI_CARD', 'GAUGE']);
 
 /**
  * Canvas editor: palette of widget types (click to add) + a react-grid-layout
@@ -577,6 +612,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // a fast path). wizardType seeds the wizard's initial chart-type selection.
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardType, setWizardType] = useState(null);
+  // Slicer's own "choose a datasource/column" step — separate from wizardOpen/wizardType
+  // above since a slicer isn't chart-shaped (no chart_type/mapping to pick), just a
+  // datasource+column binding, handled by AddSlicerModal instead of WidgetCreateWizard.
+  const [slicerModalOpen, setSlicerModalOpen] = useState(false);
+  const [slicerDropPos, setSlicerDropPos] = useState(null);
   // Tracked outside the native HTML5 drag event because dataTransfer.getData() is only
   // readable on the actual 'drop' event in most browsers, not during dragover — but the
   // grid needs to know the dragged type's own defaultSize *during* the drag to size its
@@ -627,6 +667,12 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // Phase 18 — dashboard-level global_filters, only meaningful when backendId is set.
   const [dashboardFilters, setDashboardFilters] = useState(initialGlobalFilters);
   const [filterDatasourceOptions, setFilterDatasourceOptions] = useState([]);
+  // Slicers — a standalone backend resource (own id/CRUD), unlike dashboardFilters above,
+  // so they're loaded via their own GET .../slicers call rather than riding along on the
+  // dashboard object. Only meaningful once backendId is set (a not-yet-saved dashboard has
+  // nowhere to attach a slicer to yet).
+  const [slicers, setSlicers] = useState([]);
+  const [slicerBusyId, setSlicerBusyId] = useState(null);
   // Phase 19a — dashboard-level style defaults (bgColor/accentColor/titleColor/titleWeight/
   // titleSize), stored in the dashboard's `theme` field (repurposed — was an unused
   // pass-through field, see Phase 19 plan). Only meaningful/persisted when backendId is set;
@@ -852,6 +898,12 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       return;
     }
     if (!type || !WIDGET_TYPE_REGISTRY[type]) return;
+    if (type === 'slicer') {
+      if (!backendId) return;
+      setSlicerDropPos(pos);
+      setSlicerModalOpen(true);
+      return;
+    }
     // Same real-chart-only flow the click path already uses (see the palette icon's
     // onClick) — dragging a widget-type icon no longer instantly creates a mock widget,
     // it opens the same "choose a dataset" wizard. The exact drop position isn't preserved
@@ -862,6 +914,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   };
 
   const removeWidget = (id) => {
+    // A slicer's canvas tile is just a view onto its own standalone backend resource — it
+    // has to be deleted there too, or it'd keep applying to /data calls and reappear (with
+    // no tile to control it) on the next dashboard load.
+    const removed = widgets[id];
+    if (removed?.type === 'slicer' && removed.dataSource?.slicerId) {
+      deleteSlicer(removed.dataSource.slicerId)
+        .then(() => { setSlicers((prev) => prev.filter((s) => s.id !== removed.dataSource.slicerId)); refreshDashboardData(); })
+        .catch(() => {});
+    }
     setLayout((prev) => prev.filter((l) => l.i !== id));
     setWidgets((prev) => {
       const next = { ...prev };
@@ -1028,7 +1089,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     });
   }, [widgets, chartLibraryData, backendId]);
 
-  // A KPI_CARD's actually-effective filter set: its own date_filter_column/range if set
+  // A KPI_CARD/GAUGE's actually-effective filter set: its own date_filter_column/range if set
   // (excluding the dashboard's global filter on that SAME column, so the two can't stack into
   // a contradictory BETWEEN...AND BETWEEN that silently returns zero rows — see the
   // conversation this was decided in), otherwise just the dashboard's own filters unchanged.
@@ -1050,7 +1111,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // fetch paths already provide.
   useEffect(() => {
     Object.values(widgets).forEach((w) => {
-      if (w.dataSource?.type !== 'chartLibrary' || w.dataSource.chartType !== 'KPI_CARD') return;
+      if (w.dataSource?.type !== 'chartLibrary' || !SINGLE_VALUE_CHART_TYPES.has(w.dataSource.chartType)) return;
       const widgetId = w.dataSource.widgetId;
       const mapping = w.dataSource.mapping || {};
       if (!widgetId || !mapping.date_filter_column) return;
@@ -1085,7 +1146,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // widgetId slot.
   useEffect(() => {
     Object.values(widgets).forEach((w) => {
-      if (w.dataSource?.type !== 'chartLibrary' || w.dataSource.chartType !== 'KPI_CARD') return;
+      if (w.dataSource?.type !== 'chartLibrary' || !SINGLE_VALUE_CHART_TYPES.has(w.dataSource.chartType)) return;
       const widgetId = w.dataSource.widgetId;
       const mapping = w.dataSource.mapping || {};
       const compareTo = mapping.compare_to;
@@ -1101,6 +1162,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         ? buildCustomComparisonFilters({
           filters: kpiEffectiveFilters(mapping),
           customDate: mapping.compare_custom_date,
+          customFrom: mapping.compare_custom_from,
+          customTo: mapping.compare_custom_to,
           latestByColumn: mapping.aggregation === 'LATEST' ? mapping.latest_by : null,
         })
         : buildComparisonFilters(kpiEffectiveFilters(mapping), compareTo);
@@ -1298,6 +1361,89 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     });
   };
 
+  // Loads this dashboard's slicers once a real backendId exists — re-runs if the dashboard
+  // being edited changes (e.g. navigating from one saved dashboard to another).
+  useEffect(() => {
+    if (!backendId) { setSlicers([]); return; }
+    let cancelled = false;
+    listSlicers(backendId)
+      .then((rows) => { if (!cancelled) setSlicers(rows); })
+      .catch(() => { if (!cancelled) setSlicers([]); });
+    return () => { cancelled = true; };
+  }, [backendId]);
+
+  // Re-fetches every widget's data after a slicer selection changes — mirrors
+  // persistAndApplyFilters' merge-into-chartLibraryData pattern. Unlike dashboardFilters,
+  // slicers' selected_values apply automatically server-side on every /data call, so no
+  // `filters` override is needed here — just re-request with whatever's already saved.
+  const refreshDashboardData = async () => {
+    if (!backendId) return;
+    const dataResult = await getDashboardData(backendId, { filters: resolveFiltersForQuery(dashboardFilters) });
+    setChartLibraryData((prev) => {
+      const next = { ...prev };
+      Object.entries(dataResult.widgets).forEach(([widgetId, result]) => {
+        next[widgetId] = result.status === 200
+          ? { rows: result.data?.rows, drillDown: result.data?.drill_down }
+          : { error: result.msg || 'Failed to load' };
+      });
+      return next;
+    });
+  };
+
+  // Creates the backend slicer resource AND places it as a real grid widget in the same
+  // step — unlike other widget types (empty placeholder first, data bound after via the
+  // side panel/wizard), a slicer has nothing to show until it's bound to a datasource
+  // column, so datasource/column selection happens up front in AddSlicerModal instead.
+  // `posOverride` carries the drop-cell position when this was triggered by a palette drag
+  // (see handleDrop's 'slicer' branch below); omitted for the click-to-add path, same as
+  // addWidget's own posOverride convention.
+  const addSlicerWidget = async ({ datasourceId, columnName, label }, posOverride) => {
+    const def = WIDGET_TYPE_REGISTRY.slicer;
+    const slicer = await createSlicer(backendId, { datasourceId, columnName, label, position: { x: 0, y: 0 } });
+    setSlicers((prev) => [...prev, slicer]);
+    const id = nextId();
+    const { x, y } = posOverride || findFreeSlot(layout, def.defaultSize.w, def.defaultSize.h, GRID_CONFIG.cols);
+    setLayout((prev) => [...prev, { i: id, x, y, w: def.defaultSize.w, h: def.defaultSize.h }]);
+    setWidgets((prev) => ({
+      ...prev,
+      [id]: { type: 'slicer', title: slicer.label || slicer.column_name, dataSource: { type: 'slicer', slicerId: slicer.id }, style: {} },
+    }));
+    setSelectedId(id);
+  };
+
+  const changeSlicerValues = async (slicerId, selectedValues) => {
+    setSlicerBusyId(slicerId);
+    try {
+      const updated = await updateSlicer(slicerId, { selectedValues });
+      setSlicers((prev) => prev.map((s) => (s.id === slicerId ? updated : s)));
+      await refreshDashboardData();
+    } finally {
+      setSlicerBusyId(null);
+    }
+  };
+
+  const refreshSlicer = async (slicerId) => {
+    setSlicerBusyId(slicerId);
+    try {
+      const updated = await refreshSlicerValues(slicerId);
+      setSlicers((prev) => prev.map((s) => (s.id === slicerId ? updated : s)));
+      await refreshDashboardData();
+    } finally {
+      setSlicerBusyId(null);
+    }
+  };
+
+  const removeSlicer = async (slicerId) => {
+    setSlicerBusyId(slicerId);
+    try {
+      await deleteSlicer(slicerId);
+      setSlicers((prev) => prev.filter((s) => s.id !== slicerId));
+      await refreshDashboardData();
+    } finally {
+      setSlicerBusyId(null);
+    }
+  };
+
   // Cross-filtering — ephemeral, scoped refetch for the widgets a click actually affects
   // (never dashboard.global_filters/updateDashboard, unlike persistAndApplyFilters above).
   // `dataResult.widgets` is keyed by backend chart widgetId, same key space chartLibraryData
@@ -1463,6 +1609,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // Latest-first, only fully-configured (datasource-attached) charts — shared with
   // ChartLibrary.jsx's "Charts" tab so both lists always show the same set/order.
   const sortedChartLibraryList = sortWidgetsByRecency(withDatasourceOnly(chartLibraryList));
+  const {
+    search: chartLibrarySearch, setSearch: setChartLibrarySearch,
+    typeFilter: chartLibraryTypeFilter, setTypeFilter: setChartLibraryTypeFilter,
+    visibleWidgets: visibleChartLibraryList, typeOptions: chartLibraryTypeOptions,
+  } = useChartListFilter(sortedChartLibraryList);
 
   // "Your Charts" list items only carry datasource_id (see ChartListItem.jsx's own comment)
   // — resolved against the same datasource list already fetched for the Filters modal's
@@ -1675,6 +1826,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             onPointClick={stableOnPointClick}
             onDrillUp={stableOnDrillUp}
             onPointCrossFilter={stableOnPointCrossFilter}
+            editable={editable}
+            slicer={w.type === 'slicer' ? slicers.find((s) => s.id === w.dataSource?.slicerId) : undefined}
+            onSlicerChange={changeSlicerValues}
+            onSlicerRefresh={refreshSlicer}
+            slicerBusy={w.type === 'slicer' && slicerBusyId === w.dataSource?.slicerId}
           />
         </div>
       </div>
@@ -1742,7 +1898,21 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-palette-icon:hover { filter:brightness(0.92); }
         .dbe-palette-icon-label { font-size:10px; font-weight:500; line-height:1; text-align:center; color:#475569; }
         .dbe-canvas-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; min-height:0; }
-        .dbe-canvas-wrap { flex:1; min-width:0; border:1px dashed rgb(203 213 225); border-radius:10px; padding:8px; overflow:auto; background:rgba(255,255,255,0.4); }
+        /* The horizontal "Condition Name [options ▾] ... Apply / Clear All" filter bar — a
+           distinct bordered/shaded strap sitting above the widget grid, not a bare row of
+           controls floating on the page background. */
+        /* Plain full-width bar, no card chrome (no rounded corners, no tinted background) —
+           a global divider row the rest of the dashboard sits under, Superset's own filter
+           bar convention, not a boxed widget floating on the page. Same light background as
+           the plain canvas variant below it, so the strap and the chart area it sits above
+           read as one continuous surface, not two differently-tinted regions. */
+        .dbe-filter-strap { flex-shrink:0; padding:10px 16px; border-bottom:1px solid rgb(226 232 240); background:#fff; }
+        /* One plain surface regardless of editable/read-only — no dashed border, no card
+           chrome. The filter strap above (fixed, never scrolls — it's a sibling outside
+           this element, not inside it) and this canvas (the one thing that actually scrolls)
+           are the only two zones; this used to also carry a dashed "still editing" border,
+           which read as a third nested box rather than a clean two-part layout. */
+        .dbe-canvas-wrap { flex:1; min-width:0; padding:14px 16px; overflow:auto; background:#fff; }
         /* Overrides the global index.css scrollbar rule (always-visible orange thumb) just
            for this canvas — hidden at rest, thin and neutral-colored only on hover, same
            pattern KpiMonitoringDashboard.jsx already uses for its own table widgets. */
@@ -1752,7 +1922,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-canvas-wrap:hover::-webkit-scrollbar { width: 6px; height: 6px; }
         .dbe-canvas-wrap:hover::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.25); border-radius: 3px; }
         .dbe-canvas-wrap:hover::-webkit-scrollbar-track { background: transparent; }
-        .dbe-widget { height:100%; width:100%; background:#fff; border:1px solid rgb(226 232 240); border-radius:10px; padding:6px; overflow:hidden; position:relative; cursor:pointer; }
+        .dbe-widget { height:100%; width:100%; background:#fff; border:1px solid rgb(226 232 240); border-radius:10px; padding:10px; overflow:hidden; position:relative; cursor:pointer; }
         /* Widgets that paint their own background (StatCard/GaugeCard/etc, via their own
            bg-white dark:bg-[#22273C] classes) are unaffected by this — but KpiTable
            deliberately doesn't (relies on this ancestor, to avoid double-boxing itself), so
@@ -1818,8 +1988,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-theme-popover { max-height:70vh; overflow-y:auto; scrollbar-width:none; }
         .dbe-theme-popover::-webkit-scrollbar { width:0; height:0; }
         .dbe-side-panel { flex-shrink:0; font-size:12px; }
-        .dbe-side-panel-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:#94a3b8; margin-bottom:8px; }
+        .dbe-side-panel-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:#475569; margin-bottom:8px; }
+        [data-theme="dark"] .dbe-side-panel-title { color:#cbd5e1; }
         .dbe-side-panel label { display:block; margin-bottom:10px; color:#334155; font-weight:500; }
+        [data-theme="dark"] .dbe-side-panel label { color:#e2e8f0; }
         .dbe-side-panel select, .dbe-side-panel input[type="text"], .dbe-side-panel input[type="number"] {
           width:100%; margin-top:4px; padding:5px 6px; border-radius:6px; border:1px solid rgb(203 213 225);
           font-weight:400; font-size:12px; box-sizing:border-box; background:#fff; color:#1e293b;
@@ -1832,10 +2004,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-style-section { margin-top:6px; }
         .dbe-style-section summary {
           cursor:pointer; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em;
-          color:#64748b; padding:6px 8px; border-radius:6px; background:rgb(241 245 249);
+          color:#475569; padding:6px 8px; border-radius:6px; background:rgb(241 245 249);
           list-style:none; display:flex; align-items:center; gap:4px;
         }
-        [data-theme="dark"] .dbe-style-section summary { background:rgba(255,255,255,0.06); color:#94a3b8; }
+        [data-theme="dark"] .dbe-style-section summary { background:rgba(255,255,255,0.08); color:#cbd5e1; }
         .dbe-style-section summary:hover { background:rgb(226 232 240); }
         [data-theme="dark"] .dbe-style-section summary:hover { background:rgba(255,255,255,0.1); }
         .dbe-style-section summary::-webkit-details-marker { display:none; }
@@ -1892,18 +2064,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             // persistAndApplyFilters now stages locally with no backendId (see above), and
             // the staged rows are carried into the very first createDashboard call the same
             // way pendingDashboardStyle/pendingThemeId already are (via onDashboardStyleState).
-            // The gear button and the filter-value strip sit together in this one group,
-            // instead of the strip appearing as a separate row above the canvas.
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FiltersToggleButton
-                filters={dashboardFilters}
-                datasourceOptions={filterDatasourceOptions}
-                onSave={persistAndApplyFilters}
-              />
-              {backendId && showFiltersInline && (
-                <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} />
-              )}
-            </div>
+            // Only the "Add and edit filters" gear lives in the toolbar now — the filter-VALUE
+            // strip itself always renders as its own full-width row above the canvas (see
+            // `.dbe-canvas-col` below), same as the read-only/embedded case, instead of being
+            // squeezed inline into the toolbar next to this button.
+            <FiltersToggleButton
+              filters={dashboardFilters}
+              datasourceOptions={filterDatasourceOptions}
+              onSave={persistAndApplyFilters}
+            />
           )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1912,16 +2081,26 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 (DashboardBuilder.jsx's browse view) has its own export trigger in its
                 header (between Edit and Clone), calling this component's
                 exportCSV/PNG/PDF via the ref exposed above, so it isn't duplicated here. */}
-              <Button
-              variant="primary"
-              size="sm"
-              className="h-8"
-              disabled={savingLocal}
-              onClick={handleSaveClick}
-            >
-              {savingLocal ? 'Saving…' : 'Save dashboard'}
-            </Button>
-            <Button variant="ghost" size="sm" className="h-8" onClick={onCancel}>Cancel</Button>
+              {/* Raw buttons, not the shared <Button> component — copied class-for-class from
+                  ChartLibrary.jsx's own Save/Cancel (its toolbar's `rounded-lg`/`text-xs`
+                  pair) so this row reads as visually identical to the Charts tab's, instead of
+                  <Button>'s slightly different `rounded-md`/`text-sm`/`shadow-sm` look. */}
+              <button
+                type="button"
+                onClick={handleSaveClick}
+                disabled={!name.trim() || savingLocal}
+                title={!name.trim() ? 'Enter a dashboard name first' : undefined}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#EC7D09] disabled:opacity-50"
+              >
+                {savingLocal ? 'Saving…' : 'Save dashboard'}
+              </button>
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50"
+              >
+                Cancel
+              </button>
             {editable && (
               // Phase 19c — available while creating a new dashboard too, not just after the
               // first save: persistDashboardStyle/bindTheme already degrade gracefully with no
@@ -2049,16 +2228,21 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               {Object.entries(WIDGET_TYPE_REGISTRY).filter(([, def]) => def.builderVisible !== false).map(([type, def]) => {
                 const Icon = def.icon;
                 const color = def.iconColor || '#475569';
+                const slicerDisabled = type === 'slicer' && !backendId;
                 return (
                   <button
                     key={type}
                     type="button"
-                    title={def.label}
+                    title={slicerDisabled ? 'Save the dashboard first to add a slicer' : def.label}
                     aria-label={def.label}
                     className="dbe-palette-icon"
-                    style={{ color, background: `${color}14`, borderColor: `${color}44` }}
-                    onClick={() => { setWizardType(type); setWizardOpen(true); }}
-                    draggable={editable}
+                    style={{ color, background: `${color}14`, borderColor: `${color}44`, ...(slicerDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                    disabled={slicerDisabled}
+                    onClick={() => {
+                      if (type === 'slicer') { if (!backendId) return; setSlicerDropPos(null); setSlicerModalOpen(true); return; }
+                      setWizardType(type); setWizardOpen(true);
+                    }}
+                    draggable={editable && !slicerDisabled}
                     onDragStart={(e) => {
                       setDraggedType(type);
                       e.dataTransfer.effectAllowed = 'copy';
@@ -2158,7 +2342,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                     <WidgetStyleFields
                       fields={
                         selected.type === 'chartLibrary'
-                          ? chartLibraryStyleFieldsFor(selected.dataSource?.chartType)
+                          ? chartLibraryStyleFieldsFor(selected.dataSource?.chartType, selected.dataSource?.mapping)
                           : (WIDGET_TYPE_REGISTRY[selected.type]?.styleFields || [])
                       }
                       value={selected.style}
@@ -2224,12 +2408,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         )}
 
         <div className="dbe-canvas-col">
-          {/* Read-only contexts with no toolbar of their own (EmbeddedDashboard.jsx, for
-              Insights Engine viewers) have nowhere else to combine this with a Filters gear
-              button, so it still renders here as its own strip — only the editable case
-              (toolbar above) moved it inline next to FiltersToggleButton. */}
-          {!editable && backendId && showFiltersInline && (
-            <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} />
+          {/* Always its own full-width strap directly above the widget grid — same "Condition
+              Name [options ▾] ... Apply / Clear All" horizontal-bar look the Insights Engine's
+              own embedded dashboards already use (EmbeddedDashboard.jsx), now shared by the
+              editable case too instead of being squeezed inline into the toolbar next to the
+              gear button (see the conversation this was reported in). */}
+          {backendId && showFiltersInline && (
+            <div className="dbe-filter-strap">
+              <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} />
+            </div>
           )}
           {/* Cross-filter clear chip — shown in both editable and read-only/embedded views,
               since clicking a chart to cross-filter is a viewer action, not an edit-mode-only
@@ -2259,6 +2446,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 fontWeight: effectiveDashboardStyle.dashboardTitleWeight === 'bold' ? 700 : effectiveDashboardStyle.dashboardTitleWeight === 'normal' ? 400 : 700,
                 fontSize: effectiveDashboardStyle.dashboardTitleSize ? `${effectiveDashboardStyle.dashboardTitleSize}px` : '20px',
                 fontFamily: effectiveDashboardStyle.dashboardTitleFont || undefined,
+                textAlign: effectiveDashboardStyle.dashboardTitleAlign || 'left',
                 padding: '2px 4px 10px',
               }}
             >
@@ -2327,12 +2515,28 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             </button>
             <div className={`dbe-chart-list${rightPanelCollapsed ? ' collapsed' : ''}`}>
               {!rightPanelCollapsed && <div className="dbe-chart-list-title">Your Widgets</div>}
+              {!rightPanelCollapsed && (
+                <div className="mb-1.5">
+                  <ChartListSearchBar
+                    search={chartLibrarySearch}
+                    onSearchChange={setChartLibrarySearch}
+                    typeFilter={chartLibraryTypeFilter}
+                    onTypeFilterChange={setChartLibraryTypeFilter}
+                    typeOptions={chartLibraryTypeOptions}
+                  />
+                </div>
+              )}
               {!rightPanelCollapsed && chartListActionError && (
                 <div className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5 mb-1">
                   {chartListActionError}
                 </div>
               )}
-              {sortedChartLibraryList.map((w) => {
+              {!rightPanelCollapsed && sortedChartLibraryList.length > 0 && visibleChartLibraryList.length === 0 && (
+                <div className="text-xs text-slate-400 text-center mt-4">
+                  No charts match{chartLibrarySearch.trim() ? ` "${chartLibrarySearch.trim()}"` : ''}{chartLibraryTypeFilter ? ` in ${CHART_TYPE_META[chartLibraryTypeFilter]?.label || chartLibraryTypeFilter}` : ''}.
+                </div>
+              )}
+              {(rightPanelCollapsed ? sortedChartLibraryList : visibleChartLibraryList).map((w) => {
                 const used = usedChartIds.has(w.id);
                 const isSelected = selected?.type === 'chartLibrary' && selected?.dataSource?.widgetId === w.id;
                 return (
@@ -2370,6 +2574,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         onClose={() => setWizardOpen(false)}
         onConfirm={(datasourceId) => {
           onCreateViaChartsTab?.({ chartType: MOCK_TYPE_TO_CHART_TYPE[wizardType], datasourceId, name: WIDGET_TYPE_REGISTRY[wizardType]?.label });
+        }}
+      />
+
+      <AddSlicerModal
+        isOpen={slicerModalOpen}
+        setIsOpen={setSlicerModalOpen}
+        datasourceOptions={filterDatasourceOptions}
+        onCreate={async (payload) => {
+          await addSlicerWidget(payload, slicerDropPos || undefined);
+          setSlicerDropPos(null);
         }}
       />
 

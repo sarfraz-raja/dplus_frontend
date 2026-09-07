@@ -5,7 +5,7 @@ import { chartTokens, FONT_WEIGHT_CSS } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
-import { resolveTimeAxisFormat, toAxisTimeValue } from '../DashboardBuilder/charts/axisTypeUtils';
+import { resolveCustomTickFormatter, toAxisTimeValue, buildCustomTimeTicks, resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
 
 /**
  * Small single-series line+area chart for a card, e.g. "DL Throughput (Mbps)". Despite the
@@ -19,25 +19,37 @@ export default function LineAreaChart({
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
   titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
-  isTimeAxis = false, valueAxisLabel = null, dateFormat = undefined, timezone = undefined,
+  isTimeAxis = false, valueAxisLabel = null, dateFormat = undefined, tickInterval = undefined,
+  truncateYAxis = null, yAxisMin = null, yAxisMax = null,
+  // Optional multi-series grouping (mapping.series) — see BarChart.jsx's identical block for
+  // the full rationale; `data`/`color` are ignored in this mode.
+  categories = null, series = null, showLegend = true, seriesColors = null, palette = null, showDataPoints = true,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
   const { text: textColor, sub: subColor } = chartTokens(isDark);
+  const isMultiSeries = Array.isArray(series) && series.length > 0;
 
   const values = data.map((d) => d.value);
-  const labels = data.map((d) => d.label);
+  const labels = isMultiSeries ? categories : data.map((d) => d.label);
   const latest = values.length ? values[values.length - 1] : 0;
   // Time axis: each point becomes a real [timestamp, value] pair so ECharts positions it by
   // actual elapsed time (not evenly-spaced by index) and auto-picks a sparse tick interval,
   // instead of every raw ISO label fighting for its own category slot (see the conversation
   // this was decided in — that's what caused the overlapping "2026-05-12T00:00:00" labels).
   // `toAxisTimeValue` (not a plain Date.parse of d.label) re-expresses the raw naive timestamp
-  // in `timezone` (defaulting to DEPLOYMENT_TIME_ZONE) as a "naive-as-UTC" epoch — paired with
+  // in DEPLOYMENT_TIME_ZONE as a "naive-as-UTC" epoch — paired with
   // `xAxis.useUTC: true` below, this is what makes every viewer see identical axis numbers
   // regardless of their own browser's timezone, instead of each browser silently reinterpreting
   // the naive string in its own local zone.
-  const seriesValues = isTimeAxis ? data.map((d) => [toAxisTimeValue(d.label, timezone), d.value]) : values;
+  // See BarChart.jsx's own comment on this same pattern — raw click-identification labels.
+  const clickLabels = labels;
+  // Every series shares the same x positions — see BarChart.jsx's own identical comment.
+  const timeXValues = isTimeAxis ? labels.map((l) => toAxisTimeValue(l)) : null;
+  const seriesValues = isTimeAxis ? values.map((v, i) => [timeXValues[i], v]) : values;
+  // See BarChart.jsx's own comment on this same pattern.
+  const customTicks = isTimeAxis ? buildCustomTimeTicks(timeXValues, tickInterval) : undefined;
+  const yBounds = resolveTruncatedBounds(truncateYAxis, yAxisMin, yAxisMax);
 
   const option = {
     // `top` back to its plain small value — the title no longer overlays this chart at all
@@ -46,7 +58,7 @@ export default function LineAreaChart({
     // Extra left margin when the Y axis has a title — it's rendered rotated/vertical (see
     // buildAxisTitle's `vertical: true` below), so it needs its own reserved column, not just
     // tick-label room.
-    grid: { left: gridMarginForVerticalTitle(valueAxisLabel, 28, 42), right: 4, top: 8, bottom: categoryAxisLabel ? 32 : 18 },
+    grid: { left: gridMarginForVerticalTitle(valueAxisLabel, 28, 42), right: 4, top: 8, bottom: (categoryAxisLabel ? 32 : 18) + (isMultiSeries ? 14 : 0) },
     xAxis: isTimeAxis ? {
       type: 'time',
       // Pairs with toAxisTimeValue above — without this, ECharts reads the "naive-as-UTC"
@@ -58,8 +70,10 @@ export default function LineAreaChart({
       ...buildAxisTitle(categoryAxisLabel, { axisTextSize, axisTextColor, axisTextWeight, axisTextFont }),
       axisLabel: {
         fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined,
-        formatter: resolveTimeAxisFormat(dateFormat),
+        formatter: resolveCustomTickFormatter(dateFormat, tickInterval, customTicks),
+        ...(customTicks ? { customValues: customTicks } : {}),
       },
+      ...(customTicks ? { axisTick: { customValues: customTicks } } : {}),
     } : {
       type: 'category',
       data: labels,
@@ -71,6 +85,13 @@ export default function LineAreaChart({
       type: 'value',
       scale: true,
       splitNumber: 2,
+      // Explicit axis bounds ("Truncate Y Axis" — a Data-tab mapping field, see
+      // TRUNCATE_Y_AXIS_FIELD in ChartLibrary.jsx, not a style/cosmetic one) — clips the axis
+      // to a fixed range instead of auto-scaling to the data, same as Superset's own Min/Max.
+      // resolveTruncatedBounds falls back to Auto/undefined (ECharts' normal `scale: true`
+      // auto-scaling above) when truncateYAxis is off, a bound is blank, or min > max.
+      min: yBounds.min,
+      max: yBounds.max,
       // Vertical, centered along the axis (Superset's own Y Axis Title convention) — see
       // buildAxisTitle's own doc comment.
       ...buildAxisTitle(valueAxisLabel, { axisTextSize, axisTextColor, axisTextWeight, axisTextFont, vertical: true }),
@@ -81,20 +102,45 @@ export default function LineAreaChart({
       },
     },
     tooltip: { trigger: 'axis', valueFormatter: (v) => `${v} ${unit}` },
-    series: [
+    // Legend only meaningful once there's more than one named series — see BarChart.jsx's own
+    // identical block.
+    // itemStyle here (not just each series' own) is what the legend actually draws its swatch
+    // icons from — without it, the white borderColor/borderWidth on each series' data-point
+    // itemStyle (for contrast against the line) bleeds into the legend dots too.
+    ...(isMultiSeries ? { legend: { show: showLegend, bottom: 0, textStyle: { fontSize: 9, color: subColor }, itemWidth: 10, itemHeight: 10, itemStyle: { borderWidth: 0 } } } : {}),
+    series: isMultiSeries ? series.map((s, i) => {
+      const sColor = seriesColors?.[s.name] || (palette ? palette[i % palette.length] : undefined);
+      return {
+        name: s.name,
+        type: 'line',
+        // Positional array for the category axis; [epoch, value] pairs for the continuous
+        // time axis — see BarChart.jsx's own identical comment.
+        data: isTimeAxis ? s.data.map((v, j) => [timeXValues[j], v]) : s.data,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 3,
+        showSymbol: showDataPoints,
+        itemStyle: { color: sColor, borderColor: '#ffffff', borderWidth: 1.5 },
+        lineStyle: { width: 2, color: sColor },
+        emphasis: { disabled: true },
+        blur: {
+          lineStyle: { opacity: 1 },
+          itemStyle: { opacity: 1 },
+        },
+      };
+    }) : [
       {
         type: 'line',
         data: seriesValues,
         smooth: true,
         symbol: 'circle',
         symbolSize: 3,
+        showSymbol: showDataPoints,
         itemStyle: { color, borderColor: '#ffffff', borderWidth: 1.5 },
         lineStyle: { width: 2, color },
-        areaStyle: { color, opacity: 0.1 },
         emphasis: { disabled: true },
         blur: {
           lineStyle: { opacity: 1 },
-          areaStyle: { opacity: 0.1 },
           itemStyle: { opacity: 1 },
         },
       },
@@ -102,7 +148,7 @@ export default function LineAreaChart({
   };
 
   return (
-    <div className="kpi-spark-card h-full box-border flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
+    <div className="kpi-spark-card h-full box-border flex flex-col overflow-hidden rounded-lg bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
       {/* A real reserved row, not an absolutely-positioned overlay (the previous
           TitleValueOverlay approach) — the chart below can never draw underneath the title
           now, regardless of where its data happens to sit (see the conversation this was
@@ -133,8 +179,8 @@ export default function LineAreaChart({
       )}
       <div className="flex-1 min-h-0">
         <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
-          ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
-          ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
+          ...(onPointClick ? { click: (p) => onPointClick(clickLabels[p.dataIndex]) } : {}),
+          ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(clickLabels[p.dataIndex], p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />
       </div>
       {/* Latest-point value — this chart never actually enabled the value slot

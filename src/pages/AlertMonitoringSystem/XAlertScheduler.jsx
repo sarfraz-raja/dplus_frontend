@@ -9,6 +9,7 @@ import { Urls } from '../../utils/url';
 import XAlertSchedulerForm from './XAlertSchedulerForm';
 
 const COLUMNS = [
+    { label: 'Alert Name',       key: 'alertname' },
     { label: 'Frequency (mins)', key: 'frequency' },
     { label: 'DB Name',          key: 'dbname' },
     { label: 'Mail Attachement', key: 'mailquery' },
@@ -21,10 +22,19 @@ const COLUMNS = [
     { label: 'End At',           key: 'endat' },
     { label: 'Last Check At',    key: 'lastsendat' },
     { label: 'Next Check At',    key: 'nextsendat' },
+    { label: 'Visible To',       key: '_visibleto' },
+    { label: 'Generate Ticket',  key: '_generateticket' },
     { label: 'Status',           key: '_status' },
     { label: 'Block Status',     key: '_blockstatus' },
     { label: 'Actions',          key: '_actions' },
 ];
+
+const VISIBILITY_BADGE = {
+    SELF:  { label: 'Self',      className: 'text-slate-600' },
+    ALL:   { label: 'All Users', className: 'text-emerald-700' },
+    GROUP: { label: 'Group',     className: 'text-blue-700' },
+    USER:  { label: 'User',      className: 'text-purple-700' },
+};
 
 const Toggle = ({ checked, onChange }) => (
     <label className="relative inline-flex items-center cursor-pointer">
@@ -105,6 +115,11 @@ const XAlertScheduler = () => {
 
     const norm = (itm) => ({
         ...itm,
+        alertname: itm.alertname || itm.alertName,
+        generateticket: (() => {
+            const raw = itm.generate_ticket ?? itm.generateticket ?? itm.generateTicket;
+            return (raw === true || String(raw).toLowerCase() === 'yes' || String(raw).toLowerCase() === 'true') ? 'yes' : 'no';
+        })(),
         dbname: itm.dbname || itm.dbName,
         mailquery: itm.mailquery || itm.mailQuery,
         graphquery: itm.graphquery || itm.graphQuery,
@@ -116,11 +131,22 @@ const XAlertScheduler = () => {
         endat: itm.endat || itm.endAt,
         lastsendat: itm.lastsendat || itm.lastSendAt,
         nextsendat: itm.nextsendat || itm.nextSendAt,
+        assignment_type: (itm.assignment_type || itm.assignmentType || 'SELF').toUpperCase(),
+        group_id: itm.group_id ?? itm.groupId ?? null,
+        assigned_user_id: itm.assigned_user_id ?? itm.assignedUserId ?? null,
     });
 
     const tableData = rawList.map(norm);
 
     const renderCell = (itm, col) => {
+        if (col.key === '_visibleto') {
+            const badge = VISIBILITY_BADGE[itm.assignment_type] || VISIBILITY_BADGE.SELF;
+            return <span className={`font-medium ${badge.className}`}>{badge.label}</span>;
+        }
+        if (col.key === '_generateticket') {
+            const isYes = itm.generateticket === 'yes';
+            return <span className={`font-medium ${isYes ? 'text-orange-600' : 'text-slate-500'}`}>{isYes ? 'Yes' : 'No'}</span>;
+        }
         if (col.key === '_status') return (
             <Toggle checked={itm.enabled === 1 || itm.enabled === true} onChange={(e) => handleToggle(itm, e.target.checked)} />
         );
@@ -205,6 +231,12 @@ const XAlertScheduler = () => {
 
             <FormModal
                 title={modalTitle}
+                size="xl"
+                icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zM18 16v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+                    </svg>
+                }
                 isOpen={modalOpen}
                 setIsOpen={setModalOpen}
                 footer={

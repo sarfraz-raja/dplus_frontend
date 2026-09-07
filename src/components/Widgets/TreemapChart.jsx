@@ -50,7 +50,7 @@ export default function TreemapChart({
   };
 
   return (
-    <div className="kpi-treemap-card h-full box-border flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
+    <div className="kpi-treemap-card h-full box-border flex flex-col overflow-hidden rounded-lg bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
       {title && (
         <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
           <span

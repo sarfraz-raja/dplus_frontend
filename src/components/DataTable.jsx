@@ -233,7 +233,7 @@ const DataTable = ({
                                     onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
                                 >
                                     {visibleCols.map(col => (
-                                        <td key={col.key} className="px-4 py-3 text-slate-700">
+                                        <td key={col.key} className="px-4 py-3 text-slate-700 font-medium">
                                             {cellRenderer(row, col)}
                                         </td>
                                     ))}

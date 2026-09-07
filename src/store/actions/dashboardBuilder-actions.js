@@ -475,6 +475,112 @@ export async function attachWidget(dashboardId, widgetId, position) {
   return widget;
 }
 
+/** Detaches a widget from ONE dashboard — the join-row concern only, confirmed detach-only
+ * (unlike deleteWidget below, which deletes the widget itself everywhere it's attached). The
+ * widget definition survives in the Chart Library and on any other dashboard it's attached
+ * to. Counterpart to attachWidget above — same URL family, opposite direction. */
+export async function detachWidget(dashboardId, widgetId) {
+  const res = await Api.delete({ url: `${Urls.dashboardBuilder_dashboards}/${dashboardId}/widgets/${widgetId}` });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Detaching widget ${widgetId} from dashboard ${dashboardId} failed with status ${res.status}.`);
+  }
+}
+
+// ── Slicers (interactive filters) ───────────────────────────────────────────────────
+// Own standalone resource with its own id/CRUD, unlike dashboard.global_filters (a plain
+// array field on the dashboard, written via updateDashboard) — see the backend's Slicer API
+// doc. `available_values` is populated server-side from the live datasource on create/refresh;
+// `selected_values` set via updateSlicer automatically filters every widget on the next
+// GET/POST /dashboards/{id}/data call — no separate "apply" endpoint.
+
+/** Creates a slicer on a dashboard. `position` is `{x,y}`; `available_values` comes back
+ * populated from the live datasource. */
+export async function createSlicer(dashboardId, { datasourceId, columnName, label, position }) {
+  const res = await Api.post({
+    url: `${Urls.dashboardBuilder_dashboards}/${dashboardId}/slicers`,
+    data: {
+      datasource_id: datasourceId,
+      column_name: columnName,
+      label,
+      position,
+    },
+  });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 201) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Creating slicer failed with status ${res.status}.`);
+  }
+  const slicer = res.data?.data;
+  if (!slicer?.id) {
+    throw new Error("Unexpected response shape from POST /dashboard-builder/dashboards/{id}/slicers (see console).");
+  }
+  return slicer;
+}
+
+/** Lists every slicer configured on a dashboard. */
+export async function listSlicers(dashboardId) {
+  const res = await Api.get({ url: `${Urls.dashboardBuilder_dashboards}/${dashboardId}/slicers` });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Fetching slicers failed with status ${res.status}.`);
+  }
+  return res.data?.data || [];
+}
+
+/** Updates a slicer — `selected_values`, `label`, and `position` are all editable here.
+ * `selected_values` must be a subset of the slicer's own `available_values`, or the backend
+ * returns a 422 (surfaced via the thrown error's message). */
+export async function updateSlicer(slicerId, { selectedValues, label, position } = {}) {
+  const data = {};
+  if (selectedValues !== undefined) data.selected_values = selectedValues;
+  if (label !== undefined) data.label = label;
+  if (position !== undefined) data.position = position;
+  const res = await Api.patch({ url: `${Urls.dashboardBuilder_slicers}/${slicerId}`, data });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Updating slicer ${slicerId} failed with status ${res.status}.`);
+  }
+  return res.data?.data;
+}
+
+/** Re-fetches a slicer's `available_values` from its live datasource — any currently
+ * `selected_values` that are no longer valid are dropped automatically by the backend. */
+export async function refreshSlicerValues(slicerId) {
+  const res = await Api.post({ url: `${Urls.dashboardBuilder_slicers}/${slicerId}/refresh-values` });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Refreshing slicer ${slicerId} values failed with status ${res.status}.`);
+  }
+  return res.data?.data;
+}
+
+/** Deletes a slicer entirely. */
+export async function deleteSlicer(slicerId) {
+  const res = await Api.delete({ url: `${Urls.dashboardBuilder_slicers}/${slicerId}` });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Deleting slicer ${slicerId} failed with status ${res.status}.`);
+  }
+}
+
 // ── Runtime (chart data) ────────────────────────────────────────────────────────────
 // Scoped through the dashboard (not the standalone /widgets/{id}/data variant) since it
 // 404s if the widget isn't actually attached to that dashboard — a useful sanity check.

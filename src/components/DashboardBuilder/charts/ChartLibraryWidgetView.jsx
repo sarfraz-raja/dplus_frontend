@@ -20,7 +20,7 @@ import DrillContextMenu from './DrillContextMenu';
  */
 export default function ChartLibraryWidgetView({
   chartType, name, mapping, rows, loading, error, picked, height, style, onPointClick, onDrillUp,
-  drillDown, drilling, comparison, crossFilterEnabled, onPointCrossFilter,
+  drillDown, drilling, comparison, crossFilterEnabled, onPointCrossFilter, showWarnings = true,
 }) {
   const [menu, setMenu] = useState(null); // { label, x, y } | null
 
@@ -47,8 +47,28 @@ export default function ChartLibraryWidgetView({
   // drill buttons it can never use.
   const showDrillSection = !!drillDown?.enabled || canDrillUp;
 
+  // Truncate Axis's own invalid-range guard (resolveTruncatedBounds in axisTypeUtils.js)
+  // silently falls back to Auto rather than breaking the chart — necessary since bounds are
+  // "invalid" for most of every keystroke while a user is mid-typing a value, so blocking the
+  // chart entirely would make it flicker in and out constantly. But "silently" left the warning
+  // only in the config panel's Min/Max field hints (MappingFields.jsx), easy to miss since it's
+  // not where the user's eyes are when judging whether the chart looks right — this banner
+  // repeats the same check on the chart itself, where it's actually seen.
+  const yBoundsInvalid = !!mapping?.truncate_y_axis && mapping?.y_axis_min != null && mapping?.y_axis_max != null && mapping.y_axis_min > mapping.y_axis_max;
+  const xBoundsInvalid = !!mapping?.truncate_x_axis && mapping?.x_axis_min != null && mapping?.x_axis_max != null && mapping.x_axis_min > mapping.x_axis_max;
+  const truncationWarning = !showWarnings ? null : (yBoundsInvalid && xBoundsInvalid)
+    ? 'X and Y Axis truncation ignored — Max must be ≥ Min'
+    : yBoundsInvalid ? 'Y Axis truncation ignored — Max must be ≥ Min'
+    : xBoundsInvalid ? 'X Axis truncation ignored — Max must be ≥ Min'
+    : null;
+
   return (
     <div className="relative h-full flex flex-col">
+      {truncationWarning && (
+        <div className="absolute top-1 left-1 right-1 z-10 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-[11px] text-amber-700 dark:text-amber-300 text-center">
+          {truncationWarning}
+        </div>
+      )}
       {drilling && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/50 dark:bg-slate-900/50">
           <Loader2 size={18} className="animate-spin text-sky-500" />

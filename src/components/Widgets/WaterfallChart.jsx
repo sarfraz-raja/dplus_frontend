@@ -5,6 +5,7 @@ import { chartTokens, FONT_WEIGHT_CSS } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
+import { resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
 
 /**
  * Waterfall chart — cumulative breakdown of what's driving a KPI change (e.g. what
@@ -20,6 +21,7 @@ export default function WaterfallChart({
   title = '', unit = '', data = [], upColor = '#10B981', downColor = '#EF4444', height = 140, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
   titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null, valueAxisLabel = null,
+  truncateYAxis = null, yAxisMin = null, yAxisMax = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
@@ -37,6 +39,7 @@ export default function WaterfallChart({
     colors.push(isDown ? downColor : upColor);
     running += d.value;
   });
+  const yBounds = resolveTruncatedBounds(truncateYAxis, yAxisMin, yAxisMax);
 
   const option = {
     grid: { left: gridMarginForVerticalTitle(valueAxisLabel, 32, 46), right: 4, top: 8, bottom: categoryAxisLabel ? 38 : 24 },
@@ -50,6 +53,9 @@ export default function WaterfallChart({
     },
     yAxis: {
       type: 'value', splitNumber: 2,
+      // See BarChart.jsx's own comment on this same pattern.
+      min: yBounds.min,
+      max: yBounds.max,
       ...buildAxisTitle(valueAxisLabel, { axisTextSize: axisTextSize || 8, axisTextColor, axisTextWeight, axisTextFont, vertical: true }),
       axisLabel: { fontSize: axisTextSize || 8, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined },
     },
@@ -77,7 +83,7 @@ export default function WaterfallChart({
   };
 
   return (
-    <div className="kpi-waterfall-card h-full box-border flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
+    <div className="kpi-waterfall-card h-full box-border flex flex-col overflow-hidden rounded-lg bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
       {title && (
         <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
           <span

@@ -531,7 +531,7 @@ const AddMapLayersPanelFloatingLayout = ({
               ) : null}
 
               {activeLayerSection === "BOUNDARY" ? (
-                <div className={floatingInner}>
+                <div className={floatingInner + (boundaryGroups.length === 0 ? " pointer-events-none opacity-50" : "")}>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-white/60">Show legend</span>
@@ -551,7 +551,9 @@ const AddMapLayersPanelFloatingLayout = ({
                     />
                     <div>
                       <span className="mb-1 block text-xs font-semibold text-white/60">Select layers</span>
-                      {boundaryGroups.map((group, index) => (
+                      {boundaryGroups.length === 0 ? (
+                        <p className="text-xs text-white/40 italic">No boundary layers available</p>
+                      ) : boundaryGroups.map((group, index) => (
                         <div key={index} className="mb-1.5 rounded border border-white/10 bg-white/[0.06]">
                           <div className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-white/[0.04]">
                             <input
@@ -606,7 +608,7 @@ const AddMapLayersPanelFloatingLayout = ({
               ) : null}
 
               {activeLayerSection === "RF" ? (
-                <div className={floatingInner}>
+                <div className={floatingInner + (rfRegions.length === 0 ? " pointer-events-none opacity-50" : "")}>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-white/60">Show legend</span>
@@ -626,6 +628,9 @@ const AddMapLayersPanelFloatingLayout = ({
                     />
                     <div>
                       <span className="mb-1 block text-xs font-semibold text-white/60">Select layers</span>
+                      {rfRegions.length === 0 ? (
+                        <p className="text-xs text-white/40 italic">No RF prediction layers available</p>
+                      ) : (
                       <div className="max-h-[140px] overflow-y-auto rounded border border-white/10 p-2">
                         {rfRegions.map((name, idx) => (
                           <label key={idx} className="mb-1 flex cursor-pointer items-center gap-2 text-xs">
@@ -638,6 +643,7 @@ const AddMapLayersPanelFloatingLayout = ({
                           </label>
                         ))}
                       </div>
+                      )}
                     </div>
                     <hr className="border-t border-white/10" />
                     <div>
@@ -693,7 +699,7 @@ const AddMapLayersPanelFloatingLayout = ({
               ) : null}
 
               {activeLayerSection === "DRIVE_TEST" ? (
-                <div className={floatingInner}>
+                <div className={floatingInner + (sessionIds.length === 0 ? " pointer-events-none opacity-50" : "")}>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-white/60">Show legend</span>
@@ -728,6 +734,9 @@ const AddMapLayersPanelFloatingLayout = ({
                     </div>
                     <div>
                       <span className="mb-1 block text-xs font-semibold text-white/60">Select layers</span>
+                      {sessionIds.length === 0 ? (
+                        <p className="text-xs text-white/40 italic">No drive test sessions available</p>
+                      ) : (
                       <div className="max-h-[120px] overflow-y-auto rounded border border-white/10 p-2">
                         {sessionIds.map((session) => (
                           <label key={session} className="mb-1 flex items-center gap-2 text-xs">
@@ -740,6 +749,7 @@ const AddMapLayersPanelFloatingLayout = ({
                           </label>
                         ))}
                       </div>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="flex flex-col">

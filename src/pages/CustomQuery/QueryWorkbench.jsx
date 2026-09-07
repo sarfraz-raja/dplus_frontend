@@ -473,8 +473,7 @@ const QueryWorkbench = () => {
 
     const handleCardClick = (item) => {
         setActiveQuery(item.queries || item.query || '');
-        const serverId = item.dbServer || item.dbserver;
-        if (serverId) setServer(String(serverId));
+        if (item.value) setServer(String(item.value));
     };
 
     // ── Actions ──

@@ -4,8 +4,11 @@ import { FONT_WEIGHT_CSS } from '../../theme/tokens';
 // `nameTextStyle` — every chart widget (Line, Area, Bar, Waterfall, StackedBar, Scatter, ...)
 // used to hand-roll this same block, which is exactly how the Y-axis-title fix landed on five
 // of them but missed ScatterChart.jsx entirely (see the conversation this was extracted in —
-// its y-axis title was still the raw unconditional column name, never wired to the "blank
-// title = no title at all" rule or the vertical/rotated convention the rest already got).
+// its y-axis title was still the raw unconditional column name, never wired to the
+// vertical/rotated convention the rest already got. Callers resolve a blank
+// `mapping.x_axis_title`/`y_axis_title` to the underlying column name before it ever reaches
+// here (see renderChartWidget.jsx), so `label` is effectively never empty in practice; the
+// falsy-guard below just keeps this helper safe to call standalone.
 // Returns `{}` (nothing merged in) when `label` is falsy, so `{...buildAxisTitle(...)}` is
 // always safe to spread — no separate `label ? {...} : {}` branch needed at each call site.
 export function buildAxisTitle(label, { axisTextSize, axisTextColor, axisTextWeight, axisTextFont, vertical = false, gap } = {}) {

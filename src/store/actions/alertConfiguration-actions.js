@@ -268,6 +268,27 @@ const AlertConfigurationActions = {
     resetTablesList: () => async (dispatch, _) => {
         dispatch(TABLES_LIST({}))
     },
+    getDashboardTabs: (dashboardId, cb, onError) => async (dispatch, _) => {
+        try {
+            const res = await Api.get({ url: Urls.dashboard_tabs(dashboardId), inst: 0 });
+            if (res?.status !== 200) { onError && onError(res?.data?.data?.error || 'Something went wrong.'); return; }
+            cb && cb(res.data.data);
+        } catch (error) {
+            console.log(error, "getDashboardTabs error");
+            onError && onError('Something went wrong.');
+        }
+    },
+    postReportSendNow: (data, cb, onError) => async (dispatch, _) => {
+        try {
+            const res = await Api.post({ data, url: Urls.report_scheduler_send_now });
+            if (res?.status === 400) { onError && onError(res.data?.msg); return; }
+            if (res?.status !== 201 && res?.status !== 200) { onError && onError(res?.data?.data?.error || 'Something went wrong.'); return; }
+            cb && cb();
+        } catch (error) {
+            console.log(error, "postReportSendNow error");
+            onError && onError('Something went wrong.');
+        }
+    },
     postReportScheduler: (data, cb, onError) => async (dispatch, _) => {
         try {
             const res = await Api.post({ data, url: Urls.report_scheduler });

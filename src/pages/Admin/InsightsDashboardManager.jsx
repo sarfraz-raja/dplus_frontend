@@ -18,6 +18,11 @@ import {
 } from 'lucide-react';
 import Button from '../../components/Button';
 import { buildInsightsRootTree, sortBySequence } from '../../utils/insightsMenu';
+import { listDashboards } from '../../store/actions/dashboardBuilder-actions';
+
+// Confirmed via a live POST /dashboards/{id}/data response — the field is `is_published`
+// (a plain boolean), not `status`. Same helper as DashboardBuilder.jsx/EmbeddedDashboard.jsx's isPublished.
+const isDashboardPublished = (d) => d?.is_published === true;
 
 const ICON_OPTIONS = [
     { name: 'BarChart2',    Icon: BarChart2    },
@@ -173,6 +178,21 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
     const [errors, setErrors] = useState({});
     const [confirmDeactivate, setConfirmDeactivate] = useState(false);
     const [confirmDelete,     setConfirmDelete]     = useState(false);
+    // Only fetched when the Dashboard Builder platform is picked — published (not draft)
+    // Dashboard Builder dashboards to choose from, instead of a raw numeric id.
+    const [builderDashboards, setBuilderDashboards] = useState([]);
+    const [builderLoading, setBuilderLoading] = useState(false);
+    const [builderError, setBuilderError] = useState(null);
+
+    useEffect(() => {
+        if (form.dashboard_platform !== 'dashboard_builder') return;
+        setBuilderLoading(true);
+        setBuilderError(null);
+        listDashboards()
+            .then((list) => setBuilderDashboards(list.filter(isDashboardPublished)))
+            .catch((e) => setBuilderError(e.message))
+            .finally(() => setBuilderLoading(false));
+    }, [form.dashboard_platform]);
 
     useEffect(() => {
         setForm(getInitial());
@@ -199,6 +219,8 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
         if (!form.title.trim()) e.title = 'Required';
         if (!form.route.trim()) e.route = 'Required';
         if (form.sequence === '' || form.sequence == null) e.sequence = 'Required';
+        if (isLink && form.dashboard_platform === 'dashboard_builder' && !form.dashboard_id)
+            e.dashboard_id = 'Required';
         return e;
     };
 
@@ -212,8 +234,10 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
             payload.parent_id = null;
         }
         payload.sequence = payload.sequence !== '' ? Math.trunc(Number(payload.sequence)) : null;
-        if (payload.dashboard_platform === 'grafana') {
-            payload.dashboard_id = payload.dashboard_id?.trim() || null;
+        if (payload.dashboard_platform === 'grafana' || payload.dashboard_platform === 'dashboard_builder') {
+            // Dashboard Builder's id comes from a <select> of real dashboards (string values,
+            // not necessarily numeric), so it's kept as-is rather than coerced to a Number.
+            payload.dashboard_id = payload.dashboard_id?.toString().trim() || null;
         } else {
             payload.dashboard_id = payload.dashboard_id !== '' ? Number(payload.dashboard_id) : null;
         }
@@ -337,6 +361,7 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
                                 {[
                                     { value: 'superset', label: 'v1' },
                                     { value: 'grafana',  label: 'v2' },
+                                    { value: 'dashboard_builder', label: 'Dashboard Builder' },
                                 ].map(({ value, label }) => (
                                     <button
                                         key={value} type="button"
@@ -353,8 +378,33 @@ const EditPanel = ({ mode, item, parentItem, insightsRoot, allFlat, onSave, onAc
                             </div>
                         </div>
 
+                        {/* Dashboard Builder: pick from published dashboards */}
+                        {form.dashboard_platform === 'dashboard_builder' && (
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                                    Dashboard <span className="text-red-400">*</span>
+                                </label>
+                                <select
+                                    value={form.dashboard_id ?? ''}
+                                    onChange={e => set('dashboard_id', e.target.value)}
+                                    className={inputCls('dashboard_id')}
+                                    disabled={builderLoading}
+                                >
+                                    <option value="">{builderLoading ? 'Loading…' : '— Select a published dashboard —'}</option>
+                                    {builderDashboards.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                                {errors.dashboard_id && <p className="text-xs text-red-500 mt-0.5">{errors.dashboard_id}</p>}
+                                {builderError && <p className="text-xs text-red-500 mt-0.5">{builderError}</p>}
+                                {!builderLoading && !builderError && builderDashboards.length === 0 && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5">No published dashboards yet — publish one from the Dashboard Builder first.</p>
+                                )}
+                            </div>
+                        )}
+
                         {/* v1 (Superset): Dashboard ID + UUID */}
-                        {form.dashboard_platform !== 'grafana' && (
+                        {form.dashboard_platform !== 'grafana' && form.dashboard_platform !== 'dashboard_builder' && (
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">

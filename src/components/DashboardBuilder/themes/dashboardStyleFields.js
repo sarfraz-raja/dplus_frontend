@@ -34,6 +34,14 @@ const DASHBOARD_STYLE_FIELDS = [
   { key: 'dashboardTitleWeight', label: 'Dashboard title weight', type: 'select', default: 'bold', options: [{ value: 'normal', label: 'Normal' }, { value: 'bold', label: 'Bold' }] },
   { key: 'dashboardTitleSize', label: 'Dashboard title size (px)', type: 'number', default: null, min: 12, max: 48 },
   { key: 'dashboardTitleFont', label: 'Dashboard title font', type: 'select', default: '', options: FONT_FAMILY_OPTIONS },
+  // Horizontal alignment only (left/center/right) — unlike the per-widget `titlePosition`
+  // above (a full 3x3 grid, since a widget's title can sit anywhere around its own chart),
+  // the dashboard's own heading is always a single line above the whole grid, so vertical
+  // placement has no meaning here. Named `dashboardTitleAlign`, not `dashboardTitlePosition`
+  // — that name is already taken by the *widget* titlePosition's dashboard-level fallback
+  // (see DashboardCanvasEditor.jsx's own `titlePosition: dashboardTitlePosition` alias), and
+  // reusing it here would silently collide with an unrelated existing field.
+  { key: 'dashboardTitleAlign', label: 'Dashboard title position', type: 'select', default: 'left', options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
   // Axis label styling — same key names as each chart widget's own axisText* styleFields
   // (widgetTypeRegistry.js's AXIS_TEXT_STYLE_FIELDS), so the existing `style.axisTextColor
   // || dashboardAxisTextColor` cascade pattern applies with no separate naming scheme.

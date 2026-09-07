@@ -21,7 +21,7 @@ function compareValues(a, b) {
   return String(a ?? '').localeCompare(String(b ?? ''));
 }
 
-export default function VirtualizedTable({ rows, cols, round, valueTextColor }) {
+export default function VirtualizedTable({ rows, cols, round, valueTextColor, formatValue = null }) {
   const containerRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -109,7 +109,13 @@ export default function VirtualizedTable({ rows, cols, round, valueTextColor }) 
           )}
           {visibleRows.map((row, i) => (
             <tr key={startIndex + i} className="border-t border-slate-100 dark:border-white/10">
-              {cols.map((c) => <td key={c} className="px-2 py-1 text-slate-600 dark:text-white/70 whitespace-nowrap" style={{ color: valueTextColor || undefined }}>{String(round(row[c]) ?? '')}</td>)}
+              {cols.map((c) => {
+                const cellValue = round(row[c]);
+                const display = typeof cellValue === 'number' && formatValue
+                  ? formatValue(cellValue)
+                  : String(cellValue ?? '');
+                return <td key={c} className="px-2 py-1 text-slate-600 dark:text-white/70 whitespace-nowrap" style={{ color: valueTextColor || undefined }}>{display}</td>;
+              })}
             </tr>
           ))}
           {bottomSpacerHeight > 0 && (

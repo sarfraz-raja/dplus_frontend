@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Button from '../../Button';
+import PaletteEditor from '../themes/PaletteEditor';
 
 // Auto-groups a field into one of four collapsible sections purely from its own
 // key/type shape — no per-field `group` metadata needed on every styleFields entry across
@@ -10,7 +11,7 @@ import Button from '../../Button';
 // everything else (row-count limits, donut/legend/value-label toggles) is "layout & behavior."
 function groupFor(field) {
   if (field.key === 'crossFilterSource' || field.key === 'crossFilterTarget') return 'Cross-Filtering';
-  if (field.type === 'color') return 'Colors & Branding';
+  if (field.type === 'color' || field.type === 'palette') return 'Colors & Branding';
   if (/Weight$|Size$|Position$/.test(field.key)) return 'Text Styling';
   return 'Layout & Behavior';
 }
@@ -166,30 +167,52 @@ function TextRow({ field, current, onChange }) {
   );
 }
 
+function PaletteRow({ field, current, onChange }) {
+  return (
+    <div className="dbe-style-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 6 }}>
+      <span className="dbe-style-row-label">{field.label}</span>
+      <PaletteEditor value={current} onChange={(next) => onChange(field.key, next)} />
+    </div>
+  );
+}
+
 function FieldRow({ field, value, resolvedDefaults, onChange }) {
   const raw = value?.[field.key];
   // A field only counts as an explicit override once it holds a real value — an empty
   // string (cleared text input) or undefined (cleared via the × below) both mean "inherit
-  // from the dashboard theme/local default," same as never having touched it.
-  const isOverridden = raw !== undefined && raw !== null && raw !== '';
-  const current = raw ?? field.default ?? '';
+  // from the dashboard theme/local default," same as never having touched it. A palette's
+  // "empty" is `[]`/undefined, never `''` (it's an array field, not text) — checked
+  // separately so an untouched palette doesn't read as "overridden with nothing".
+  const isOverridden = field.type === 'palette'
+    ? Array.isArray(raw) && raw.length > 0
+    : raw !== undefined && raw !== null && raw !== '';
+  const current = field.type === 'palette' ? (raw ?? field.default ?? []) : (raw ?? field.default ?? '');
 
   let row = null;
   if (field.type === 'color') row = <ColorRow field={field} current={current} resolvedDefaults={resolvedDefaults} onChange={onChange} />;
+  else if (field.type === 'palette') row = <PaletteRow field={field} current={current} onChange={onChange} />;
   else if (field.type === 'number') row = <SliderRow field={field} current={current} resolvedDefaults={resolvedDefaults} onChange={onChange} />;
   else if (field.type === 'text') row = <TextRow field={field} current={current} onChange={onChange} />;
   else if (field.type === 'position') row = <PositionPickerRow field={field} current={current} onChange={onChange} />;
   else if (field.type === 'select') {
     if (isShowHide(field)) row = <SwitchRow field={field} current={current} onChange={onChange} />;
-    else if (field.options?.length === 2) row = <SegmentedRow field={field} current={current} onChange={onChange} />;
+    else if (field.options?.length === 2 && !field.asDropdown) row = <SegmentedRow field={field} current={current} onChange={onChange} />;
     else row = <SelectRow field={field} current={current} onChange={onChange} />;
   }
   if (!row) return null;
 
+  // Switch/segmented 2-option fields already show both states on the control itself (the
+  // active button/knob position) — the × here only ever adds a third "inherit theme/default"
+  // state, which is meaningless for these since their fallback (field.default) is a hardcoded
+  // constant, never theme-dependent, unlike color/size/text fields where a dashboard-level
+  // theme genuinely can supply a different value than the field's own default.
+  const isSegmented = field.type === 'select' && field.options?.length === 2 && !field.asDropdown;
+  const showClear = isOverridden && !isShowHide(field) && !isSegmented;
+
   return (
     <div className={`dbe-style-field-wrap${isOverridden ? '' : ' inherited'}`}>
       {row}
-      {isOverridden && (
+      {showClear && (
         <button
           type="button"
           className="dbe-style-field-clear"
@@ -278,10 +301,10 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
         .dbe-style-subsection + .dbe-style-subsection { margin-top:4px; }
         .dbe-style-subsection summary {
           cursor:pointer; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.03em;
-          color:#64748b; padding:6px 8px; border-radius:6px; background:rgb(241 245 249);
+          color:#475569; padding:6px 8px; border-radius:6px; background:rgb(241 245 249);
           list-style:none; display:flex; align-items:center; gap:4px;
         }
-        [data-theme="dark"] .dbe-style-subsection summary { background:rgba(255,255,255,0.06); color:#94a3b8; }
+        [data-theme="dark"] .dbe-style-subsection summary { background:rgba(255,255,255,0.08); color:#cbd5e1; }
         .dbe-style-subsection summary:hover { background:rgb(226 232 240); }
         [data-theme="dark"] .dbe-style-subsection summary:hover { background:rgba(255,255,255,0.1); }
         .dbe-style-subsection summary::-webkit-details-marker { display:none; }
@@ -290,8 +313,8 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
         .dbe-style-subsection-body { display:flex; flex-direction:column; gap:10px; padding:4px 6px 8px; }
         .dbe-style-row { display:flex; flex-direction:column; gap:5px; min-height:50px; justify-content:flex-start; }
         .dbe-style-row-inline { flex-direction:row; align-items:center; justify-content:space-between; min-height:auto; }
-        .dbe-style-row-label { font-size:11px; color:#475569; }
-        [data-theme="dark"] .dbe-style-row-label { color:#cbd5e1; }
+        .dbe-style-row-label { font-size:11px; color:#334155; }
+        [data-theme="dark"] .dbe-style-row-label { color:#e2e8f0; }
         .dbe-style-row-label-line { display:flex; align-items:center; justify-content:space-between; }
         .dbe-style-slider-line { display:flex; align-items:center; gap:8px; }
         .dbe-style-slider-line input[type="range"] { flex:1; height:6px; }
@@ -305,6 +328,7 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
           overflow:hidden; background:#fff; transition:border-color .1s;
         }
         .dbe-style-color-pill:focus-within, .dbe-style-color-pill.set { border-color:#EC7D09; }
+        [data-theme="dark"] .dbe-style-color-pill { background:#1e293b; border-color:#475569; }
         .dbe-style-color-swatch {
           position:relative; width:26px; height:26px; flex-shrink:0; cursor:pointer;
           border-right:1px solid rgb(203 213 225);
@@ -312,26 +336,35 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
             linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
           background-size: 8px 8px; background-position: 0 0, 0 4px, 4px -4px, -4px 0;
         }
+        [data-theme="dark"] .dbe-style-color-swatch { border-right-color:#475569; }
         .dbe-style-color-swatch input[type="color"] { position:absolute; inset:0; opacity:0; cursor:pointer; padding:0; border:none; }
         .dbe-style-color-pill input[type="text"] {
-          flex:1; min-width:0; font-size:11px; font-family:monospace; padding:5px 8px; border:none; background:transparent;
+          flex:1; min-width:0; font-size:11px; font-family:monospace; padding:5px 8px; border:none; background:transparent; color:#1e293b;
         }
+        [data-theme="dark"] .dbe-style-color-pill input[type="text"] { color:#f1f5f9; }
+        .dbe-style-color-pill input[type="text"]::placeholder { color:#64748b; opacity:1; }
+        [data-theme="dark"] .dbe-style-color-pill input[type="text"]::placeholder { color:#94a3b8; }
         .dbe-style-color-pill input[type="text"]:focus { outline:none; }
         .dbe-style-row select {
-          width:100%; font-size:11px; padding:5px 6px; border:1px solid rgb(203 213 225); border-radius:6px; background:#fff;
+          width:100%; font-size:11px; padding:5px 6px; border:1px solid rgb(203 213 225); border-radius:6px; background:#fff; color:#1e293b;
         }
+        [data-theme="dark"] .dbe-style-row select { background:#1e293b; border-color:#475569; color:#f1f5f9; }
         .dbe-style-row select:focus {
           outline:none; border-color:#EC7D09; box-shadow:0 0 0 2px rgba(236,125,9,0.25);
         }
         .dbe-style-text-input {
-          width:100%; font-size:11px; padding:5px 6px; border:1px solid rgb(203 213 225); border-radius:6px; background:#fff; box-sizing:border-box;
+          width:100%; font-size:11px; padding:5px 6px; border:1px solid rgb(203 213 225); border-radius:6px; background:#fff; color:#1e293b; box-sizing:border-box;
         }
+        [data-theme="dark"] .dbe-style-text-input { background:#1e293b; border-color:#475569; color:#f1f5f9; }
         .dbe-style-segmented { display:flex; border:1px solid rgb(203 213 225); border-radius:6px; overflow:hidden; }
         .dbe-style-segmented button {
-          flex:1; padding:5px 0; font-size:11px; font-weight:600; color:#64748b; background:#fff; cursor:pointer;
+          flex:1; padding:5px 0; font-size:11px; font-weight:600; color:#475569; background:#fff; cursor:pointer;
           text-align:center;
         }
+        [data-theme="dark"] .dbe-style-segmented { border-color:#475569; }
+        [data-theme="dark"] .dbe-style-segmented button { background:#1e293b; color:#cbd5e1; }
         .dbe-style-segmented button + button { border-left:1px solid rgb(203 213 225); }
+        [data-theme="dark"] .dbe-style-segmented button + button { border-left-color:#475569; }
         .dbe-style-segmented button.active { background:#EC7D09; color:#fff; }
         .dbe-style-position-grid {
           display:grid; grid-template-columns:repeat(3, 1fr); gap:3px; width:64px;
@@ -340,7 +373,9 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
           width:20px; height:20px; border:1px solid rgb(203 213 225); border-radius:4px;
           background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;
         }
+        [data-theme="dark"] .dbe-style-position-grid button { background:#1e293b; border-color:#475569; }
         .dbe-style-position-grid button span { width:6px; height:6px; border-radius:50%; background:rgb(203 213 225); }
+        [data-theme="dark"] .dbe-style-position-grid button span { background:#64748b; }
         .dbe-style-position-grid button:hover { border-color:#EC7D09; }
         .dbe-style-position-grid button.active { background:#EC7D09; border-color:#EC7D09; }
         .dbe-style-position-grid button.active span { background:#fff; }
@@ -364,9 +399,10 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
         .dbe-style-field-wrap.inherited { opacity:0.6; }
         .dbe-style-field-clear {
           position:absolute; top:0; right:0; width:16px; height:16px; border-radius:50%;
-          border:1px solid rgb(203 213 225); background:#fff; color:#64748b; font-size:11px;
+          border:1px solid rgb(203 213 225); background:#fff; color:#475569; font-size:11px;
           line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;
         }
+        [data-theme="dark"] .dbe-style-field-clear { background:#1e293b; border-color:#475569; color:#cbd5e1; }
         .dbe-style-field-clear:hover { background:#fee2e2; border-color:#fca5a5; color:#dc2626; }
         .dbe-style-actions { display:flex; gap:8px; margin-top:8px; padding-top:8px; border-top:1px solid rgb(226 232 240); }
         .dbe-style-actions > * { flex:1; }

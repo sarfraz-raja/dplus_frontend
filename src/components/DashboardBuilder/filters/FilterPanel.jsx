@@ -206,7 +206,12 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
   };
 
   return (
-    <div className="flex items-center gap-2.5 flex-wrap px-1">
+    <div className="flex items-center justify-between gap-2.5 flex-wrap px-1">
+      {/* Every filter control grouped together on the left, Apply/Clear pinned to the far
+          right via the outer `justify-between` — matches the reference strap (filters on
+          one side, actions on the other), instead of the buttons sitting immediately after
+          whichever filter happens to be last. */}
+      <div className="flex items-center gap-2.5 flex-wrap">
       {/* Label sits to the left of its control, single line — matches the reference
           (Region / Site Name / Cell Name laid out inline) and keeps the strip from taking
           extra vertical space the way a label-above-control stack would. */}
@@ -270,6 +275,7 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
           )}
         </div>
       ))}
+      </div>
 
       <div className="flex items-center gap-1.5 shrink-0">
         <button

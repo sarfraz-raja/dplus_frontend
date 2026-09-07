@@ -3,6 +3,17 @@ import Api from "../../utils/api";
 import toast from "react-hot-toast";
 import { useSelector } from "react-redux";
 
+// Backend-generated notices. NOTE: create_or_update_alert_ticket() in ticket_management.py
+// currently inserts the alert "re-occurred" notice as a normal message_type='TEXT' row with
+// sender_id = the alert's creator — it's not actually distinguishable from a real user message
+// except by its fixed text prefix, so that's matched here too. message_type SYSTEM / no-sender
+// are kept as forward-compatible checks in case the backend later marks these more explicitly.
+const isSystemMessage = (msg) =>
+  msg.message_type === "SYSTEM" ||
+  msg.message_type === "system" ||
+  (!msg.sender_id && !msg.username) ||
+  (typeof msg.message === "string" && msg.message.startsWith("Issue re-occurred at"));
+
 export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
   const authUser = useSelector((state) => state.auth.user);
   const [messages, setMessages] = useState([]);
@@ -193,6 +204,19 @@ export default function ChatModal({ isOpen, onClose, ticketId, ticketTitle }) {
             ) : (
               <div className="space-y-4">
                 {messages.map((msg, index) => {
+                  if (isSystemMessage(msg)) {
+                    return (
+                      <div key={index} className="flex justify-center">
+                        <div className="flex items-center gap-1.5 max-w-[85%] text-center text-xs text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-3 py-1.5">
+                          <svg className="w-3 h-3 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 2 3 14h7l-1 8 10-12h-7z" />
+                          </svg>
+                          <span>{msg.message}</span>
+                          <span className="text-gray-400 shrink-0">· {formatTimestamp(msg.create_time || msg.created_at)}</span>
+                        </div>
+                      </div>
+                    );
+                  }
                   const isCurrentUser = msg.sender_id === authUser?.id;
                   return (
                     <div

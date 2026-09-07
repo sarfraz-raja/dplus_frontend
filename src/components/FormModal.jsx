@@ -30,11 +30,20 @@ const FormModal = ({
 }) => {
     if (!isOpen) return null;
 
+    const isLight = (() => {
+        if (!/^#([0-9a-f]{6})$/i.test(headerColor)) return false;
+        const r = parseInt(headerColor.slice(1, 3), 16);
+        const g = parseInt(headerColor.slice(3, 5), 16);
+        const b = parseInt(headerColor.slice(5, 7), 16);
+        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return lum > 0.6;
+    })();
+
     const sizeClass =
-        size === 'full' ? 'w-[98vw] h-[96vh]' :
-        size === 'xl'   ? 'w-[94vw] md:w-[1000px] max-h-[90vh]' :
-        size === 'lg'   ? 'w-[94vw] md:w-[860px]  max-h-[90vh]' :
-                          'w-[94vw] md:w-[640px]   max-h-[90vh]';
+        size === 'full' ? 'w-[92vw] h-[90vh]' :
+        size === 'xl'   ? 'w-[88vw] md:w-[820px] max-h-[88vh]' :
+        size === 'lg'   ? 'w-[88vw] md:w-[720px] max-h-[88vh]' :
+                          'w-[88vw] md:w-[560px] max-h-[88vh]';
 
     const positionClass = contained ? 'absolute inset-0 z-[400]' : 'fixed inset-0 z-[4000]';
 
@@ -54,21 +63,21 @@ const FormModal = ({
             >
                 {/* ── Sticky header ── */}
                 <div
-                    className="flex items-center gap-3 px-5 py-4 shrink-0 rounded-t-2xl overflow-hidden"
+                    className={`flex items-center gap-3 px-5 py-4 shrink-0 rounded-t-2xl overflow-hidden ${isLight ? 'border-b border-slate-100' : ''}`}
                     style={{ background: headerColor }}
                 >
                     {/* Optional icon */}
                     {icon && (
-                        <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isLight ? 'bg-orange-50 text-orange-500' : 'bg-white/20 text-white'}`}>
                             {icon}
                         </div>
                     )}
 
                     {/* Title + subtitle */}
                     <div className="flex-1 min-w-0">
-                        <h2 className="text-white font-semibold text-base leading-tight truncate">{title}</h2>
+                        <h2 className={`font-semibold text-base leading-tight truncate ${isLight ? 'text-slate-800' : 'text-white'}`}>{title}</h2>
                         {subtitle && (
-                            <p className="text-white/70 text-xs mt-0.5 truncate">{subtitle}</p>
+                            <p className={`text-xs mt-0.5 truncate ${isLight ? 'text-slate-500' : 'text-white/70'}`}>{subtitle}</p>
                         )}
                     </div>
 
@@ -76,7 +85,7 @@ const FormModal = ({
                     <button
                         type="button"
                         onClick={() => setIsOpen(false)}
-                        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/25 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
+                        className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-500 focus:ring-slate-300' : 'bg-white/10 hover:bg-white/25 text-white focus:ring-white/50'}`}
                         aria-label="Close"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"

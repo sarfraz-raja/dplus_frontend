@@ -5,7 +5,7 @@ import { chartTokens, FONT_WEIGHT_CSS } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
-import { resolveTimeAxisFormat, toAxisTimeValue } from '../DashboardBuilder/charts/axisTypeUtils';
+import { resolveCustomTickFormatter, toAxisTimeValue, buildCustomTimeTicks, resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
 
 /**
  * Filled area trend chart — same `{label, value}[]` single-series shape and theme wiring
@@ -20,23 +20,33 @@ export default function AreaChart({
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
   titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
-  isTimeAxis = false, valueAxisLabel = null, dateFormat = undefined, timezone = undefined,
+  isTimeAxis = false, valueAxisLabel = null, dateFormat = undefined, tickInterval = undefined,
+  truncateYAxis = null, yAxisMin = null, yAxisMax = null,
+  // Optional multi-series grouping (mapping.series) — see BarChart.jsx's identical block for
+  // the full rationale; `data`/`color` are ignored in this mode.
+  categories = null, series = null, showLegend = true, seriesColors = null, palette = null,
 }) {
   const { theme } = useTheme();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
   const { text: textColor, sub: subColor } = chartTokens(isDark);
+  const isMultiSeries = Array.isArray(series) && series.length > 0;
 
   const values = data.map((d) => d.value);
-  const labels = data.map((d) => d.label);
+  const labels = isMultiSeries ? categories : data.map((d) => d.label);
   const latest = values.length ? values[values.length - 1] : 0;
-  // See LineAreaChart.jsx's own comment on this same pattern — real [timestamp, value] pairs,
-  // re-expressed in `timezone` (default DEPLOYMENT_TIME_ZONE) via toAxisTimeValue so every
-  // viewer sees identical axis numbers regardless of their own browser's timezone.
-  const seriesValues = isTimeAxis ? data.map((d) => [toAxisTimeValue(d.label, timezone), d.value]) : values;
+  // See BarChart.jsx's own comment on this same pattern — raw click-identification labels,
+  // kept separate from whatever's actually displayed/formatted.
+  const clickLabels = labels;
+  // Every series shares the same x positions — see BarChart.jsx's own identical comment.
+  const timeXValues = isTimeAxis ? labels.map((l) => toAxisTimeValue(l)) : null;
+  const seriesValues = isTimeAxis ? values.map((v, i) => [timeXValues[i], v]) : values;
+  // See BarChart.jsx's own comment on this same pattern.
+  const customTicks = isTimeAxis ? buildCustomTimeTicks(timeXValues, tickInterval) : undefined;
+  const yBounds = resolveTruncatedBounds(truncateYAxis, yAxisMin, yAxisMax);
 
   const option = {
     // Extra left margin when the Y axis has a title — see axisTitle.js's own doc comment.
-    grid: { left: gridMarginForVerticalTitle(valueAxisLabel, 28, 42), right: 4, top: 8, bottom: categoryAxisLabel ? 32 : 18 },
+    grid: { left: gridMarginForVerticalTitle(valueAxisLabel, 28, 42), right: 4, top: 8, bottom: (categoryAxisLabel ? 32 : 18) + (isMultiSeries ? 14 : 0) },
     xAxis: isTimeAxis ? {
       type: 'time',
       // See LineAreaChart.jsx's own comment — pairs with toAxisTimeValue above.
@@ -44,8 +54,10 @@ export default function AreaChart({
       ...buildAxisTitle(categoryAxisLabel, { axisTextSize, axisTextColor, axisTextWeight, axisTextFont }),
       axisLabel: {
         fontSize: axisTextSize || 9, color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined,
-        formatter: resolveTimeAxisFormat(dateFormat),
+        formatter: resolveCustomTickFormatter(dateFormat, tickInterval, customTicks),
+        ...(customTicks ? { customValues: customTicks } : {}),
       },
+      ...(customTicks ? { axisTick: { customValues: customTicks } } : {}),
     } : {
       type: 'category',
       data: labels,
@@ -59,6 +71,9 @@ export default function AreaChart({
       type: 'value',
       scale: true,
       splitNumber: 2,
+      // See BarChart.jsx's own comment on this same pattern.
+      min: yBounds.min,
+      max: yBounds.max,
       ...buildAxisTitle(valueAxisLabel, { axisTextSize, axisTextColor, axisTextWeight, axisTextFont, vertical: true }),
       axisLabel: {
         fontSize: axisTextSize || 8,
@@ -67,7 +82,32 @@ export default function AreaChart({
       },
     },
     tooltip: { trigger: 'axis', valueFormatter: (v) => `${v} ${unit}` },
-    series: [
+    // Legend only meaningful once there's more than one named series — see BarChart.jsx's own
+    // identical block.
+    ...(isMultiSeries ? { legend: { show: showLegend, bottom: 0, textStyle: { fontSize: 9, color: subColor }, itemWidth: 10, itemHeight: 10 } } : {}),
+    series: isMultiSeries ? series.map((s, i) => {
+      const sColor = seriesColors?.[s.name] || (palette ? palette[i % palette.length] : undefined);
+      return {
+        name: s.name,
+        type: 'line',
+        // Positional array for the category axis; [epoch, value] pairs for the continuous
+        // time axis — same isTimeAxis branch the xAxis block above already switches on. See
+        // BarChart.jsx's own identical comment.
+        data: isTimeAxis ? s.data.map((v, j) => [timeXValues[j], v]) : s.data,
+        smooth: true,
+        symbol: (onPointClick || onPointContextMenu) ? 'circle' : 'none',
+        symbolSize: (onPointClick || onPointContextMenu) ? 10 : undefined,
+        itemStyle: (onPointClick || onPointContextMenu) ? { opacity: 0, color: sColor } : { color: sColor },
+        lineStyle: { width: 1.5, color: sColor },
+        areaStyle: { color: sColor, opacity: 0.35 },
+        emphasis: { disabled: true },
+        blur: {
+          lineStyle: { opacity: 1 },
+          areaStyle: { opacity: 0.1 },
+          itemStyle: { opacity: 1 },
+        },
+      };
+    }) : [
       {
         type: 'line',
         data: seriesValues,
@@ -93,7 +133,7 @@ export default function AreaChart({
   };
 
   return (
-    <div className="kpi-area-card h-full box-border flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
+    <div className="kpi-area-card h-full box-border flex flex-col overflow-hidden rounded-lg bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
       {/* Reserved header row, not an absolutely-positioned overlay — see LineAreaChart.jsx's
           own comment for why. */}
       {title && (
@@ -114,8 +154,8 @@ export default function AreaChart({
       )}
       <div className="flex-1 min-h-0">
         <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
-          ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
-          ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
+          ...(onPointClick ? { click: (p) => onPointClick(clickLabels[p.dataIndex]) } : {}),
+          ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(clickLabels[p.dataIndex], p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />
       </div>
       {/* Latest-point value — never actually enabled (see LineAreaChart.jsx's own comment on

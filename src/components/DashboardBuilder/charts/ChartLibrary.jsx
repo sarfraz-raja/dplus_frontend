@@ -1,11 +1,14 @@
 import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Plus, Play, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, LayoutGrid, Settings2, Palette, AlertTriangle } from 'lucide-react';
+import { Plus, Play, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, LayoutGrid, Settings2, Palette, AlertTriangle, BarChart3 } from 'lucide-react';
 import MappingFields from './MappingFields';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
 import Button from '../../Button';
 import ConfirmModal from '../../ConfirmModal';
+import CustomTooltip from '../../CustomTooltip';
 import ChartListItem from './ChartListItem';
+import ChartListSearchBar from './ChartListSearchBar';
+import useChartListFilter from './useChartListFilter';
 import { chartLibraryStyleFieldsFor } from '../widgetConfig/widgetTypeRegistry';
 import { exportRowsCSV } from '../utils/exportUtils';
 import ChartLibraryWidgetView from './ChartLibraryWidgetView';
@@ -26,8 +29,8 @@ import {
 import { subscribeDatasourcesChanged } from '../../../store/actions/datasourceEvents';
 import { subscribeWidgetsChanged, notifyWidgetsChanged } from '../../../store/actions/widgetEvents';
 import { sortWidgetsByRecency, withDatasourceOnly } from './sortWidgets';
-import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset, DEPLOYMENT_TIME_ZONE } from '../utils/resolveTimeRange';
-import { TIME_AXIS_FORMAT_PRESETS, DEFAULT_TIME_AXIS_FORMAT, TIMEZONE_OPTIONS } from './axisTypeUtils';
+import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
+import { DEFAULT_TIME_AXIS_FORMAT, TIME_AXIS_FORMAT_OPTIONS, DEFAULT_TICK_INTERVAL_UNIT, TICK_INTERVAL_UNIT_MAX } from './axisTypeUtils';
 
 const AGGREGATIONS = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX', 'LATEST'];
 
@@ -43,15 +46,51 @@ const AGG_FIELD = { key: 'aggregation', label: 'Aggregation', type: 'select', op
 // getWidgetData's own doc comment for the backend-side contract). Left off SCATTER (no
 // dimension, two raw measures), KPI_CARD/GAUGE (measure-only), and TABLE (a plain column list,
 // no chart to drill within).
-const DRILL_DOWN_FIELD = { key: 'drill_down', label: 'Drill-down/Drill-up hierarchy (optional)', type: 'orderedColumns', optional: true };
+// Wrapped in a 'group' (its own collapsible bordered card, same as X Axis/Y Axis) rather than
+// left as a bare top-level field — every other section of the Data tab got that treatment, so
+// a lone unboxed field here would be the one visual outlier. The inner field's own label is
+// left blank; MappingFields.jsx's orderedColumns case skips rendering an empty label, so the
+// group header text is the only place "Drill-down/Drill-up hierarchy" appears, not duplicated.
+const DRILL_DOWN_FIELD = { key: 'drill_down_group', label: 'Drill-down/Drill-up hierarchy', type: 'group', fields: [
+  { key: 'drill_down', label: '', type: 'orderedColumns', optional: true },
+] };
 
 // Optional display-only overrides for the axis titles — a chart otherwise always shows the
 // picked column's own name (e.g. "starttime") as its axis label, which is rarely a title
 // worth showing to an end user as-is. Purely cosmetic (renderChartWidget.jsx falls back to
 // the column name whenever these are blank), never touches the actual mapping.x_axis/y_axis
 // column selection.
-const X_AXIS_TITLE_FIELD = { key: 'x_axis_title', label: 'X Axis title (optional)', type: 'text', optional: true, placeholder: 'Leave blank to hide' };
-const Y_AXIS_TITLE_FIELD = { key: 'y_axis_title', label: 'Y Axis title (optional)', type: 'text', optional: true, placeholder: 'Leave blank to hide' };
+const X_AXIS_TITLE_FIELD = { key: 'x_axis_title', label: 'X Axis title', type: 'text', optional: true, placeholder: 'Leave blank to use column name' };
+const Y_AXIS_TITLE_FIELD = { key: 'y_axis_title', label: 'Y Axis title', type: 'text', optional: true, placeholder: 'Leave blank to use column name' };
+
+// Explicit Y-axis value bounds ("Truncate Y Axis" — same concept as Superset's own Truncate
+// Y Axis + Min/Max) — clips the axis to a fixed range instead of auto-scaling to the data,
+// maps directly onto ECharts' yAxis.min/max (see renderChartWidget.jsx). This is a *data*
+// concern (it changes which values are visible/comparable, not just their appearance), which
+// is why it lives in the Y Axis mapping group alongside Measure/Aggregation, not in the Style
+// tab's cosmetic panel. Min/Max only render once truncate_y_axis is checked (`showIf`).
+// Optional per chart_type, opted into via buildAxisFields' `showYAxisBounds` — each
+// chart_type's own component builds its own ECharts option independently (no shared
+// option-builder), so this needs the actual yAxis.min/max wiring added per component before
+// it belongs in that chart_type's fields; extend chart-type by chart-type as each is wired
+// (see LineAreaChart.jsx for the first one).
+const TRUNCATE_Y_AXIS_FIELD = { key: 'truncate_y_axis', label: 'Truncate Y Axis', type: 'checkbox', default: false, optional: true };
+// `warnIf` — surfaces resolveTruncatedBounds' own silent min>max fallback (axisTypeUtils.js)
+// right where the user is looking, instead of a truncation bound that just quietly does
+// nothing with no explanation. Put on both fields so the warning shows next to whichever one
+// the user is actually looking at/editing, not just one of the pair.
+const Y_AXIS_BOUNDS_INVALID = (m) => m.y_axis_min != null && m.y_axis_max != null && m.y_axis_min > m.y_axis_max;
+const Y_AXIS_MIN_FIELD = { key: 'y_axis_min', label: 'Min', type: 'number', optional: true, showIf: (m) => !!m.truncate_y_axis, warnIf: (m) => (Y_AXIS_BOUNDS_INVALID(m) ? 'Max must be ≥ Min — ignored until fixed' : null) };
+const Y_AXIS_MAX_FIELD = { key: 'y_axis_max', label: 'Max', type: 'number', optional: true, showIf: (m) => !!m.truncate_y_axis, warnIf: (m) => (Y_AXIS_BOUNDS_INVALID(m) ? 'Max must be ≥ Min — ignored until fixed' : null) };
+// X-axis equivalent — only wired for SCATTER (see its own CHART_TYPE_FIELDS entry), the one
+// chart_type whose x_axis is a raw numeric measure rather than a dimension/time column (every
+// other chart_type's x_axis is a category or `type: 'time'` axis, where a numeric min/max
+// bound doesn't map onto ECharts' axis.min/max the same way — see the conversation this was
+// scoped down from "every chart_type" to just Scatter).
+const TRUNCATE_X_AXIS_FIELD = { key: 'truncate_x_axis', label: 'Truncate X Axis', type: 'checkbox', default: false, optional: true };
+const X_AXIS_BOUNDS_INVALID = (m) => m.x_axis_min != null && m.x_axis_max != null && m.x_axis_min > m.x_axis_max;
+const X_AXIS_MIN_FIELD = { key: 'x_axis_min', label: 'Min', type: 'number', optional: true, showIf: (m) => !!m.truncate_x_axis, warnIf: (m) => (X_AXIS_BOUNDS_INVALID(m) ? 'Max must be ≥ Min — ignored until fixed' : null) };
+const X_AXIS_MAX_FIELD = { key: 'x_axis_max', label: 'Max', type: 'number', optional: true, showIf: (m) => !!m.truncate_x_axis, warnIf: (m) => (X_AXIS_BOUNDS_INVALID(m) ? 'Max must be ≥ Min — ignored until fixed' : null) };
 
 // Only meaningful once the X Axis column actually turns out to be time-shaped at render time
 // (renderChartWidget.jsx's isTimeAxis check, run against the real data — this field has no way
@@ -61,19 +100,28 @@ const Y_AXIS_TITLE_FIELD = { key: 'y_axis_title', label: 'Y Axis title (optional
 // vs "DD MMM" ...) vs *which zone's clock* is being read out at all — see axisTypeUtils.js's
 // own doc comment on toAxisTimeValue for why the latter needs real zone math, not just a
 // different string template.
-// Only covers the day tier (e.g. "05-18" vs "18 May") — year/hour/minute/second stay fixed at
-// a plain 4-digit year and a 24-hour clock. Not an oversight: a year has no alternate "style"
-// to offer, and ECharts' time-axis template tokens have no AM/PM marker at all, so a 12-hour
+// Applies to the day-tier tick label (e.g. "05-18" vs "18 May") — the year and hour:minute
+// can optionally be folded into that same tick ("05-18-2026" / "18 May, 2026 14:30", see the
+// "-YYYY"/"-YYYY HH:mm" presets in TIME_AXIS_FORMAT_PRESETS) for an axis where every day-level
+// tick needs to carry more than just the day. The year/hour/minute/second *tiers* above/below
+// day still stay fixed at a plain 4-digit year and 24-hour clock regardless — those only ever
+// show once ticks zoom out/in past the day tier, not something a "style" choice applies to.
+// No AM/PM option: ECharts' time-axis template tokens have no AM/PM marker at all, so a 12-hour
 // toggle would just render "1:00" for both 1am and 1pm with no way to tell them apart — worse
 // than the unambiguous 24-hour clock this app's own timestamps already use everywhere else
 // (see resolveTimeRange.js's 'HH:MM:SS' convention).
-const X_AXIS_DATE_FORMAT_FIELD = { key: 'x_axis_date_format', label: 'Date format', type: 'select', options: Object.keys(TIME_AXIS_FORMAT_PRESETS), default: DEFAULT_TIME_AXIS_FORMAT, hint: 'Day-level ticks only' };
-// Defaults to DEPLOYMENT_TIME_ZONE (the same zone every relative filter — "Last 7 days" — is
-// already pinned to, see resolveTimeRange.js), but overridable per-widget: e.g. a chart built
-// for a specific region's ops team can show that region's local clock instead of the
-// deployment default, while every viewer of that one widget still sees identical numbers
-// regardless of their own browser timezone.
-const X_AXIS_TIMEZONE_FIELD = { key: 'x_axis_timezone', label: 'Timezone', type: 'select', options: TIMEZONE_OPTIONS, default: DEPLOYMENT_TIME_ZONE, hint: `Default: ${DEPLOYMENT_TIME_ZONE}` };
+const X_AXIS_DATE_FORMAT_FIELD = { key: 'x_axis_date_format', label: 'Date format', type: 'select', options: TIME_AXIS_FORMAT_OPTIONS, default: DEFAULT_TIME_AXIS_FORMAT, hint: 'Day-level ticks' };
+// Fully custom tick spacing — a number + unit pair (rendered as one combined "Tick every [N]
+// [unit ▾]" control, see MappingFields.jsx's 'numberUnit' case) rather than a fixed preset
+// list, so it can match any real sampling rate (e.g. "3 hours" for 3-hourly readings), not just
+// whatever intervals happened to be offered. Blank value = Auto (ECharts' own span/width-based
+// spacing, today's existing behavior) — see resolveTickInterval in axisTypeUtils.js.
+const X_AXIS_TICK_INTERVAL_FIELD = {
+  key: 'x_axis_tick_interval_value', unitKey: 'x_axis_tick_interval_unit', label: 'Tick every',
+  type: 'numberUnit', optional: true, placeholder: 'Auto',
+  unitOptions: ['minutes', 'hours', 'days', 'weeks'], unitDefault: DEFAULT_TICK_INTERVAL_UNIT,
+  unitMax: TICK_INTERVAL_UNIT_MAX,
+};
 
 // "LATEST" (aggregation: 'LATEST') needs a date/timestamp column to order by — the backend
 // requires mapping.latest_by whenever aggregation is LATEST (validate_widget_mapping rejects
@@ -86,6 +134,33 @@ const LATEST_BY_FIELD = {
   key: 'latest_by', label: 'Latest by (date column)', type: 'column', role: 'date',
   showIf: (mapping) => mapping.aggregation === 'LATEST',
 };
+
+// Shared by every single-aggregated-value chart_type (KPI_CARD, GAUGE — anything whose
+// mapping is "one measure, one aggregation, no dimension axis") so "own date range" and
+// "compare to" are defined and behave identically everywhere they appear, instead of each
+// chart_type declaring its own near-identical copy. See each field's own original doc
+// comment (moved here unchanged) for why every individual choice below is what it is.
+const SINGLE_VALUE_DATE_FILTER_GROUP = { key: 'date_filter_group', label: 'Date Filter', type: 'group', fields: [
+  { key: 'date_filter_column', label: 'Column', type: 'column', role: 'date', optional: true, showIf: (m) => m.aggregation !== 'LATEST' },
+  { key: 'date_filter_range', label: 'Range', type: 'select', options: ['Last hour', 'Last 24 hours', 'Last 7 days', 'Last 30 days', 'This month', 'This quarter', 'This year'], default: 'Last 7 days', showIf: (m) => m.aggregation !== 'LATEST' },
+] };
+const SINGLE_VALUE_COMPARISON_GROUP = { key: 'comparison_group', label: 'Comparison', type: 'group', fields: [
+  {
+    key: 'compare_to', label: 'Compare to', type: 'select', default: 'None',
+    options: (m) => (m.aggregation === 'LATEST' ? ['None', 'Custom'] : ['None', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom']),
+  },
+  // LATEST has no "current window" to shift (its own date_filter_column is hidden/cleared —
+  // see LATEST_BY_FIELD's comment) — its own Custom is a single cutoff instant ("the latest
+  // reading at or before this date"), so one date/time picker is the right, unambiguous
+  // input there. Every other aggregation DOES have a real current window (date_filter_range,
+  // e.g. "This year") — comparing that against a single picked instant was ambiguous (what's
+  // actually being diffed against?), so it takes an explicit from/to range instead, matching
+  // the same shape Date Filter's own Range picker implies.
+  { key: 'compare_custom_date', label: 'Compare to date/time', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.aggregation === 'LATEST' },
+  { key: 'compare_custom_from', label: 'Compare from', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.aggregation !== 'LATEST' },
+  { key: 'compare_custom_to', label: 'Compare to', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.aggregation !== 'LATEST' },
+  { key: 'delta_format', label: 'Delta format', type: 'select', options: ['Percent', 'Number'], default: 'Percent' },
+] };
 
 // `role` ('dimension' | 'measure') restricts each field's column dropdown to columns actually
 // flagged that way on the datasource (see MappingFields.jsx's 'column' case) — without it, a
@@ -102,39 +177,77 @@ const LATEST_BY_FIELD = {
 // `showTitles` (default true) drops both title fields for chart_types with no rendered axis
 // at all (PIE/FUNNEL/TREEMAP — slices/stages/rectangles, not an x/y plot) — an axis title
 // input with nothing to attach to would just be dead weight in the config panel. `showTimeAxis`
-// (default false) additionally adds the Date format/Timezone fields — only the three
-// chart_types that actually support a `type: 'time'` x-axis (LINE/BAR/AREA — see
-// renderChartWidget.jsx's isTimeAxis wiring) opt into these; the others don't render a
-// continuous time axis at all (see the conversation on why HORIZONTAL_BAR/WATERFALL/
-// STACKED_BAR/HEAT_MAP were deliberately left out of time-axis support).
-function buildAxisFields(xLabel = 'Dimension', yLabel = 'Measure', showTitles = true, showTimeAxis = false) {
+// (default false) additionally adds the Date format field — LINE/BAR/AREA (a real continuous
+// `type: 'time'` x-axis — see renderChartWidget.jsx's isTimeAxis wiring) and HORIZONTAL_BAR
+// (a discrete/ranked axis whose own row labels still get date-formatted — see
+// HorizontalBarChart.jsx's own comment) opt in; WATERFALL/STACKED_BAR/HEAT_MAP remain
+// deliberately excluded (see the conversation this was decided in). `showTickInterval`
+// (defaults to mirroring showTimeAxis) is HORIZONTAL_BAR's one deliberate override — set to
+// `false` there. Bucket granularity for that chart_type comes entirely from Date format (see
+// HorizontalBarChart.jsx's own bucket-and-sum comment); "Tick every" (continuous-axis tick
+// spacing) has never had anything to apply to on its discrete/ranked category axis, in
+// bucketed mode or not — showing it anyway would be a dead field with no effect, so it's
+// hidden here rather than left visible-but-inert.
+// Optional multi-series grouping dimension — same field STACKED_BAR already has (see its own
+// CHART_TYPE_FIELDS entry), now opted into by LINE/BAR/AREA too (`showSeries`). Kept
+// `optional: true` (unlike STACKED_BAR's required one) since every existing saved LINE/BAR/AREA
+// widget has no mapping.series at all and must keep rendering its current single-series shape
+// unchanged (see renderChartWidget.jsx's `mapping.series` branch for the fallback).
+const SERIES_FIELD = { key: 'series', label: 'Series (grouping dimension)', type: 'column', role: 'dimension', optional: true };
+// Sits directly under SERIES_FIELD in the Data tab (not the Style tab, where every other
+// color field lives) — a palette only makes sense once Series is actually set, so putting it
+// right where that decision was just made means never having to go hunt for it in a separate
+// tab. `showIf` hides it until then, same as any other conditionally-relevant field. Writes to
+// mapping.style.palette via MappingFields' own styleValue/onStyleChange pair (see its doc
+// comment) — a style-tree value, not a real mapping key, despite living in this field list.
+const SERIES_PALETTE_FIELD = { key: 'palette', label: 'Series colors', type: 'palette', showIf: (m) => !!m.series };
+
+// `xGroupLabel`/`yGroupLabel` — HORIZONTAL_BAR's own group headers (see its call site below):
+// its `x_axis`/`y_axis` mapping keys are the same category/measure pair every other chart_type
+// here uses, but HorizontalBarChart.jsx deliberately renders them on the *rotated* ECharts axis
+// (category on the vertical yAxis, measure on the horizontal xAxis — see that component's own
+// comment on why). Labeling the group "X Axis" when its field actually draws on the chart's
+// vertical axis reads as self-contradictory, so HORIZONTAL_BAR overrides these to the neutral
+// "Category"/"Measure" (no axis-direction claim at all) instead of the default "X Axis"/"Y Axis"
+// every axis-having chart_type otherwise shares.
+// `showTickInterval` (defaults to mirroring `showTimeAxis`) — split out separately for
+// HORIZONTAL_BAR: it's a *ranked* chart (sorted by value, top-N sliced — see
+// HorizontalBarChart.jsx), never a continuous chronological axis, so "Tick every N hours"
+// (a continuous-axis tick-spacing control) has nothing to apply to there. Its own date-shaped
+// category values still benefit from Date format, though — it just governs how each row's
+// own label is displayed, not tick spacing along a timeline — so that field stays available
+// while tick spacing doesn't.
+function buildAxisFields(xLabel = 'Dimension', yLabel = 'Measure', showTitles = true, showTimeAxis = false, showYAxisBounds = false, showSeries = false, xGroupLabel = 'X Axis', yGroupLabel = 'Y Axis', showTickInterval = showTimeAxis) {
   return [
-    { key: 'x_axis_group', label: 'X Axis', type: 'group', fields: [
+    { key: 'x_axis_group', label: xGroupLabel, type: 'group', fields: [
       { key: 'x_axis', label: xLabel, type: 'column', role: 'dimension' },
-      ...(showTitles ? [X_AXIS_TITLE_FIELD] : []),
-      ...(showTimeAxis ? [X_AXIS_DATE_FORMAT_FIELD, X_AXIS_TIMEZONE_FIELD] : []),
+      ...(showSeries ? [SERIES_FIELD, SERIES_PALETTE_FIELD] : []),
+      ...(showTitles ? [{ ...X_AXIS_TITLE_FIELD, label: `${xGroupLabel} title` }] : []),
+      ...(showTimeAxis ? [X_AXIS_DATE_FORMAT_FIELD] : []),
+      ...(showTickInterval ? [X_AXIS_TICK_INTERVAL_FIELD] : []),
     ] },
     // Aggregation (and LATEST's own "latest by" column) only ever apply to the measure —
     // `SELECT x_axis, AGG(y_axis) ... GROUP BY x_axis`, never the dimension itself — so both
     // live inside the Y Axis group, matching Superset's own layout (Aggregation sits under
     // Metrics, not Dimensions) instead of standing alone between the two groups where it read
     // as ambiguous about which axis it modified.
-    { key: 'y_axis_group', label: 'Y Axis', type: 'group', fields: [
+    { key: 'y_axis_group', label: yGroupLabel, type: 'group', fields: [
       // Aggregation right next to Measure (both wrap onto the same row, group's flex-wrap
       // container) — it's a direct modifier of the measure column, not the title, so it reads
       // as "SUM of cs_traffic" sitting together rather than looking related to the title field.
       { key: 'y_axis', label: yLabel, type: 'column', role: 'measure' },
       AGG_FIELD,
       LATEST_BY_FIELD,
-      ...(showTitles ? [Y_AXIS_TITLE_FIELD] : []),
+      ...(showTitles ? [{ ...Y_AXIS_TITLE_FIELD, label: `${yGroupLabel} title` }] : []),
+      ...(showYAxisBounds ? [TRUNCATE_Y_AXIS_FIELD, Y_AXIS_MIN_FIELD, Y_AXIS_MAX_FIELD] : []),
     ] },
   ];
 }
 
 const CHART_TYPE_FIELDS = {
-  LINE: [...buildAxisFields('Dimension', 'Measure', true, true), DRILL_DOWN_FIELD],
-  BAR: [...buildAxisFields('Dimension', 'Measure', true, true), DRILL_DOWN_FIELD],
-  AREA: [...buildAxisFields('Dimension', 'Measure', true, true), DRILL_DOWN_FIELD],
+  LINE: [...buildAxisFields('Dimension', 'Measure', true, true, true, true), DRILL_DOWN_FIELD],
+  BAR: [...buildAxisFields('Dimension', 'Measure', true, true, true, true), DRILL_DOWN_FIELD],
+  AREA: [...buildAxisFields('Dimension', 'Measure', true, true, true, true), DRILL_DOWN_FIELD],
   PIE: [...buildAxisFields('Category', 'Value (measure)', false), DRILL_DOWN_FIELD],
   KPI_CARD: [
     // Measure + Aggregation grouped together, same reasoning as buildAxisFields' Y Axis
@@ -145,56 +258,23 @@ const CHART_TYPE_FIELDS = {
       AGG_FIELD,
       LATEST_BY_FIELD,
     ] },
-    // Own date range, independent of whatever the dashboard's global filters happen to have
-    // set (matches how Superset's "Big Number" — the direct equivalent of this chart_type —
-    // requires its own Time Range rather than relying solely on a dashboard-level filter).
-    // Resolved and sent as a request-level filter at fetch time (see
-    // buildDateFilterFromPreset in resolveTimeRange.js) — never written into this widget's
-    // persisted mapping.filters, which the backend applies literally with no re-resolution,
-    // so a relative spec stored there would freeze at whatever dates were true when saved.
-    // Hidden under LATEST — a date range would risk excluding the very row LATEST's own
-    // `ORDER BY latest_by DESC LIMIT 1` is trying to find (the exact "filter finds nothing"
-    // failure LATEST exists to sidestep — see the conversation this was decided in), so the
-    // two are kept mutually exclusive rather than left to silently combine badly. Grouped
-    // together — MappingFields.jsx skips rendering this whole group once both children are
-    // hidden under LATEST, instead of leaving a bare "Date Filter" label with nothing in it.
-    { key: 'date_filter_group', label: 'Date Filter', type: 'group', fields: [
-      { key: 'date_filter_column', label: 'Column (optional)', type: 'column', role: 'date', optional: true, showIf: (m) => m.aggregation !== 'LATEST' },
-      { key: 'date_filter_range', label: 'Range', type: 'select', options: ['Last hour', 'Last 24 hours', 'Last 7 days', 'Last 30 days', 'This month', 'This quarter', 'This year'], default: 'Last 7 days', showIf: (m) => m.aggregation !== 'LATEST' },
-    ] },
-    // No backend comparison-period concept exists (confirmed — getWidgetData/
-    // getStandaloneWidgetData only take {filters, drillPath}) — 'None' (default) means no
-    // second query runs at all; any other preset triggers a second, date-shifted query (see
-    // buildComparisonFilters in resolveTimeRange.js) whose value is diffed against this
-    // card's own to drive StatCard's existing delta/deltaUp props. Shifts whichever date
-    // range is actually active for this card — its own date_filter_column/range if set,
-    // otherwise the dashboard's global filter, matching the fetch effect's own fallback.
-    // The three window-shifting presets (Previous period/7/30 days ago) only make sense when
-    // there's an actual current date window to shift — which LATEST intentionally has none of
-    // (its own date_filter_column is hidden/cleared, see LATEST_BY_FIELD's comment), so they'd
-    // otherwise just silently do nothing (or accidentally piggyback on an unrelated dashboard
-    // filter). Narrowed to None/Custom under LATEST — Custom's own `<=` cutoff shape doesn't
-    // need a window at all (see buildCustomComparisonFilters). Grouped with its own
-    // conditional date/format fields — everything about "what is this compared against" in
-    // one block, same reasoning as Date Filter above.
-    { key: 'comparison_group', label: 'Comparison', type: 'group', fields: [
-      {
-        key: 'compare_to', label: 'Compare to', type: 'select', default: 'None',
-        options: (m) => (m.aggregation === 'LATEST' ? ['None', 'Custom'] : ['None', 'Previous period', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom']),
-      },
-      // Only meaningful shape for LATEST (no "current window" to shift — see
-      // buildCustomComparisonFilters's own doc comment) and for any other aggregation where
-      // the preset shifts (Previous period/7/30 days ago) aren't the comparison point
-      // actually wanted — a fixed cutoff date instead of "N days before now".
-      { key: 'compare_custom_date', label: 'Compare to date/time', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' },
-      { key: 'delta_format', label: 'Delta format', type: 'select', options: ['Percent', 'Number'], default: 'Percent' },
-    ] },
+    SINGLE_VALUE_DATE_FILTER_GROUP,
+    SINGLE_VALUE_COMPARISON_GROUP,
   ],
-  GAUGE: [{ key: 'measure_group', label: 'Measure', type: 'group', fields: [
-    { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
-    AGG_FIELD,
-    LATEST_BY_FIELD,
-  ] }],
+  GAUGE: [
+    { key: 'measure_group', label: 'Measure', type: 'group', fields: [
+      { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
+      AGG_FIELD,
+      LATEST_BY_FIELD,
+    ] },
+    // Same single-value comparison feature as KPI_CARD, reusing the exact same field
+    // descriptors/groups (see SINGLE_VALUE_DATE_FILTER_GROUP/SINGLE_VALUE_COMPARISON_GROUP's
+    // own doc comment) — GAUGE is structurally identical to KPI_CARD (one aggregated measure,
+    // no dimension axis), so "compare to" means the same thing here: diff this gauge's value
+    // against the same measure computed over a shifted/earlier window.
+    SINGLE_VALUE_DATE_FILTER_GROUP,
+    SINGLE_VALUE_COMPARISON_GROUP,
+  ],
   SCATTER: [
     // Both axes are plain measures here (no dimension/aggregation at all — each dot is one
     // row's raw X/Y pair), so these groups are just the column picker + title override, same
@@ -203,27 +283,30 @@ const CHART_TYPE_FIELDS = {
     { key: 'x_axis_group', label: 'X Axis', type: 'group', fields: [
       { key: 'x_axis', label: 'X (measure)', type: 'column', role: 'measure' },
       X_AXIS_TITLE_FIELD,
+      TRUNCATE_X_AXIS_FIELD, X_AXIS_MIN_FIELD, X_AXIS_MAX_FIELD,
     ] },
     { key: 'y_axis_group', label: 'Y Axis', type: 'group', fields: [
       { key: 'y_axis', label: 'Y (measure)', type: 'column', role: 'measure' },
       Y_AXIS_TITLE_FIELD,
+      TRUNCATE_Y_AXIS_FIELD, Y_AXIS_MIN_FIELD, Y_AXIS_MAX_FIELD,
     ] },
     // Scatter has no dimension axis by design (each dot is one row's X/Y measure pair) — this
     // is purely for identifying a dot on hover (e.g. which region/date/cell it came from),
     // wired into ScatterChart's own `name` per point + tooltip (see renderChartWidget.jsx's
     // SCATTER case), which already supported this, just never had anything to populate it.
-    { key: 'label', label: 'Label (dimension, optional)', type: 'column', role: 'dimension', optional: true },
+    { key: 'label', label: 'Label (dimension)', type: 'column', role: 'dimension', optional: true },
   ],
   TABLE: [{ key: 'columns', label: 'Columns to display', type: 'multiColumn' }],
   HEAT_MAP: [...buildAxisFields('Dimension', 'Measure'), DRILL_DOWN_FIELD],
-  HORIZONTAL_BAR: [...buildAxisFields('Category', 'Y Axis (measure)'), DRILL_DOWN_FIELD],
+  HORIZONTAL_BAR: [...buildAxisFields('Category', 'Measure', true, true, true, true, 'Category', 'Measure', false), DRILL_DOWN_FIELD],
   FUNNEL: [...buildAxisFields('Stage', 'Value (measure)', false), DRILL_DOWN_FIELD],
-  WATERFALL: [...buildAxisFields('Step', 'Delta (measure)'), DRILL_DOWN_FIELD],
+  WATERFALL: [...buildAxisFields('Step', 'Delta (measure)', true, false, true), DRILL_DOWN_FIELD],
   TREEMAP: [...buildAxisFields('Category', 'Value (measure)', false), DRILL_DOWN_FIELD],
   STACKED_BAR: [
     { key: 'x_axis_group', label: 'X Axis', type: 'group', fields: [
       { key: 'x_axis', label: 'Category', type: 'column', role: 'dimension' },
       { key: 'series', label: 'Series (grouping dimension)', type: 'column', role: 'dimension' },
+      SERIES_PALETTE_FIELD,
       X_AXIS_TITLE_FIELD,
     ] },
     { key: 'y_axis_group', label: 'Y Axis', type: 'group', fields: [
@@ -231,6 +314,7 @@ const CHART_TYPE_FIELDS = {
       AGG_FIELD,
       LATEST_BY_FIELD,
       Y_AXIS_TITLE_FIELD,
+      TRUNCATE_Y_AXIS_FIELD, Y_AXIS_MIN_FIELD, Y_AXIS_MAX_FIELD,
     ] },
     DRILL_DOWN_FIELD,
   ],
@@ -260,9 +344,25 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   const [widgets, setWidgets] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState(null);
+  // "Your Charts" list search/type-filter state now lives in useChartListFilter.js (shared
+  // with DashboardCanvasEditor.jsx's own "Your Widgets" panel) — see its destructuring further
+  // down, near sortedWidgets.
   // Data/Style/Charts now live as three tabs inside one collapsible panel (matches the
   // reference "Style Editor" mockup) instead of three separate side-by-side boxes.
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  // Drag-to-resize width for the Chart Editor panel — persisted only for this component's
+  // lifetime (not across reloads), same scope as panelCollapsed above. Clamped to keep the
+  // preview canvas usable on one side (MIN) and the panel itself from swallowing the whole
+  // screen on the other (MAX), regardless of how far the user drags past either edge.
+  const [panelWidth, setPanelWidth] = useState(384); // w-96 in px, this panel's original fixed width
+  const [isResizingPanel, setIsResizingPanel] = useState(false);
+  // Visualization Type's own collapse state — lives here, not in MappingFields.jsx's
+  // collapsedGroups, since this card isn't a mapping field at all (chartType is separate,
+  // top-level state), just styled to match the same collapsible-card look as the field groups
+  // below it.
+  const [vizTypeCollapsed, setVizTypeCollapsed] = useState(false);
+  const PANEL_MIN_WIDTH = 320;
+  const PANEL_MAX_WIDTH = 720;
   const [activeTab, setActiveTab] = useState('data');
 
   // Same theme-token derivation DashboardCanvasEditor.jsx uses for its own Style panel's
@@ -346,6 +446,39 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // (mounted-but-hidden, not unmounted). Without this, a widget created/edited/deleted/
   // duplicated from THERE never showed up here until this tab was manually revisited/remounted.
   useEffect(() => subscribeWidgetsChanged(() => { refreshList(); }), []);
+
+  // Drag-to-resize — listeners only attached while a drag is actually in progress (not on
+  // every render) so mousemove doesn't fire into a stale closure once the drag ends. Delta is
+  // measured from the drag's own start point each time (startX/startWidth), not a running
+  // "previous event" diff, so occasional dropped mousemove events (fast drags) don't cause
+  // any cumulative drift between the cursor and the panel edge.
+  const panelResizeStartRef = useRef(null);
+  const startPanelResize = (e) => {
+    panelResizeStartRef.current = { x: e.clientX, width: panelWidth };
+    setIsResizingPanel(true);
+  };
+  useEffect(() => {
+    if (!isResizingPanel) return undefined;
+    const onMove = (e) => {
+      const start = panelResizeStartRef.current;
+      if (!start) return;
+      // Panel sits on the right edge of the screen — dragging the handle LEFT (cursor moves
+      // to a smaller clientX) should WIDEN the panel, the opposite sign of a left-edge panel.
+      const next = start.width + (start.x - e.clientX);
+      setPanelWidth(Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, next)));
+    };
+    const onUp = () => setIsResizingPanel(false);
+    // Selecting the preview text/labels mid-drag is a common accidental side effect of a fast
+    // drag crossing over other elements — suppressed only while a drag is actually in flight.
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [isResizingPanel]);
 
   // "Add a widget" from a dashboard editor hands off here with a chart_type + datasource
   // already chosen (see DashboardBuilder.jsx's handleCreateViaChartsTab) — pre-fill the
@@ -532,7 +665,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       if (key === 'aggregation' && val === 'LATEST') {
         delete next.date_filter_column;
         delete next.date_filter_range;
-        // The window-shifting presets (Previous period/7 days ago/30 days ago) have no
+        // The window-shifting presets (1 hour/1 day/7 days/30 days ago) have no
         // window to shift under LATEST (see compare_to's own options fn) — clear rather than
         // leave a now-meaningless value sitting in mapping while the dropdown itself falls
         // back to displaying 'None'.
@@ -540,6 +673,20 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           delete next.compare_to;
           delete next.compare_custom_date;
         }
+        // Custom's own shape flips under LATEST too — from an explicit from/to range to a
+        // single cutoff instant (see compare_custom_date/_from/_to's own showIf in
+        // SINGLE_VALUE_COMPARISON_GROUP) — clear the now-hidden range fields so a stale value
+        // can't silently linger and get sent once the field re-hides.
+        if (next.compare_to === 'Custom') {
+          delete next.compare_custom_from;
+          delete next.compare_custom_to;
+        }
+      }
+      // Switching AWAY from LATEST while Custom is still selected — the reverse flip: the
+      // single-cutoff field hides, the from/to range field pair takes over. Same staleness
+      // guard as above, just the opposite direction.
+      if (key === 'aggregation' && val !== 'LATEST' && prev.aggregation === 'LATEST' && next.compare_to === 'Custom') {
+        delete next.compare_custom_date;
       }
       return next;
     });
@@ -565,7 +712,11 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       // MappingFields.jsx applies the exact same showIf check to decide what to render, so
       // this always matches what's actually on screen.
       if (f.showIf && !f.showIf(mapping)) return true;
-      return f.optional ? true : f.type === 'multiColumn' ? (mapping[f.key] || []).length > 0 : f.type === 'select' || mapping[f.key];
+      // 'palette' is a display-only style field whose real value lives in mapping.style.palette,
+      // never in the flat mapping[f.key] this check reads — so it must never gate Save/Preview,
+      // or picking a series (which flips SERIES_PALETTE_FIELD's showIf on) locks canSave false
+      // forever, silently killing the live preview and the Save/Preview buttons.
+      return f.optional || f.type === 'palette' ? true : f.type === 'multiColumn' ? (mapping[f.key] || []).length > 0 : f.type === 'select' || mapping[f.key];
     });
 
   // Shared create-or-update save, used by both runPreview (save-then-run) and
@@ -659,11 +810,13 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       // Best-effort: any failure just clears the delta rather than surfacing as a preview
       // error, since the base chart itself still loaded fine.
       const isLatestCustom = mapping.compare_to === 'Custom' && mapping.aggregation === 'LATEST';
-      if (chartType === 'KPI_CARD' && mapping.compare_to && mapping.compare_to !== 'None' && (dateFilter || isLatestCustom)) {
+      if ((chartType === 'KPI_CARD' || chartType === 'GAUGE') && mapping.compare_to && mapping.compare_to !== 'None' && (dateFilter || isLatestCustom)) {
         const compareFilters = mapping.compare_to === 'Custom'
           ? buildCustomComparisonFilters({
             filters: dateFilter ? [dateFilter] : [],
             customDate: mapping.compare_custom_date,
+            customFrom: mapping.compare_custom_from,
+            customTo: mapping.compare_custom_to,
             latestByColumn: isLatestCustom ? mapping.latest_by : null,
           })
           : buildComparisonFilters([dateFilter], mapping.compare_to);
@@ -701,7 +854,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // re-querying for it (see the auto-refresh effect below) is pure waste, and on a free-text
   // field triggers exactly the "auto-saves on every character" chatter this comment is
   // sitting next to fix. Any future purely-display-only mapping field belongs in this list.
-  const COSMETIC_MAPPING_KEYS = ['x_axis_title', 'y_axis_title', 'x_axis_date_format', 'x_axis_timezone'];
+  const COSMETIC_MAPPING_KEYS = ['x_axis_title', 'y_axis_title', 'x_axis_date_format', 'x_axis_tick_interval_value', 'x_axis_tick_interval_unit', 'truncate_y_axis', 'y_axis_min', 'y_axis_max', 'truncate_x_axis', 'x_axis_min', 'x_axis_max'];
   const queryRelevantMapping = JSON.stringify(
     Object.fromEntries(Object.entries(mapping).filter(([k]) => !COSMETIC_MAPPING_KEYS.includes(k))),
   );
@@ -886,7 +1039,21 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
         {renderPreviewDrillControls()}
         <ChartLibraryWidgetView
           chartType={chartType} name={name} mapping={mapping} rows={previewData.rows}
-          picked loading={false} error={null} height={440} style={mapping.style || {}}
+          picked loading={false} error={null} height={440}
+          // `mapping.style` alone still holds each 'show'/'hide' field as that raw string —
+          // renderChartWidget.jsx's LineAreaChart/PieChart/etc. consumers expect the resolved
+          // boolean (see DashboardCanvasEditor.jsx's own `extraStyle.showLegend !== 'hide'`
+          // conversion for the real dashboard-canvas render path), so a toggle set here
+          // previously had no visible effect — every string value, including the literal
+          // "hide", is truthy.
+          style={{
+            ...(mapping.style || {}),
+            donut: mapping.style?.donut === 'donut',
+            showLegend: mapping.style?.showLegend !== 'hide',
+            showDataPoints: mapping.style?.showDataPoints !== 'hide',
+            showPercent: mapping.style?.showPercent !== 'no',
+            showValueLabels: mapping.style?.showValueLabels !== 'hide',
+          }}
           onPointClick={handlePreviewPointClick}
           onDrillUp={handlePreviewDrillUp}
           drillDown={previewData.drillDown}
@@ -902,14 +1069,46 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // Latest-first, only fully-configured (datasource-attached) charts — shared with
   // DashboardCanvasEditor.jsx's "Your Charts" panel so both lists always match.
   const sortedWidgets = sortWidgetsByRecency(withDatasourceOnly(widgets));
+  const {
+    search: chartSearch, setSearch: setChartSearch,
+    typeFilter: chartTypeFilter, setTypeFilter: setChartTypeFilter,
+    visibleWidgets, typeOptions: sortedChartTypeOptions,
+  } = useChartListFilter(sortedWidgets);
 
   return (
-    <div className="flex flex-col gap-3 h-full">
+    <div className="flex gap-4 flex-1 min-h-0 h-full">
+      {/* Left column: toolbar + preview canvas, stacked — the toolbar only spans THIS column's
+          width, not the side panel's too (see the conversation this was reported in: it used
+          to span the full width above both, pushing the side panel's own Data/Style/Charts
+          tab strip down and wasting vertical space there for no reason, unlike
+          DashboardBuilder.jsx's own dashboard editor, where the toolbar and the "Your Widgets"
+          panel are independent siblings that both start at the very top). Own card chrome
+          (rounded/border/shadow/backdrop-blur) rather than one shared card wrapping this and
+          the side panel together — matches DashboardBuilder.jsx's own Dashboards-view row,
+          where the preview panel and the dashboard-list sidebar are each their own card, not
+          one card split in half. */}
+      <div
+        className="flex-1 min-w-0 flex flex-col overflow-hidden rounded-xl backdrop-blur-md border border-white/60 shadow-lg p-3"
+        style={{ background: 'rgba(255,255,255,0.55)' }}
+      >
       {/* Top toolbar — same "actions live at the top" convention DashboardCanvasEditor.jsx
-          uses for its own Save/Cancel/Export row, instead of buried below the form. */}
-      <div className="flex items-center justify-between gap-3 shrink-0 pb-3 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          {editingId && <span className="text-[0.6875rem] text-slate-400">ID: {editingId}</span>}
+          uses for its own Save/Cancel/Export row, instead of buried below the form. `pb-2.5` +
+          `border-b` is the only spacing between toolbar and content below (no separate `gap-3`
+          stacking on top of it, unlike before, which doubled the visual gap) — matches
+          DashboardBuilder.jsx's own dashboard-preview header's single-divider spacing. */}
+      <div className="flex items-center justify-between gap-3 shrink-0 pb-2.5 border-b border-slate-100">
+        {/* Same widget-name field as the Data tab's own "Widget Name" input (same
+            name/setName/markDirty state) — mirrors DashboardCanvasEditor.jsx's own dashboard
+            name input sitting in this exact toolbar slot, so the name is editable right here
+            on the canvas side too, not only by switching to the Data tab. */}
+        <div className="flex items-center gap-3 min-w-0">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => { setName(e.target.value); markDirty(); }}
+            placeholder="Widget name"
+            className="text-sm px-2.5 py-1.5 rounded-lg border border-slate-200 min-w-[180px] focus:outline-none focus:border-[#EC7D09] focus:ring-2 focus:ring-[#EC7D09]/20"
+          />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {prefill && (
@@ -1006,7 +1205,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
         </div>
       </div>
       {(saveError || deleteError || previewError) && (
-        <div className="flex flex-col gap-1.5 shrink-0">
+        <div className="flex flex-col gap-1.5 shrink-0 mt-3">
           {saveError && (
             <div className="flex items-center justify-between gap-2 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               <span>{saveError}</span>
@@ -1028,38 +1227,63 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
         </div>
       )}
 
-    <div className="flex gap-4 flex-1 min-h-0">
-      {/* Left: large preview canvas */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Preview canvas — the rest of this left column, below the toolbar. Dashed bordered
+          box, matching DashboardCanvasEditor.jsx's own `.dbe-canvas-wrap` treatment exactly
+          (border:1px dashed, rounded, padded) — the side panel deliberately has no border of
+          its own (see below), same pairing as that editor's canvas/"Your Widgets" panel. */}
+      <div className="flex-1 min-h-0 mt-3 flex flex-col border border-dashed border-slate-300 rounded-lg p-2 bg-white/40">
         {previewData ? (
           <div className="flex-1 min-h-0">{renderPreview()}</div>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-sm text-slate-400 text-center px-6">
-            Configure a chart on the right and click Preview to run it against real data.
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
+            <BarChart3 size={28} className="text-slate-300" />
+            <div className="text-sm font-medium text-slate-500">Configure a chart to preview</div>
+            <div className="text-xs text-slate-400">pick a datasource and visualization type, then click Preview</div>
           </div>
         )}
       </div>
-
-      {/* Chart Editor — one collapsible box (matches the reference "Style Editor" mockup:
+      </div>
+      {/* Chart Editor — sibling of the left column above, not nested inside its own flex row —
+          starts at the very top of this component's own bounding box, independent of the
+          toolbar's height (matches DashboardCanvasEditor.jsx's own "Your Widgets" panel). One
+          collapsible box (matches the reference "Style Editor" mockup:
           single panel, internal tab row) instead of three separate side-by-side boxes.
           Tabs: Data (name/datasource/chart type/field mapping), Style (this chart's own
           default style), Charts (the reusable chart list + New chart). */}
       <div
-        className={`relative shrink-0 border-l border-slate-100 flex flex-col overflow-y-auto transition-[width] duration-200 ${
-          panelCollapsed ? 'w-10 pl-1' : 'w-96 pl-3'
-        }`}
+        className={`relative shrink-0 flex flex-col overflow-y-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg p-3 pl-5 ${
+          isResizingPanel ? '' : 'transition-[width] duration-200'
+        } ${panelCollapsed ? 'w-10 px-1' : ''}`}
+        style={{ ...(panelCollapsed ? undefined : { width: panelWidth }), background: 'rgba(255,255,255,0.55)' }}
       >
+        {/* Drag handle — a thin strip straddling the panel's own left border, widened past its
+            visible 1px line so it's actually grabbable without needing pixel-perfect aim.
+            Hidden while collapsed (nothing to resize — panelCollapsed forces a fixed w-10). */}
+        {!panelCollapsed && (
+          <div
+            onMouseDown={startPanelResize}
+            title="Drag to resize"
+            className="absolute top-0 -left-1 w-2 h-full cursor-col-resize z-20 group"
+          >
+            <div className={`w-px h-full mx-auto transition-colors ${isResizingPanel ? 'bg-[#EC7D09]' : 'bg-transparent group-hover:bg-[#EC7D09]/60'}`} />
+          </div>
+        )}
+        {/* Floating badge straddling the gap between this panel and the left column — same
+          `.dbe-right-panel-toggle` treatment DashboardCanvasEditor.jsx's own "Your Widgets"
+          panel uses (absolute, shifted left of the panel's own edge, own bordered/white
+          background), not a row inside the panel's content flow — so it costs zero vertical
+          space here and never needs the panel's own padding/content to make room for it. */}
         <button
           type="button"
           onClick={() => setPanelCollapsed((c) => !c)}
           title={panelCollapsed ? 'Expand' : 'Collapse'}
-          className="absolute top-0 left-0.5 w-5 h-5 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors z-10"
+          className="absolute -left-3 top-0 w-[22px] h-[22px] rounded-md border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-[#EC7D09] hover:border-[#EC7D09] transition-colors z-30 shadow-sm"
         >
           {panelCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
 
         {panelCollapsed ? (
-          <div className="flex flex-col items-center gap-3 mt-6">
+          <div className="flex flex-col items-center gap-3 mt-1">
             {[
               { id: 'data', label: 'Data', Icon: Settings2 },
               { id: 'style', label: 'Style', Icon: Palette },
@@ -1077,7 +1301,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
             ))}
           </div>
         ) : (
-          <div className="mt-6 flex flex-col gap-3 min-h-0 flex-1">
+          <div className="mt-1 flex flex-col gap-3 min-h-0 flex-1">
             <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shrink-0">
               {[
                 { id: 'data', label: 'Data', Icon: Settings2 },
@@ -1098,57 +1322,84 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
             </div>
 
             {activeTab === 'data' && (
-              <div className="flex flex-col gap-3 overflow-y-auto">
+              <div className="flex flex-col gap-4 overflow-y-auto">
                 {detailLoading && <div className="text-xs text-slate-400">Loading widget…</div>}
 
-                <label className="text-xs font-medium text-slate-600">
-                  Name
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => { setName(e.target.value); markDirty(); }}
-                    placeholder="e.g. Traffic by Cell"
-                    className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
-                  />
-                </label>
-                <label className="text-xs font-medium text-slate-600">
-                  Datasource
-                  <select
-                    value={datasourceId}
-                    onChange={(e) => onDatasourceChange(e.target.value)}
-                    className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
-                  >
-                    <option value="">Select a datasource</option>
-                    {datasources.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </label>
-
-                <div>
-                  <div className="text-xs font-medium text-slate-600 mb-1.5">Widget type</div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {CHART_TYPES.map((t) => {
-                      const meta = CHART_TYPE_META[t];
-                      const Icon = meta.icon;
-                      const active = chartType === t;
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          title={meta.label}
-                          onClick={() => onChartTypeChange(t)}
-                          className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-[0.625rem] leading-tight transition-colors ${
-                            active ? 'border-[#EC7D09] bg-orange-50' : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <Icon size={16} color={meta.color} />
-                          <span className="text-slate-600 text-center">{meta.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* No card here, unlike the collapsible sections below — Widget Name/Data
+                    Source are always-visible identity fields (nothing to fold away), set apart
+                    instead by a tinted input background rather than a bordered box. */}
+                <div className="flex flex-col gap-3 w-full">
+                  <label className="text-xs font-medium text-slate-600">
+                    Widget Name
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => { setName(e.target.value); markDirty(); }}
+                      placeholder="e.g. Traffic by Cell"
+                      className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-transparent bg-orange-50 text-xs"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-slate-600">
+                    Data Source
+                    <select
+                      value={datasourceId}
+                      onChange={(e) => onDatasourceChange(e.target.value)}
+                      className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-transparent bg-orange-50 text-xs font-medium"
+                    >
+                      <option value="">Select a datasource</option>
+                      {datasources.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </label>
                 </div>
 
-                <MappingFields fields={fields} value={mapping} onChange={onMappingChange} columns={columns} columnsLoading={columnsLoading} />
+                <div className="flex flex-col gap-2 p-3 rounded-xl border border-slate-200 bg-white w-full">
+                  <button
+                    type="button"
+                    onClick={() => setVizTypeCollapsed((c) => !c)}
+                    className="flex items-center justify-between text-xs font-semibold text-[#EC7D09] uppercase tracking-wide"
+                  >
+                    Visualization Type
+                    {vizTypeCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                  </button>
+                  {!vizTypeCollapsed && (
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {CHART_TYPES.map((t) => {
+                        const meta = CHART_TYPE_META[t];
+                        const Icon = meta.icon;
+                        const active = chartType === t;
+                        const button = (
+                          <button
+                            type="button"
+                            onClick={() => onChartTypeChange(t)}
+                            className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-[0.625rem] leading-tight transition-colors w-full ${
+                              active ? 'border-[#EC7D09] bg-orange-50' : 'border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <Icon size={18} color={meta.color} />
+                            <span className="text-slate-600 text-center">{meta.label}</span>
+                          </button>
+                        );
+                        // Styled popup ("best for X") instead of the plain native browser
+                        // tooltip `title` used to fall back to — see chartTypeMeta.js's own
+                        // comment on why this needs to be visible at pick-time, not discovered
+                        // later by trial and error.
+                        return (
+                          <CustomTooltip key={t} text={meta.description || meta.label} wrap>{button}</CustomTooltip>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <MappingFields
+                  fields={fields}
+                  value={mapping}
+                  onChange={onMappingChange}
+                  columns={columns}
+                  columnsLoading={columnsLoading}
+                  styleValue={mapping.style || {}}
+                  onStyleChange={(key, val) => { setMapping((prev) => ({ ...prev, style: { ...(prev.style || {}), [key]: val } })); markDirty(); }}
+                />
 
                 {showDimensionHint && (
                   <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -1199,16 +1450,25 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
 
             {activeTab === 'charts' && (
               <div className="flex flex-col gap-2 overflow-y-auto">
-                <button
-                  type="button"
-                  onClick={handleNewWidgetClick}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-[#EC7D09] hover:opacity-80 mb-1"
-                >
-                  <Plus size={14} /> New widget
-                </button>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <button
+                    type="button"
+                    onClick={handleNewWidgetClick}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-[#EC7D09] hover:opacity-80 shrink-0"
+                  >
+                    <Plus size={14} /> New widget
+                  </button>
+                  <ChartListSearchBar
+                    search={chartSearch}
+                    onSearchChange={setChartSearch}
+                    typeFilter={chartTypeFilter}
+                    onTypeFilterChange={setChartTypeFilter}
+                    typeOptions={sortedChartTypeOptions}
+                  />
+                </div>
                 {listLoading && <div className="text-xs text-slate-400 text-center mt-4">Loading…</div>}
                 {listError && <div className="text-xs text-red-500 px-1">{listError}</div>}
-                {sortedWidgets.map((w) => (
+                {visibleWidgets.map((w) => (
                   <ChartListItem
                     key={w.id}
                     widget={w}
@@ -1223,12 +1483,16 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                 {!listLoading && sortedWidgets.length === 0 && (
                   <div className="text-xs text-slate-400 text-center mt-4">No widgets yet.</div>
                 )}
+                {!listLoading && sortedWidgets.length > 0 && visibleWidgets.length === 0 && (
+                  <div className="text-xs text-slate-400 text-center mt-4">
+                    No charts match{chartSearch.trim() ? ` "${chartSearch.trim()}"` : ''}{chartTypeFilter ? ` in ${CHART_TYPE_META[chartTypeFilter]?.label || chartTypeFilter}` : ''}.
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
       </div>
-    </div>
 
     <ConfirmModal
       isOpen={!!pendingConfirm}

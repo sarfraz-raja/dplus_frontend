@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Pencil, LayoutGrid, ChevronLeft, ChevronRight, Trash2, Copy, Download, Database, FlaskConical, UploadCloud, Palette, PanelsTopLeft, Grid2x2 } from 'lucide-react';
+import { Plus, Pencil, LayoutGrid, ChevronLeft, ChevronRight, Trash2, Copy, Download, Database, FlaskConical, UploadCloud, Palette, PanelsTopLeft, Grid2x2, Search, Maximize2, X } from 'lucide-react';
 import Button from '../components/Button';
 import FormModal from '../components/FormModal';
 import ConfirmModal from '../components/ConfirmModal';
 import KpiMonitoringDashboard from '../components/DashboardBuilder/legacy/KpiDashboard/KpiMonitoringDashboard';
 import DashboardCanvasEditor from '../components/DashboardBuilder/dashboard/DashboardCanvasEditor';
+import EmbeddedDashboard from '../components/DashboardBuilder/dashboard/EmbeddedDashboard';
 import DatasourceManager from '../components/DashboardBuilder/datasource/DatasourceManager';
 import ThemeManager from '../components/DashboardBuilder/themes/ThemeManager';
 import ChartLibrary from '../components/DashboardBuilder/charts/ChartLibrary';
@@ -12,7 +13,7 @@ import FilterPanel from '../components/DashboardBuilder/filters/FilterPanel';
 import FiltersToggleButton from '../components/DashboardBuilder/filters/FiltersToggleButton';
 import {
   createDashboard, updateDashboard, deleteDashboardBackend, cloneDashboardBackend,
-  publishDashboard, attachWidget, listDashboards, getDashboardDetail,
+  publishDashboard, attachWidget, detachWidget, listDashboards, getDashboardDetail,
 } from '../store/actions/dashboardBuilder-actions';
 
 // Only read once, for the one-time migration of dashboards created before the backend
@@ -183,6 +184,27 @@ async function attachRealCharts(backendId, widgets, layout, alreadyAttachedIds =
   return newlyAttached;
 }
 
+// Counterpart to attachRealCharts above — detaches whichever previously-attached widgets
+// (`alreadyAttachedIds`, from the dashboard's own state as of the last load) are no longer
+// present in the current local `widgets` set, i.e. were removed via removeWidget
+// (DashboardCanvasEditor.jsx) and the removal is now being saved. Before detachWidget existed
+// (see dashboardBuilder-actions.js's own doc comment on it), there was no way to do this at
+// all — a removed widget's coordinates dropped out of dashboard.layout on save, but the
+// backend's join row survived, so the widget silently reappeared on the next load. Same
+// per-item try/catch pattern as attachRealCharts, so one failure doesn't block the rest.
+async function detachRemovedCharts(backendId, widgets, alreadyAttachedIds = []) {
+  const stillAttached = new Set(realChartWidgetEntries(widgets).map(([, w]) => w.dataSource.widgetId));
+  const removed = alreadyAttachedIds.filter((id) => !stillAttached.has(id));
+  for (const widgetId of removed) {
+    try {
+      await detachWidget(backendId, widgetId);
+    } catch (e) {
+      console.error('[DashboardBuilder] detachWidget failed for', widgetId, e);
+    }
+  }
+  return removed;
+}
+
 const DashboardBuilder = () => {
   const [customDashboards, setCustomDashboards] = useState([]);
   const [dashboardsLoading, setDashboardsLoading] = useState(true);
@@ -198,6 +220,7 @@ const DashboardBuilder = () => {
   // list never change/disappear for this, unlike the old separate full-page 'editor' view.
   const [editingDashboard, setEditingDashboard] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [dashboardSearch, setDashboardSearch] = useState('');
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -240,6 +263,12 @@ const DashboardBuilder = () => {
   // always succeeds regardless (see handleSave/confirmDelete/cloneDashboard).
   const [syncError, setSyncError] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  // Lets an admin see exactly how a dashboard will read once embedded elsewhere (e.g.
+  // EmbeddedDashboard.jsx inside Insights Engine) without leaving the builder or publishing
+  // first — same read-only DashboardCanvasEditor, just filling the viewport instead of the
+  // preview panel.
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  useEffect(() => { setPreviewFullscreen(false); }, [previewId]);
 
   // Backend is now the single source of truth for the dashboard list (previously
   // localStorage-only, which is why dashboards created on one device/browser never showed
@@ -305,6 +334,12 @@ const DashboardBuilder = () => {
   };
 
   const allDashboards = [...STATIC_DASHBOARDS, ...customDashboards];
+  // Dashboard list search — name only (no "type" concept here, unlike ChartLibrary.jsx's own
+  // chart-type filter, since every entry in this list is just "a dashboard", nothing to
+  // narrow by beyond its name).
+  const visibleDashboards = dashboardSearch.trim()
+    ? allDashboards.filter((d) => d.name?.toLowerCase().includes(dashboardSearch.trim().toLowerCase()))
+    : allDashboards;
   const previewDashboard = allDashboards.find((d) => d.id === previewId) || null;
   // The actual dashboard record being edited, or null when creating a brand new one — always
   // re-derived from customDashboards (not a snapshot) so hydration updates (ensureDashboardDetail
@@ -329,6 +364,11 @@ const DashboardBuilder = () => {
   const startNewDashboard = () => {
     setNewDashboardToken((t) => t + 1);
     setEditingDashboard('new');
+    // The page-level Dashboards list (this component's own right rail) isn't needed while
+    // actively building a dashboard — DashboardCanvasEditor.jsx's own "Add Widget"/"Your
+    // Widgets" panels are what matter now, so collapse this one down to its icon-only rail
+    // to free up width for them, rather than leaving three panels competing for space.
+    setSidebarCollapsed(true);
   };
   const openNewDashboard = () => {
     // Nothing currently open to lose — just start fresh, no confirm/remount noise.
@@ -516,6 +556,11 @@ const DashboardBuilder = () => {
       if (realCharts.length > 0) {
         await attachRealCharts(backendId, widgets, layout, editingExisting?.attachedChartIds || []);
       }
+      // Only relevant on the update path — a brand-new dashboard (editingExisting null, or
+      // one with no prior attachedChartIds) has nothing to detach yet.
+      if (editingExisting?.attachedChartIds?.length > 0) {
+        await detachRemovedCharts(backendId, widgets, editingExisting.attachedChartIds);
+      }
 
       // Re-fetch so the local record reflects exactly what the backend now holds, rather
       // than a hand-assembled guess.
@@ -624,10 +669,11 @@ const DashboardBuilder = () => {
           so chartLibraryRef stays valid even before the Charts tab is visible. Without
           this, handleEditInChartsTab's ref call (which fires before setView('charts')
           mounts anything) would silently no-op against a null ref. */}
-      <div
-        className={`flex-1 overflow-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0 p-3 ${view === 'charts' ? '' : 'hidden'}`}
-        style={{ background: 'rgba(255,255,255,0.55)' }}
-      >
+      {/* Plain layout container, no card styling of its own — matches the Dashboards view's
+          own two-card row below (each child owns its own rounded/border/shadow/bg card
+          instead of one shared card wrapping both — see ChartLibrary.jsx's own left-column
+          and side-panel divs for where that styling now lives). */}
+      <div className={`flex-1 min-h-0 ${view === 'charts' ? 'flex' : 'hidden'}`}>
         <ChartLibrary
           ref={chartLibraryRef}
           prefill={chartsPrefill}
@@ -727,16 +773,14 @@ const DashboardBuilder = () => {
                         right, so Filters reads as a distinct dashboard-level control. */}
                     {!previewDashboard.static && previewDashboard.backendId && (
                       <div className="flex items-center gap-2 pl-4 ml-1 border-l border-slate-200">
+                        {/* Only the "Add and edit filters" gear stays here — the filter-VALUE
+                            strip itself renders as its own full-width strap above the canvas
+                            below (matches DashboardCanvasEditor.jsx's own editable/embedded
+                            strap, instead of squeezing the value controls into this header). */}
                         <FiltersToggleButton
                           filters={previewFilters}
                           datasourceOptions={previewFilterDatasourceOptions}
                           onSave={(rows) => previewEditorRef.current?.applyFilters(rows)}
-                        />
-                        <FilterPanel
-                          filters={previewFilters}
-                          onApply={(rows) => previewEditorRef.current?.applyFilters(rows)}
-                          onClear={() => previewEditorRef.current?.clearFilterValues()}
-                          datasourceOptions={previewFilterDatasourceOptions}
                         />
                       </div>
                     )}
@@ -744,6 +788,15 @@ const DashboardBuilder = () => {
                   {!previewDashboard.static && (
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        title="Preview fullscreen (read-only, as it'll look embedded elsewhere)"
+                        aria-label="Preview fullscreen"
+                        onClick={() => setPreviewFullscreen(true)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+                      >
+                        <Maximize2 size={14} />
+                      </button>
                       <Button variant="secondary" size="sm" className="h-8" icon={<Pencil size={14} />} onClick={() => openEditor(previewDashboard)}>
                         Edit
                       </Button>
@@ -809,6 +862,16 @@ const DashboardBuilder = () => {
                   </div>
                 )}
                 <div className="dbe-preview-scroll flex-1 min-h-0 overflow-y-auto p-3">
+                  {!previewDashboard.static && previewDashboard.backendId && (
+                    <div className="dbe-filter-strap mb-2">
+                      <FilterPanel
+                        filters={previewFilters}
+                        onApply={(rows) => previewEditorRef.current?.applyFilters(rows)}
+                        onClear={() => previewEditorRef.current?.clearFilterValues()}
+                        datasourceOptions={previewFilterDatasourceOptions}
+                      />
+                    </div>
+                  )}
                   {previewDashboard.static ? (
                     previewDashboard.render()
                   ) : !previewDashboard.detailLoaded ? (
@@ -835,6 +898,27 @@ const DashboardBuilder = () => {
                     />
                   )}
                 </div>
+                {previewFullscreen && previewDashboard.backendId && (
+                  <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+                    {/* Reuses EmbeddedDashboard as-is — same component Insights Engine's
+                        DynamicInsightsDashboard.jsx embeds a published dashboard with — so this
+                        is a byte-for-byte preview of what shows up there (inline filter bar,
+                        publish gate, deep-link filter parsing) instead of a hand-approximated
+                        copy that could drift from the real embed. */}
+                    <button
+                      type="button"
+                      title="Exit fullscreen preview"
+                      aria-label="Exit fullscreen preview"
+                      onClick={() => setPreviewFullscreen(false)}
+                      className="fixed top-3 right-3 z-10 w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 bg-white shadow-md hover:bg-slate-50 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                    <div className="p-3">
+                      <EmbeddedDashboard key={`fullscreen-${previewDashboard.id}`} dashboardId={previewDashboard.backendId} />
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <div className="h-full flex flex-col items-center justify-center gap-2 text-center px-6">
@@ -863,13 +947,25 @@ const DashboardBuilder = () => {
               {sidebarCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
             </button>
             {!sidebarCollapsed && (
-              <button
-                type="button"
-                onClick={openNewDashboard}
-                className="w-full flex items-center gap-1.5 px-4 pt-8 pb-2.5 border-b border-white/40 text-xs font-semibold text-[#EC7D09] hover:opacity-80"
-              >
-                <Plus size={14} /> New dashboard
-              </button>
+              <div className="flex items-center gap-1.5 px-4 pt-8 pb-2.5 border-b border-white/40">
+                <button
+                  type="button"
+                  onClick={openNewDashboard}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#EC7D09] hover:opacity-80 shrink-0"
+                >
+                  <Plus size={14} /> New dashboard
+                </button>
+                <div className="relative flex-1 min-w-0">
+                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={dashboardSearch}
+                    onChange={(e) => setDashboardSearch(e.target.value)}
+                    placeholder="Search"
+                    className="w-full pl-7 pr-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                  />
+                </div>
+              </div>
             )}
             {sidebarCollapsed && <div className="h-9" />}
             {!sidebarCollapsed && dashboardsLoading && (
@@ -878,7 +974,7 @@ const DashboardBuilder = () => {
             {!sidebarCollapsed && dashboardsError && (
               <div className="p-4 text-xs text-red-500 text-center">Couldn't load dashboards: {dashboardsError}</div>
             )}
-            {allDashboards.map((d) => (
+            {visibleDashboards.map((d) => (
               <button
                 key={d.id}
                 type="button"
@@ -905,6 +1001,9 @@ const DashboardBuilder = () => {
             ))}
             {!sidebarCollapsed && allDashboards.length === 0 && (
               <div className="p-4 text-xs text-slate-400 text-center">No dashboards yet.</div>
+            )}
+            {!sidebarCollapsed && allDashboards.length > 0 && visibleDashboards.length === 0 && (
+              <div className="p-4 text-xs text-slate-400 text-center">No dashboards match "{dashboardSearch.trim()}".</div>
             )}
           </div>
         </div>
