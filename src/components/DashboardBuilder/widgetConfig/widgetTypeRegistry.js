@@ -343,7 +343,9 @@ const WIDGET_TYPE_REGISTRY = {
   // goes through. No styleFields yet — its look is fixed (label + dropdown), not
   // per-placement customizable like a chart's title/axis/background.
   slicer: {
-    label: 'Slicer', icon: ListFilter, iconColor: '#0891B2', component: SlicerWidgetCard, defaultSize: { w: 36, h: 16 }, dataShape: null,
+    // Taller default than a KPI Card — this renders as a scrollable checklist (Power BI/
+    // Superset slicer convention), not a one-line dropdown, so it needs real vertical room.
+    label: 'Slicer', icon: ListFilter, iconColor: '#0891B2', component: SlicerWidgetCard, defaultSize: { w: 30, h: 42 }, dataShape: null,
   },
   degradedCellsTable: {
     label: 'Top Degraded Cells', icon: AlertTriangle, iconColor: '#EF4444', component: DegradedCellsTable, defaultSize: { w: 72, h: 60 }, dataShape: 'table', builderVisible: false,
