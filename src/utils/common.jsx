@@ -13,6 +13,12 @@ export const getApiErrorMessage = (res) => {
     return res?.data?.msg || `Request failed (status ${res?.status ?? 'unknown'}).`
 }
 
+// Global default database (Custom Query → DB Config, Admin-set). GET /querybuilder/getDatabase
+// marks at most one item with is_default: true. Every database dropdown uses these two so the
+// default is found and labelled the same way everywhere.
+export const getDefaultDb = (databaseList) => (databaseList || []).find((db) => db?.is_default) || null
+export const dbOptionLabel = (db) => (db?.is_default ? `${db.label} (Default)` : db?.label)
+
 // react-hook-form `validate` rule for fields the backend requires to be whole numbers
 // (e.g. frequency must be an int — a decimal would otherwise only fail later as a backend 422).
 // Blank passes so `required` stays responsible for emptiness; a valueAsNumber blank (NaN) fails.

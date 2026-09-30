@@ -5,6 +5,8 @@ import { Urls } from "../../utils/url"
 import { ALERTS } from "../reducers/component-reducer"
 import { DATABASE_LIST, DBO_LIST, DB_CONFIG_LIST, GENERATED_SQL_QUERY, RUN_QUERY, SAVED_QUERY_LIST, TABLES_LIST, USERS_LIST } from "../reducers/customQuery-reducer"
 import CommonActions from "./common-actions"
+import toast from "react-hot-toast"
+import { getApiErrorMessage } from "../../utils/common"
 // import Notify from "./notify-actions"
 
 
@@ -107,7 +109,12 @@ const CustomQueryActions = {
             //     dispatch(GENERATED_SQL_QUERY({}))
             // }
             const res = await Api.post({ data: data, url: uniqueId == null ? Urls.querybuilder_DBConfig : Urls.querybuilder_DBConfig + "/" + uniqueId })
-            if (res?.status !== 201 && res?.status !== 200) return
+            if (res?.status !== 201 && res?.status !== 200) {
+                // A rejected save used to fail silently. The backend's msg explains why — e.g. 400
+                // "Default database must be assigned to ALL", 403 "Only Admin can modify the default database".
+                toast.error(getApiErrorMessage(res))
+                return
+            }
             cb()
         } catch (error) {
             console.log(error, "amit errorerror 37")

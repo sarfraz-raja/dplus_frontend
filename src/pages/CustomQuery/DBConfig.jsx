@@ -193,6 +193,9 @@ import CustomQueryActions from '../../store/actions/customQuery-actions';
 import DBConfigForm from './DBConfigForm';
 import CommonActions from '../../store/actions/common-actions';
 import { Urls } from '../../utils/url';
+import Api from '../../utils/api';
+import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '../../utils/common';
 
 const COLUMNS = [
     { label: 'DB Name',  key: 'dbname' },
@@ -201,8 +204,20 @@ const COLUMNS = [
     { label: 'Username', key: 'username' },
     { label: 'Port',     key: 'port' },
     { label: 'User',     key: 'name' },
+    { label: 'Created',  key: 'create_time' },
     { label: 'Actions',  key: 'actions' },
 ]
+
+const safeParse = (raw) => {
+    if (!raw) return null
+    try { return typeof raw === 'string' ? JSON.parse(raw) : raw } catch { return null }
+}
+
+const formatDate = (ts) => {
+    if (!ts) return '—'
+    const d = new Date(ts)
+    return Number.isNaN(d.getTime()) ? String(ts) : d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+}
 
 const TYPE_BADGE = {
     PostgreSQL: 'bg-blue-100 text-blue-700',
@@ -235,9 +250,40 @@ const DBConfig = () => {
 
     const dbConfigList = useSelector((state) => state?.customQuery?.dbConfigList ?? [])
 
+    // Global default database: one DB at a time, Admin-only to set/remove, and the default DB's
+    // row is read-only for everyone else (the backend enforces the same — 403 otherwise).
+    const authUser = useSelector((state) => state?.auth?.user)
+    const rolename = (safeParse(authUser) ?? safeParse(localStorage.getItem('user')))?.rolename
+    const isAdmin = String(rolename ?? '').toLowerCase() === 'admin'
+    const [defaultBusyId, setDefaultBusyId] = useState(null)
+
     useEffect(() => {
         dispatch(CustomQueryActions.getDBConfig())
     }, [])
+
+    // POST = set as default (replaces the current one), DELETE = remove default.
+    // Every failure (403 not Admin / 404 gone / 400 not assigned to ALL / 409 changed elsewhere)
+    // carries a message from the backend, shown as-is; the list is reloaded either way so the
+    // page reflects whatever the default is now.
+    const changeDefault = async (itm, makeDefault) => {
+        if (defaultBusyId) return
+        setDefaultBusyId(itm.uniqueid)
+        try {
+            const url = `${Urls.querybuilder_DBConfig}/${itm.uniqueid}/default`
+            const res = makeDefault ? await Api.post({ url, data: {} }) : await Api.delete({ url })
+            if (res?.status === 200) {
+                toast.success(makeDefault ? `${itm.dbname} is now the default database` : 'Default database removed')
+            } else {
+                toast.error(getApiErrorMessage(res))
+            }
+        } catch (err) {
+            if (import.meta.env.DEV) console.warn('[db-config] default change failed', err)
+            toast.error('Something went wrong, please retry.')
+        } finally {
+            setDefaultBusyId(null)
+            dispatch(CustomQueryActions.getDBConfig())
+        }
+    }
 
     const openEdit = (itm) => {
         setmodalOpen(true)
@@ -251,18 +297,27 @@ const DBConfig = () => {
         setDeleteModalOpen(true)
     }
 
-    const confirmDelete = () => {
+    // Called directly (not via CommonActions.deleteApiCaller, which returns silently on a rejected
+    // delete and would leave this modal stuck on "Deleting…") so a refusal — e.g. 403 "Only Admin
+    // can delete the default database" — is shown.
+    const confirmDelete = async () => {
         if (!deleteTarget) return
         setDeleting(true)
-        dispatch(CommonActions.deleteApiCaller(
-            `${Urls.querybuilder_DBConfig}/${deleteTarget.uniqueid}`,
-            () => {
-                dispatch(CustomQueryActions.getDBConfig())
-                setDeleting(false)
+        try {
+            const res = await Api.delete({ url: `${Urls.querybuilder_DBConfig}/${deleteTarget.uniqueid}` })
+            if ([200, 201, 204].includes(res?.status)) {
                 setDeleteModalOpen(false)
                 setDeleteTarget(null)
+            } else {
+                toast.error(getApiErrorMessage(res))
             }
-        ))
+        } catch (err) {
+            if (import.meta.env.DEV) console.warn('[db-config] delete failed', err)
+            toast.error('Something went wrong, please retry.')
+        } finally {
+            setDeleting(false)
+            dispatch(CustomQueryActions.getDBConfig())
+        }
     }
 
     const filtered = search.trim()
@@ -286,14 +341,39 @@ const DBConfig = () => {
             <span className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                 <span className="truncate max-w-[140px]" title={itm.dbname}>{itm.dbname}</span>
+                {itm.is_default && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200 shrink-0"
+                        title="Pre-selected in database dropdowns for all users">
+                        DEFAULT
+                    </span>
+                )}
             </span>
         )
+        if (col.key === 'create_time') return <span className="whitespace-nowrap">{formatDate(itm.create_time)}</span>
         if (col.key === 'dbtype') {
             const cls = TYPE_BADGE[itm.dbtype] ?? 'bg-slate-100 text-slate-600'
             return <span className={`px-2 py-0.5 rounded text-xs font-medium ${cls}`}>{itm.dbtype}</span>
         }
-        if (col.key === 'actions') return (
+        if (col.key === 'actions') {
+            // Non-Admin users can't edit or delete the default DB (backend returns 403).
+            const lockedForUser = itm.is_default && !isAdmin
+            // Admin only; "Set as default" only for DBs assigned to ALL (backend returns 400 otherwise).
+            const canSetDefault = isAdmin && !itm.is_default && String(itm.assignment_type ?? '').toUpperCase() === 'ALL'
+            const canRemoveDefault = isAdmin && itm.is_default
+            const busy = defaultBusyId === itm.uniqueid
+            return (
             <span className="flex items-center gap-2">
+                {lockedForUser && <span className="text-xs text-slate-400">Read-only (default database)</span>}
+                {(canSetDefault || canRemoveDefault) && (
+                    <button
+                        onClick={() => changeDefault(itm, canSetDefault)}
+                        disabled={!!defaultBusyId}
+                        className="px-2.5 py-1 text-xs font-medium rounded-md border border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 hover:border-orange-300 transition-colors whitespace-nowrap disabled:opacity-50"
+                    >
+                        {busy ? 'Saving…' : canSetDefault ? 'Set as default' : 'Remove default'}
+                    </button>
+                )}
+                {!lockedForUser && <>
                 <button
                     onClick={() => openEdit(itm)}
                     title="Edit"
@@ -318,8 +398,10 @@ const DBConfig = () => {
                     </svg>
                     Delete
                 </button>
+                </>}
             </span>
-        )
+            )
+        }
         const val = itm[col.key]
         return (
             <span className="truncate max-w-[180px] block" title={String(val ?? '')}>

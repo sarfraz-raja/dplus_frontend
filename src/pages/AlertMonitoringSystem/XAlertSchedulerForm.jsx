@@ -9,6 +9,7 @@ import AlertConfigurationActions from '../../store/actions/alertConfiguration-ac
 import GroupManagementActions from '../../store/actions/groupManagement-actions';
 import Button from '../../components/Button';
 import moment from 'moment';
+import { getDefaultDb, dbOptionLabel } from '../../utils/common';
 
 const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
@@ -48,7 +49,7 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
 
     const authUser = useSelector((state) => state?.auth?.user);
 
-    const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, getValues, control, formState: { errors } } = useForm();
     const [mailQueryVisual, setMailQueryVisual] = useState(false);
     const [graphQueryVisual, setGraphQueryVisual] = useState(false);
     const [mailBodyVisual, setMailBodyVisual] = useState(false);
@@ -119,6 +120,15 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
             setValue('ticket_query', formValue.ticket_query ?? formValue.ticketquery ?? '');
         }
     }, [formValue, resetting]);
+
+    // New alert only: pre-select the Admin-set global default DB server once the list has loaded
+    // (declared after the reset effect above, so it re-applies after each form reset). An edit
+    // keeps the server the alert was saved with. The user can still pick another one.
+    useEffect(() => {
+        if (!resetting || getValues('dbserver')) return;
+        const defaultDb = getDefaultDb(databaseList);
+        if (defaultDb) setValue('dbserver', defaultDb.value);
+    }, [databaseList, formValue, resetting]);
 
     const onSubmit = (data) => {
         if (data.startat) {
@@ -192,7 +202,7 @@ const XAlertSchedulerForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
                             <option value={formValue.dbserver}>{formValue.dbservername || formValue.dbserver}</option>
                         )}
                         {databaseList?.map((db) => (
-                            <option key={db.value} value={db.value}>{db.label}</option>
+                            <option key={db.value} value={db.value}>{dbOptionLabel(db)}</option>
                         ))}
                     </select>
                     {errors.dbserver && <p className={errorCls}>{errors.dbserver.message}</p>}

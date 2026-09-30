@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../store/actions/customQuery-actions';
+import { getDefaultDb, dbOptionLabel } from '../utils/common';
 import Button from './Button';
 
 // Extracted from the Query Workbench's Visual Builder (src/pages/CustomQuery/QueryWorkbench.jsx)
@@ -17,6 +18,17 @@ const VisualQueryBuilder = ({ onGenerate }) => {
     const databaseList = useSelector(s => s?.customQuery?.databaseList || []);
     const dboList      = useSelector(s => s?.customQuery?.dboList      || []);
     const tableList    = useSelector(s => s?.customQuery?.tableList    || {});
+
+    // Pre-select the Admin-set global default server (and load its schemas, as picking it by hand
+    // would) when nothing is chosen yet. With no default set, the picker stays on "Select Server".
+    useEffect(() => {
+        if (builderServer) return;
+        const defaultDb = getDefaultDb(databaseList);
+        if (!defaultDb) return;
+        const value = String(defaultDb.value);
+        setBuilderServer(value);
+        dispatch(CustomQueryActions.getdboList(true, value, () => {}));
+    }, [databaseList]);
 
     const tables = tableList?.d1 || [];
     const allCols = tableList?.d2 || [];
@@ -55,7 +67,7 @@ const VisualQueryBuilder = ({ onGenerate }) => {
                     className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-white focus:outline-none"
                 >
                     <option value="">Select Server</option>
-                    {databaseList.map(db => <option key={db.value} value={String(db.value)}>{db.label}</option>)}
+                    {databaseList.map(db => <option key={db.value} value={String(db.value)}>{dbOptionLabel(db)}</option>)}
                 </select>
 
                 {dboList.length > 0 && (

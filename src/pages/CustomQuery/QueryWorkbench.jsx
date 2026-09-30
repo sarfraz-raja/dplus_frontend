@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
 import CommonActions from '../../store/actions/common-actions';
 import { Urls } from '../../utils/url';
+import { getDefaultDb, dbOptionLabel } from '../../utils/common';
 import { RUN_QUERY } from '../../store/reducers/customQuery-reducer';
 import Modal from '../../components/Modal';
 import Table from '../../components/Table';
@@ -435,7 +436,10 @@ const QueryWorkbench = () => {
         if (databaseList.length === 0 || server) return;
         const saved = localStorage.getItem('qw_last_server');
         const valid = saved && databaseList.some(db => String(db.value) === saved);
-        setServer(valid ? saved : String(databaseList[0].value));
+        // The Admin-set global default wins on load (it is "the default for all users"); with no
+        // default set, fall back to the last-used server, then the first. Still changeable after.
+        const defaultDb = getDefaultDb(databaseList);
+        setServer(defaultDb ? String(defaultDb.value) : valid ? saved : String(databaseList[0].value));
     }, [databaseList]);
 
     // Persist the chosen server so it survives page reloads
@@ -705,7 +709,7 @@ const QueryWorkbench = () => {
                                             <option value="">— No DB configured —</option>
                                         )}
                                         {databaseList.map((db) => (
-                                            <option key={db.value} value={String(db.value)}>{db.label}</option>
+                                            <option key={db.value} value={String(db.value)}>{dbOptionLabel(db)}</option>
                                         ))}
                                     </select>
                                     <SaveQueryPopover onSave={(name, visibleTo) => saveQuery(name, undefined, undefined, visibleTo)} disabled={!canExecute} />
@@ -1002,6 +1006,17 @@ const VisualBuilder = ({
     const tableList    = useSelector(s => s?.customQuery?.tableList    || {});
     const dispatch = useDispatch();
 
+    // Pre-select the Admin-set global default server (and load its schemas, as picking it by hand
+    // would) when nothing is chosen yet. With no default set, the picker stays on "Select Server".
+    useEffect(() => {
+        if (builderServer) return;
+        const defaultDb = getDefaultDb(databaseList);
+        if (!defaultDb) return;
+        const value = String(defaultDb.value);
+        setBuilderServer(value);
+        dispatch(CustomQueryActions.getdboList(true, value, () => {}));
+    }, [databaseList]);
+
     const tables = tableList?.d1 || [];
     const allCols = tableList?.d2 || [];
     const selectedTableCols = selectedTable
@@ -1041,7 +1056,7 @@ const VisualBuilder = ({
                     className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded bg-white shadow-inner focus:outline-none"
                 >
                     <option value="">Select Server</option>
-                    {databaseList.map(db => <option key={db.value} value={String(db.value)}>{db.label}</option>)}
+                    {databaseList.map(db => <option key={db.value} value={String(db.value)}>{dbOptionLabel(db)}</option>)}
                 </select>
 
                 {dboList.length > 0 && (

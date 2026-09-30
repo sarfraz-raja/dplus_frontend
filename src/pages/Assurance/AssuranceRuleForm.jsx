@@ -9,7 +9,7 @@ import CustomQueryActions from '../../store/actions/customQuery-actions';
 import GroupManagementActions from '../../store/actions/groupManagement-actions';
 import AssuranceActions from '../../store/actions/assurance-actions';
 import EmailChipInput from '../../components/EmailChipInput';
-import { wholeNumber } from '../../utils/common';
+import { wholeNumber, getDefaultDb, dbOptionLabel } from '../../utils/common';
 import { TELECOM_CONSTANTS } from '../Tickets/ticketConstants';
 
 const inputCls = "w-full border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400";
@@ -123,7 +123,7 @@ const AssuranceRuleForm = () => {
     // PUT /assurance-rules/<id> is a full replace — fields this wizard has no UI for would be
     // written back as null on save. Kept from the loaded rule and re-sent as-is in edit mode.
     const [preservedConfig, setPreservedConfig] = useState({});
-    const { register, control, watch, reset, handleSubmit, formState: { errors } } = useForm({
+    const { register, control, watch, reset, setValue, getValues, handleSubmit, formState: { errors } } = useForm({
         defaultValues: {
             conditions: [{ kpi: '', operator: '>', threshold: '' }],
             consecutive_breach_threshold: 1,
@@ -157,6 +157,22 @@ const AssuranceRuleForm = () => {
             setGroupList((data ?? []).map((g) => ({ value: g.id, label: g.group_name })));
         }));
     }, []);
+
+    // Data Source once the database list has loaded:
+    //  - create: pre-select the Admin-set global default database (the user can still change it);
+    //  - edit/view: re-apply the rule's own saved data source — if the rule arrived before the
+    //    list, the <select> had no matching <option> yet and would keep showing "Select data source"
+    //    even though the right id is stored.
+    useEffect(() => {
+        if (databaseList.length === 0) return;
+        const current = getValues('data_source_id');
+        if (current) {
+            setValue('data_source_id', current);
+        } else if (mode === 'create') {
+            const defaultDb = getDefaultDb(databaseList);
+            if (defaultDb) setValue('data_source_id', defaultDb.value);
+        }
+    }, [databaseList, loadingRule]);
 
     // View/Edit prefill — GET /assurance-rules/<id>, reshaped back into the
     // wizard's form field names (the inverse of buildPayload below).
@@ -489,7 +505,7 @@ const AssuranceRuleForm = () => {
                                 <select className={inputCls} {...register('data_source_id', { required: 'Required' })}>
                                     <option value="">Select data source</option>
                                     {databaseList?.map((db) => (
-                                        <option key={db.value} value={db.value}>{db.label}</option>
+                                        <option key={db.value} value={db.value}>{dbOptionLabel(db)}</option>
                                     ))}
                                 </select>
                                 {errors.data_source_id && <p className={errorCls}>{errors.data_source_id.message}</p>}

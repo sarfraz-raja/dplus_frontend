@@ -6,6 +6,7 @@ import CustomQueryActions from '../../store/actions/customQuery-actions';
 import AlertConfigurationActions from '../../store/actions/alertConfiguration-actions';
 import Button from '../../components/Button';
 import moment from 'moment';
+import { getDefaultDb, dbOptionLabel } from '../../utils/common';
 
 const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
@@ -17,7 +18,7 @@ const XAlertConfigureForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
     const userList = useSelector((state) => state?.customQuery?.usersList ?? []);
     const databaseList = useSelector((state) => state?.customQuery?.databaseList ?? []);
 
-    const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, getValues, control, formState: { errors } } = useForm();
 
     useEffect(() => {
         dispatch(CustomQueryActions.getDatabaseList());
@@ -38,6 +39,15 @@ const XAlertConfigureForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
             });
         }
     }, [formValue, resetting]);
+
+    // New alert only: pre-select the Admin-set global default DB server once the list has loaded
+    // (declared after the reset effect above, so it re-applies after each form reset). An edit
+    // keeps the server the alert was saved with. The user can still pick another one.
+    useEffect(() => {
+        if (!resetting || getValues('dbserver')) return;
+        const defaultDb = getDefaultDb(databaseList);
+        if (defaultDb) setValue('dbserver', defaultDb.value);
+    }, [databaseList, formValue, resetting]);
 
     const onSubmit = (data) => {
         if (data.mailrecipients) {
@@ -84,7 +94,7 @@ const XAlertConfigureForm = ({ setIsOpen, resetting, formValue = {}, submitRef }
                     <select className={inputCls} {...register('dbserver', { required: 'Required' })}>
                         <option value="">Select server</option>
                         {databaseList?.map((db) => (
-                            <option key={db.value} value={db.value}>{db.label}</option>
+                            <option key={db.value} value={db.value}>{dbOptionLabel(db)}</option>
                         ))}
                     </select>
                     {errors.dbserver && <p className={errorCls}>{errors.dbserver.message}</p>}

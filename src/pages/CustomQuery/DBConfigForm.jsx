@@ -167,6 +167,16 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
 
     const dispatch = useDispatch()
     const userList = useSelector((state) => state?.customQuery?.usersList)
+    // state.auth.user may be the object or its JSON string (same handling as Navigation.jsx).
+    const authUser = useSelector((state) => state?.auth?.user)
+    const currentUser = (() => {
+        const parse = (raw) => { try { return typeof raw === 'string' ? JSON.parse(raw) : raw } catch { return null } }
+        return parse(authUser) ?? parse(localStorage.getItem('user'))
+    })()
+    const currentUserId = currentUser?.id ?? null
+    const isAdmin = String(currentUser?.rolename ?? '').toLowerCase() === 'admin'
+    // Editing the connection that is currently the global default (set on the DB Config page).
+    const isDefaultDb = !resetting && !!formValue?.is_default
     const [confirmBlankPassword, setConfirmBlankPassword] = useState(null)
     const [assignType, setAssignType] = useState('SELF') // SELF | ALL | GROUP | USER
     const [groupId, setGroupId] = useState('')
@@ -232,12 +242,28 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
     }, [formValue, resetting, userList])
 
     const applyAssignment = (data) => {
+        // The edit form is filled from the list row, so read-only columns the list returns would be
+        // sent back on save. The backend writes every key it receives into web.dbConfig, so
+        // create_time (a display string) crashed the update with a 500; is_default is only ever
+        // changed through the /default endpoint.
+        delete data.create_time
+        delete data.is_default
         data.assignment_type = assignType
         data.group_id = assignType === 'GROUP' ? groupId : null
         data.assigned_user_id = assignType === 'USER' ? userId : null
-        // Keep legacy single-owner field in sync for USER scope so any not-yet-updated
-        // backend consumers of userId still work.
-        data.userId = assignType === 'USER' ? userId : null
+        // userId is the connection's owner, and both backend list queries INNER JOIN web.Users on it —
+        // a connection saved with userId = null drops out of the DB Config list AND every database
+        // dropdown. So it is never sent as null:
+        //   USER          → the chosen user (keeps legacy single-owner consumers working)
+        //   everything else, new connection → the current user (the backend only fills it for SELF)
+        //   everything else, edit           → not sent, so the existing owner is left untouched
+        if (assignType === 'USER') {
+            data.userId = userId
+        } else if (resetting && currentUserId) {
+            data.userId = currentUserId
+        } else {
+            delete data.userId
+        }
         return data
     }
 
@@ -368,6 +394,28 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
                             </label>
                         ))}
                     </div>
+
+                    {/* Default-database hint. Only a connection visible to All can be the default,
+                        and only an Admin can set it (from the Actions column on the list). The
+                        current default must stay on All — the backend rejects the save otherwise. */}
+                    {isDefaultDb && assignType !== 'ALL' ? (
+                        <p className="mb-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                            <span className="font-bold" aria-hidden="true">!</span>
+                            <span>This is the <span className="font-semibold">default database</span> — it must stay visible to <span className="font-semibold">All</span>. Remove it as default first if you need to change this.</span>
+                        </p>
+                    ) : isDefaultDb ? (
+                        <p className="mb-2 flex items-start gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+                            <span aria-hidden="true">★</span>
+                            <span>This is the <span className="font-semibold">default database</span> for all users.</span>
+                        </p>
+                    ) : isAdmin && (
+                        <p className="mb-2 flex items-start gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+                            <span aria-hidden="true">★</span>
+                            {assignType === 'ALL'
+                                ? <span>Visible to <span className="font-semibold">All</span> — after saving, this connection can be made the default database with <span className="font-semibold">Set as default</span> in the list.</span>
+                                : <span>To make this the <span className="font-semibold">default database</span>, select <span className="font-semibold">All</span> here. Only a connection visible to All can be the default.</span>}
+                        </p>
+                    )}
 
                     {assignType === 'GROUP' && (
                         <select className={inputCls} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
