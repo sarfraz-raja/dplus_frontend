@@ -140,7 +140,7 @@ export async function exportWidgetPNG(node, title) {
 // do that per widget and composite the results onto one output canvas ourselves, at each
 // widget's real position — rather than asking html2canvas to walk the whole transformed
 // tree in one pass.
-async function compositeDashboardCanvas(containerNode, widgetNodes) {
+export async function compositeDashboardCanvas(containerNode, widgetNodes) {
   const scale = 2;
   const width = containerNode.scrollWidth;
   const height = containerNode.scrollHeight;
@@ -182,5 +182,27 @@ export async function exportDashboardPDF(containerNode, widgetNodes, dashboardNa
   const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
   const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
   pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+  pdf.save(`${dashboardName || 'dashboard'}.pdf`);
+}
+
+/** Multi-tab PDF export — one page per tab, each page sized to that tab's own captured
+ * canvas (tabs can have very different content heights). `pages` is `[{canvas, tabName}]`,
+ * already composited by the caller (see DashboardCanvasEditor's exportPDFAllTabs, which has
+ * to switch the active tab and wait for it to actually render before each capture — hidden
+ * tabs' widgets aren't mounted in the DOM, so there's nothing here compositeDashboardCanvas
+ * could capture on its own without that). */
+export function exportDashboardPDFMultiPage(pages, dashboardName) {
+  if (!pages.length) return;
+  let pdf = null;
+  pages.forEach(({ canvas }, i) => {
+    const imgData = canvas.toDataURL('image/png');
+    const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
+    if (i === 0) {
+      pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
+    } else {
+      pdf.addPage([canvas.width, canvas.height], orientation);
+    }
+    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+  });
   pdf.save(`${dashboardName || 'dashboard'}.pdf`);
 }

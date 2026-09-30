@@ -1,17 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import FormModal from '../../components/FormModal';
 import DataTable from '../../components/DataTable';
 import Button from '../../components/Button';
+import { cn } from '../../utils/common';
 import GroupManagementActions from '../../store/actions/groupManagement-actions';
 
 const COLUMNS = [
     { label: 'Group Name',   key: 'group_name' },
     { label: 'Description',  key: 'description' },
-    { label: 'Members (Admins)', key: '_members' },
+    { label: 'Members', key: '_members' },
     { label: 'Created At',   key: 'create_time' },
     { label: 'Actions',      key: '_actions' },
 ];
+
+const ROLE_FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'admin', label: 'Admins' },
+    { key: 'user', label: 'Users' },
+];
+
+const isAdminRole = (role) => String(role || '').toLowerCase() === 'admin';
 
 const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
@@ -30,6 +39,8 @@ const GroupManagement = () => {
     const [description, setDescription] = useState('');
     const [memberIds, setMemberIds] = useState([]);
     const [originalMemberIds, setOriginalMemberIds] = useState([]);
+    const [roleFilter, setRoleFilter] = useState('all');
+    const [memberSearch, setMemberSearch] = useState('');
     const [nameError, setNameError] = useState('');
     const [formError, setFormError] = useState('');
 
@@ -54,6 +65,8 @@ const GroupManagement = () => {
         setOriginalMemberIds([]);
         setNameError('');
         setFormError('');
+        setRoleFilter('all');
+        setMemberSearch('');
         setModalOpen(true);
     };
 
@@ -65,11 +78,31 @@ const GroupManagement = () => {
         setOriginalMemberIds(g.member_ids || []);
         setNameError('');
         setFormError('');
+        setRoleFilter('all');
+        setMemberSearch('');
         setModalOpen(true);
     };
 
     const toggleMember = (value) => {
         setMemberIds((prev) => prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]);
+    };
+
+    const visibleUsers = useMemo(() => {
+        const q = memberSearch.trim().toLowerCase();
+        return (userList || []).filter((u) => {
+            if (roleFilter === 'admin' && !isAdminRole(u.role)) return false;
+            if (roleFilter === 'user' && isAdminRole(u.role)) return false;
+            return !q || u.label.toLowerCase().includes(q);
+        });
+    }, [userList, roleFilter, memberSearch]);
+
+    const allVisibleSelected = visibleUsers.length > 0 && visibleUsers.every((u) => memberIds.includes(u.value));
+
+    const toggleAllVisible = () => {
+        const visibleIds = visibleUsers.map((u) => u.value);
+        setMemberIds((prev) => allVisibleSelected
+            ? prev.filter((id) => !visibleIds.includes(id))
+            : [...prev, ...visibleIds.filter((id) => !prev.includes(id))]);
     };
 
     const handleSave = () => {
@@ -234,9 +267,45 @@ const GroupManagement = () => {
                     </div>
 
                     <div>
-                        <label className={labelCls}>Members (Admins Only)</label>
+                        <div className="flex items-center justify-between mb-1">
+                            <label className={cn(labelCls, 'mb-0')}>Members ({memberIds.length} selected)</label>
+                            <button
+                                type="button"
+                                onClick={toggleAllVisible}
+                                disabled={!visibleUsers.length}
+                                className="text-xs text-orange-600 hover:underline disabled:text-slate-300 disabled:no-underline"
+                            >
+                                {allVisibleSelected ? 'Clear shown' : 'Select shown'}
+                            </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <div className="inline-flex rounded border border-slate-300 overflow-hidden" role="group" aria-label="Filter members by role">
+                                {ROLE_FILTERS.map((f) => (
+                                    <button
+                                        key={f.key}
+                                        type="button"
+                                        onClick={() => setRoleFilter(f.key)}
+                                        aria-pressed={roleFilter === f.key}
+                                        className={cn(
+                                            'px-3 py-1 text-xs font-medium',
+                                            roleFilter === f.key ? 'bg-orange-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                                        )}
+                                    >
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <input
+                                type="text"
+                                value={memberSearch}
+                                onChange={(e) => setMemberSearch(e.target.value)}
+                                placeholder="Search members"
+                                aria-label="Search members"
+                                className={cn(inputCls, 'flex-1 min-w-[8rem] !py-1 text-xs')}
+                            />
+                        </div>
                         <div className="border border-slate-200 rounded max-h-48 overflow-y-auto divide-y divide-slate-100">
-                            {userList?.length ? userList.map((u) => (
+                            {visibleUsers.length ? visibleUsers.map((u) => (
                                 <label key={u.value} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
                                     <input
                                         type="checkbox"
@@ -244,10 +313,11 @@ const GroupManagement = () => {
                                         onChange={() => toggleMember(u.value)}
                                         className="accent-orange-500"
                                     />
-                                    {u.label}
+                                    <span className="flex-1">{u.label}</span>
+                                    {u.role && <span className="text-[10px] text-slate-400">{u.role}</span>}
                                 </label>
                             )) : (
-                                <p className="px-3 py-3 text-xs text-slate-400">No users found.</p>
+                                <p className="px-3 py-3 text-xs text-slate-400">{userList?.length ? 'No members match the filter.' : 'No users found.'}</p>
                             )}
                         </div>
                     </div>

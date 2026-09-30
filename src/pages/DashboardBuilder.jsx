@@ -11,9 +11,13 @@ import ThemeManager from '../components/DashboardBuilder/themes/ThemeManager';
 import ChartLibrary from '../components/DashboardBuilder/charts/ChartLibrary';
 import FilterPanel from '../components/DashboardBuilder/filters/FilterPanel';
 import FiltersToggleButton from '../components/DashboardBuilder/filters/FiltersToggleButton';
+import CustomTooltip from '../components/CustomTooltip';
+import { notifyWidgetsChanged } from '../store/actions/widgetEvents';
+import { buildLocalLayoutAndWidgets, LOCAL_PERSISTABLE_TYPES, TABS_SENTINEL_ID } from '../components/DashboardBuilder/dashboard/buildLocalLayoutAndWidgets';
 import {
   createDashboard, updateDashboard, deleteDashboardBackend, cloneDashboardBackend,
-  publishDashboard, attachWidget, detachWidget, listDashboards, getDashboardDetail,
+  publishDashboard, attachWidget, detachWidget, listDashboards, getDashboardDetail, updateWidget,
+  listWidgets, deleteWidget,
 } from '../store/actions/dashboardBuilder-actions';
 
 // Only read once, for the one-time migration of dashboards created before the backend
@@ -25,6 +29,78 @@ const LEGACY_STORAGE_KEY = 'dy3-dashboard-builder-layouts';
 // (a plain boolean), not `status`.
 function isPublished(dashboard) {
   return dashboard?.is_published === true;
+}
+
+// Strips a trailing " (Copy)" (the old fixed suffix) or " (N)" (the new progressive one) so
+// cloning an already-cloned dashboard suggests "A (2)" next, not "A (Copy) (Copy)" or "A (1)
+// (1)" piling up — cloning "A (3)" again suggests "A (4)", not "A (3) (1)".
+function baseDashboardName(name) {
+  return (name || '').replace(/\s*\(Copy\)$/i, '').replace(/\s*\(\d+\)$/, '').trim();
+}
+
+// Lowest N such that "<baseName> (N)" isn't already taken among existingNames — avoids the
+// confusing "two dashboards both named 'A (Copy)'" case the fixed suffix always produced past
+// the first clone (per the conversation this was reported in).
+function nextCopyName(baseName, existingNames) {
+  let n = 1;
+  while (existingNames.has(`${baseName} (${n})`)) n += 1;
+  return `${baseName} (${n})`;
+}
+
+// Pairs each NEW widget (from a duplicate_widgets:true clone response) back to the ORIGINAL
+// widget it was cloned from, matched on name/chart_type/datasource_id — the only signal
+// available, since new widgets still carry these unchanged at the moment this runs (before any
+// renaming). Computed once and shared by both remapClonedLayoutForNewWidgets and the rename
+// step in cloneDashboard, so the two can never disagree about which original a given new widget
+// maps to (a real risk if each ran its own independent same-key matching pass, especially when
+// several widgets share an identical name+type+datasource).
+function pairClonedWidgetsWithOriginal(originalDashboard, newWidgets) {
+  const keyFor = (title, chartType, datasourceId) => `${title}|${chartType || ''}|${datasourceId || ''}`;
+  // Grouped into arrays (not a single entry per key) so two ORIGINALLY-identical widgets
+  // (same name/type/datasource) each still get their own distinct pairing instead of both
+  // collapsing onto one — paired off in encounter order against their same-key new copies.
+  const originalByKey = new Map();
+  (originalDashboard.layout || []).forEach((l) => {
+    const w = originalDashboard.widgets?.[l.i];
+    if (!w || w.dataSource?.type !== 'chartLibrary') return;
+    const key = keyFor(w.title, w.dataSource.chartType, w.dataSource.datasourceId);
+    if (!originalByKey.has(key)) originalByKey.set(key, []);
+    originalByKey.get(key).push(l);
+  });
+  const pairs = [];
+  (newWidgets || []).forEach((w) => {
+    const key = keyFor(w.name, w.chart_type, w.datasource_id);
+    const original = originalByKey.get(key)?.shift();
+    // No match found (name/type/datasource drifted somehow, or more new widgets than
+    // originals) — that one widget just keeps today's degraded layout behavior (position via
+    // w.position, no tabId) and its auto-generated rename, rather than this whole pass
+    // silently failing for everything.
+    if (original) pairs.push({ original, widget: w });
+  });
+  return pairs;
+}
+
+// Fixes a real backend gap: with duplicate_widgets:true, the clone endpoint copies
+// `dashboard.layout` wholesale (position/tabId/style all correct) AND creates brand-new
+// widget copies with new ids — but doesn't rewrite the layout's `i: "w_<oldId>"` keys onto
+// those new ids. Confirmed live: a cloned dashboard's `layout` entries still reference the
+// ORIGINAL widget ids, which don't exist on the new dashboard at all, so
+// buildLocalLayoutAndWidgets' own `w_${w.id}` lookup misses for every widget — position still
+// mostly survives via its own `w.position` fallback, but tabId has no such fallback, so every
+// duplicated widget silently lands on the default tab instead of its original one (see the
+// conversation this was diagnosed in, with a live network capture proving the id mismatch).
+// Fixed here rather than waiting on a backend fix — rewrites `i` to the new widget's id and
+// keeps everything else (position/tabId/style) exactly as the backend already cloned it.
+function remapClonedLayoutForNewWidgets(originalDashboard, clonedLayout, pairs) {
+  const remapped = pairs.map(({ original, widget }) => ({ ...original, i: `w_${widget.id}` }));
+  // Text Box/Shape/Slicer/the tabs-sentinel entries were never part of the id-mismatch (they
+  // aren't in `attachedWidgets` at all — their own `i` is self-contained, not a widget
+  // reference) — carried through from the backend's response unchanged.
+  const passthrough = (clonedLayout || []).filter((l) => {
+    const isRealWidgetEntry = /^w_/.test(l.i) && originalDashboard.widgets?.[l.i]?.dataSource?.type === 'chartLibrary';
+    return !isRealWidgetEntry;
+  });
+  return [...remapped, ...passthrough];
 }
 
 const STATIC_DASHBOARDS = [
@@ -54,67 +130,18 @@ function clearLegacyLocalDashboards() {
   }
 }
 
-// Only what's actually persisted on the backend is ever shown — a dashboard's local
-// `widgets`/`layout` are always rebuilt fresh from its attached real Chart Library widget
-// rows, never from any local-only/mock state.
-//
-// Position source, in priority order:
-//   1. `dashboardLayout` (dashboard.layout, the plain array PATCH /dashboards/{id} already
-//      saves successfully on every handleSave) — its `i` values are always `w_<widgetId>`
-//      (see the localId below), a stable, deterministic key back to the real widget, so this
-//      reliably reflects the latest drag position for any widget that's already attached.
-//   2. Each attached widget's own `.position` (set once, at first attach) — used as a
-//      fallback for a widget dashboard.layout doesn't (yet) mention.
-// This split exists because POST /dashboards/{id}/widgets (which sets #2) was confirmed via
-// a live 409 CONFLICT to be create-only — it can't update an already-attached widget's
-// position — while PATCH /dashboards/{id} (which sets #1) has no such restriction and always
-// succeeds. So dashboard.layout is actually the reliable, live-updating source; the
-// per-widget position is the stale one.
-function buildLocalLayoutAndWidgets(attachedWidgets, dashboardLayout) {
-  const layoutByLocalId = Object.fromEntries((dashboardLayout || []).map((l) => [l.i, l]));
-  const widgets = {};
-  const layout = [];
-  (attachedWidgets || []).forEach((w, idx) => {
-    const localId = `w_${w.id}`;
-    const fromDashboardLayout = layoutByLocalId[localId];
-    widgets[localId] = {
-      type: 'chartLibrary',
-      title: w.name || 'Widget',
-      // `datasource_id` is needed for cross-filtering's "same datasourceId" match strictness
-      // (DashboardCanvasEditor.jsx's handleWidgetPointClickRef) — without it, every widget
-      // loaded from a saved dashboard silently had no datasourceId at all (only widgets
-      // freshly added in the current editing session got one, via addWidget's later async
-      // updateWidget call), making that safety check permanently inert for real dashboards.
-      dataSource: { type: 'chartLibrary', widgetId: w.id, chartType: w.chart_type, mapping: w.mapping, datasourceId: w.datasource_id },
-      // Per-placement style has no dedicated backend field — it rides along inside each
-      // dashboard.layout entry (see handleSave below), the same JSON array that already
-      // reliably round-trips position via PATCH /dashboards/{id}. Without this, every
-      // save-then-refetch silently reset every real widget's style back to {}.
-      style: fromDashboardLayout?.style || {},
-    };
-    const pos = fromDashboardLayout || w.position || {};
-    layout.push({
-      i: localId,
-      x: pos.x ?? (idx % 3) * 12,
-      y: pos.y ?? Math.floor(idx / 3) * 8,
-      w: pos.w ?? 12,
-      h: pos.h ?? 8,
-    });
-  });
-  return { widgets, layout };
-}
-
 // Builds a full local dashboard record from a backend response — shared by the initial
 // detail hydration, handleSave's create/update, and cloneDashboard, so there's one place
 // that knows how a backend dashboard+attached-widgets response maps to our local shape.
 function buildRecordFromBackend(dashboard, attachedWidgets = [], prevRecord = null) {
-  const { widgets, layout } = buildLocalLayoutAndWidgets(attachedWidgets, dashboard.layout);
+  const { widgets, layout, tabs } = buildLocalLayoutAndWidgets(attachedWidgets, dashboard.layout);
   return {
     id: String(dashboard.id),
     backendId: dashboard.id,
     name: dashboard.name,
     layout,
     widgets,
+    tabs,
     globalFilters: dashboard.global_filters || [],
     // DashboardCanvasEditor.jsx re-fetches these directly via getDashboardData(backendId) on
     // its own mount, so this local copy currently isn't read anywhere for the editor view —
@@ -223,6 +250,10 @@ const DashboardBuilder = () => {
   const [dashboardSearch, setDashboardSearch] = useState('');
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  // Per-widget selection (widgetId set), not a single all-or-nothing toggle — the "used
+  // elsewhere?" risk the checkbox itself warns about only applies to SOME of a dashboard's
+  // widgets in practice, so picking exactly which ones is safer than an all-or-nothing choice.
+  const [deleteWidgetIds, setDeleteWidgetIds] = useState(() => new Set());
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   // DashboardCanvasEditor exposes exportCSV/exportPNG/exportPDF via useImperativeHandle —
   // this preview panel has its own header (outside DashboardCanvasEditor's own render
@@ -333,7 +364,17 @@ const DashboardBuilder = () => {
     }
   };
 
-  const allDashboards = [...STATIC_DASHBOARDS, ...customDashboards];
+  // Newest first — customDashboards itself is in whatever order the backend list/create/clone
+  // calls happened to return/append in (oldest-created first, since a new one is always
+  // appended to the end via `[...prev, record]`), which read as "backwards" in the sidebar —
+  // see the conversation this was reported in. Sorted here, at render, rather than keeping
+  // customDashboards itself sorted, so every setCustomDashboards call site (create, clone,
+  // rename, delete, migration) doesn't also need to know about ordering. STATIC_DASHBOARDS
+  // stay pinned first, unchanged — they're fixed built-in entries with no real createdAt.
+  const sortedCustomDashboards = [...customDashboards].sort(
+    (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+  );
+  const allDashboards = [...STATIC_DASHBOARDS, ...sortedCustomDashboards];
   // Dashboard list search — name only (no "type" concept here, unlike ChartLibrary.jsx's own
   // chart-type filter, since every entry in this list is just "a dashboard", nothing to
   // narrow by beyond its name).
@@ -450,20 +491,45 @@ const DashboardBuilder = () => {
   const askDelete = (dashboard) => {
     setDeleteTarget(dashboard);
     setDeleteModalOpen(true);
+    setDeleteWidgetIds(new Set());
   };
 
   // Backend-primary: every dashboard has a backendId by construction now, so delete/clone
   // always go through the backend first and mirror local state off the result — rather than
   // updating local state optimistically and syncing best-effort, which was the old
   // localStorage-primary behavior.
+  // `deleteWidgetIds` — mirrors clone's own duplicate_widgets checkbox in spirit (an explicit
+  // opt-in, default off/none-selected, to also delete this dashboard's OWN attached widgets in
+  // the same action rather than deleting the dashboard then separately hunting down and
+  // deleting each of its now-orphaned widgets from the Charts tab by hand) — but per-widget,
+  // not all-or-nothing, since "used elsewhere?" risk (see each checkbox's own label) usually
+  // only applies to SOME of a dashboard's widgets, not all of them uniformly. Deliberately NOT
+  // safety-checked against actual usage elsewhere — same as clone's own checkbox, this trusts
+  // an explicit, clearly-labeled per-widget choice rather than attempting a cheap-but-incomplete
+  // usage check (there's no existing endpoint for "which dashboards use widget X" to check
+  // against, unlike DatasourceManager's own datasource-delete blast-radius check, which can
+  // filter the one existing listWidgets() call by datasource_id).
   const confirmDelete = () => {
     if (!deleteTarget) return;
     setDeleteModalOpen(false);
+    const widgetIdsToDelete = [...deleteWidgetIds];
     setDeleteTarget(null);
+    setDeleteWidgetIds(new Set());
     deleteDashboardBackend(deleteTarget.backendId)
-      .then(() => {
+      .then(async () => {
         setCustomDashboards((prev) => prev.filter((d) => d.id !== deleteTarget.id));
         setPreviewId((prev) => (prev === deleteTarget.id ? null : prev));
+        if (widgetIdsToDelete.length) {
+          // Best-effort, per-widget — one widget already gone/failing to delete (e.g. a stale
+          // id, or a race with something else) shouldn't block cleaning up the rest.
+          await Promise.all(widgetIdsToDelete.map((id) => deleteWidget(id).catch((e) => (
+            console.error('[DashboardBuilder] Failed to delete widget', id, 'while deleting dashboard:', e)
+          ))));
+          // Keeps any already-mounted Charts list (ChartLibrary.jsx's own tab, another open
+          // dashboard's "Your Widgets" panel) in sync — same call cloneDashboard's own
+          // duplicateWidgets path already makes for the mirror-image "widgets appeared" case.
+          notifyWidgetsChanged();
+        }
       })
       .catch((e) => setSyncError(e.message));
   };
@@ -472,16 +538,134 @@ const DashboardBuilder = () => {
   // composite {grid, widgets} blob — and its attached real Chart Library widgets) and
   // builds the local record straight from that response, rather than a client-side deep
   // clone of possibly-not-yet-hydrated local state.
-  const cloneDashboard = (dashboard) => {
-    const name = `${dashboard.name} (Copy)`;
-    cloneDashboardBackend(dashboard.backendId, { name })
-      .then(({ dashboard: backendDashboard, widgets: attachedWidgets }) => {
+  // `duplicateWidgets` — see cloneDashboardBackend's own doc comment: false (default) has the
+  // clone share the same widget records as the original (editing one edits both); true gives
+  // it its own independent copy of every widget. Dashboard-level, not per-widget.
+  // `name` is chosen up front in the Clone dialog itself (defaulted via nextCopyName, but
+  // freely editable there) rather than always hardcoded to "<name> (Copy)". `widgetNames` —
+  // same idea, per-widget: an optional { [originalLayoutId]: name } override map, also editable
+  // in that same dialog when "duplicate widgets" is checked (originalLayoutId is the ORIGINAL
+  // dashboard's own `l.i`, e.g. "w_<oldWidgetId>" — see the ConfirmModal below, which builds
+  // this keyed exactly that way). Any widget with no override (or an override that fails to
+  // resolve to a pair — see pairClonedWidgetsWithOriginal) falls back to an auto-generated
+  // progressive name, same as before this override existed.
+  const cloneDashboard = (dashboard, duplicateWidgets = false, name, widgetNames = {}) => {
+    cloneDashboardBackend(dashboard.backendId, { name: name || `${dashboard.name} (Copy)`, duplicateWidgets })
+      .then(async ({ dashboard: backendDashboard, widgets: attachedWidgets }) => {
         console.log('[DashboardBuilder] cloneDashboardBackend response.dashboard:', backendDashboard);
+        // Computed once, while attachedWidgets still carry the same name/chart_type/
+        // datasource_id they were cloned from — shared by the layout fix AND the rename step
+        // below so the two can't disagree about which original a given new widget maps to
+        // (see pairClonedWidgetsWithOriginal's own doc comment).
+        if (duplicateWidgets) {
+          const pairs = pairClonedWidgetsWithOriginal(dashboard, attachedWidgets);
+
+          const fixedLayout = remapClonedLayoutForNewWidgets(dashboard, backendDashboard.layout, pairs);
+          backendDashboard = { ...backendDashboard, layout: fixedLayout };
+          // Persisted immediately, not just applied to this in-memory record — otherwise the
+          // backend's own still-stale layout (old widget ids) would silently come back the
+          // next time this cloned dashboard is loaded, reintroducing the exact bug this fixes.
+          try {
+            await updateDashboard(backendDashboard.id, { layout: fixedLayout });
+          } catch (e) {
+            console.error('[DashboardBuilder] Failed to persist remapped clone layout:', e);
+          }
+
+          // duplicateWidgets:true's own new widget copies come back with the SAME name as the
+          // original (the backend doesn't currently suffix them) — same confusion the
+          // dashboard clone itself avoids via nextCopyName above, and for the same reason:
+          // widgets are a single shared Chart Library across every dashboard (not scoped to
+          // just this one), so cloning from several dashboards over time previously left
+          // multiple *different* widgets all literally named "Availability (Copy)" with
+          // nothing to tell them apart — see the conversation this was reported in.
+          // `widgetNames[original.i]` (typed in the Clone dialog) wins when present; otherwise
+          // falls back to progressive numbering, checked against every OTHER widget's name in
+          // the whole library (not just this dashboard's own) via `takenNames`, updated as each
+          // one is assigned so two widgets renamed in the SAME clone batch can't collide with
+          // each other either — including a custom-typed name, so a later auto-generated one
+          // can't accidentally collide with a name the user just typed by hand. Sequential (not
+          // Promise.all) for that same reason. Best-effort per widget; a rename failing here
+          // still leaves a perfectly usable (just unrenamed) widget, so it's not worth
+          // blocking/erroring the whole clone over.
+          let takenNames;
+          try {
+            takenNames = new Set((await listWidgets()).map((w) => w.name));
+          } catch {
+            takenNames = new Set(); // best-effort — falls back to un-deduplicated "(1)" for every widget rather than blocking the clone
+          }
+          const newNameByWidgetId = new Map();
+          for (const { original, widget } of pairs) {
+            const custom = widgetNames?.[original.i]?.trim();
+            const newName = custom || nextCopyName(baseDashboardName(widget.name), takenNames);
+            takenNames.add(newName);
+            newNameByWidgetId.set(widget.id, newName);
+          }
+          const renamed = [];
+          for (const w of attachedWidgets) {
+            const newName = newNameByWidgetId.get(w.id);
+            if (!newName) { renamed.push(w); continue; } // no pairing found — leave unrenamed rather than guessing
+            try {
+              await updateWidget(w.id, { name: newName });
+              renamed.push({ ...w, name: newName });
+            } catch {
+              renamed.push(w);
+            }
+          }
+          attachedWidgets = renamed;
+        }
         const record = buildRecordFromBackend(backendDashboard, attachedWidgets);
         setCustomDashboards((prev) => [...prev, record]);
         setPreviewId(record.id);
+        // duplicateWidgets:true creates brand-new widget records server-side — without this,
+        // any already-mounted Charts list (ChartLibrary.jsx's own "Charts" tab, or another
+        // open dashboard's "Your Widgets" panel) keeps showing whatever it fetched at ITS OWN
+        // mount time, not these newly-created widgets, since nothing told it to refresh — see
+        // the conversation this was reported in ("these lists shall always be in sync"). Every
+        // other place in the app that creates/deletes a widget already calls this same
+        // notifyWidgetsChanged()/subscribeWidgetsChanged() pair; cloning just hadn't been
+        // wired into it yet. Harmless to call even when duplicateWidgets is false — no widgets
+        // changed in that case, so every subscriber's refetch is just a no-op extra request.
+        if (duplicateWidgets) notifyWidgetsChanged();
       })
       .catch((e) => setSyncError(e.message));
+  };
+  // Pending confirm for the Clone button — { dashboard } | null — asks whether the clone's
+  // widgets should be independent copies (duplicate_widgets) before actually cloning, rather
+  // than always defaulting to the shared-reference behavior silently.
+  const [cloneTarget, setCloneTarget] = useState(null);
+  const [cloneDuplicateWidgets, setCloneDuplicateWidgets] = useState(false);
+  const [cloneName, setCloneName] = useState('');
+  // Per-widget name overrides for a duplicate_widgets:true clone — keyed by the ORIGINAL
+  // dashboard's own layout id (`l.i`, e.g. "w_<oldWidgetId>"), same key cloneDashboard's
+  // `widgetNames` param expects (matched there via pairClonedWidgetsWithOriginal). Populated
+  // with auto-suggested progressive names (loadCloneWidgetNameSuggestions below) the moment
+  // "duplicate widgets" gets checked, then freely editable in the dialog.
+  const [cloneWidgetNames, setCloneWidgetNames] = useState({});
+  const [cloneWidgetNamesLoading, setCloneWidgetNamesLoading] = useState(false);
+
+  // Suggests a progressive name (same scheme as nextCopyName) for every real widget on
+  // `dashboard`, checked against every OTHER widget's name in the whole Chart Library (not just
+  // this dashboard's own — widgets are a shared, cross-dashboard resource) so the suggestions
+  // shown are already collision-free, not just a starting guess the user has to fix by hand.
+  const loadCloneWidgetNameSuggestions = async (dashboard) => {
+    const realEntries = (dashboard.layout || [])
+      .map((l) => ({ l, w: dashboard.widgets?.[l.i] }))
+      .filter(({ w }) => w?.dataSource?.type === 'chartLibrary');
+    setCloneWidgetNamesLoading(true);
+    let taken;
+    try {
+      taken = new Set((await listWidgets()).map((w) => w.name));
+    } catch {
+      taken = new Set();
+    }
+    const names = {};
+    realEntries.forEach(({ l, w }) => {
+      const suggestion = nextCopyName(baseDashboardName(w.title), taken);
+      taken.add(suggestion);
+      names[l.i] = suggestion;
+    });
+    setCloneWidgetNames(names);
+    setCloneWidgetNamesLoading(false);
   };
 
   const handlePublish = () => {
@@ -508,7 +692,7 @@ const DashboardBuilder = () => {
   // charts, then re-fetches the dashboard fresh so local state reflects exactly what the
   // backend now holds (mock/local-only widgets are never round-tripped — see
   // buildLocalLayoutAndWidgets above).
-  const handleSave = async ({ name, layout, widgets }) => {
+  const handleSave = async ({ name, layout, widgets, tabs }) => {
     if (savingDashboard) return;
     setSavingDashboard(true);
     try {
@@ -533,19 +717,40 @@ const DashboardBuilder = () => {
         const canonicalId = w?.dataSource?.type === 'chartLibrary' && w.dataSource.widgetId
           ? `w_${w.dataSource.widgetId}`
           : item.i;
-        return { ...item, i: canonicalId, style: w?.style || {} };
+        return {
+          ...item,
+          i: canonicalId,
+          style: w?.style || {},
+          // Text Box/Shape's whole definition rides along here too (type/title), not just
+          // their style — see LOCAL_PERSISTABLE_TYPES' own doc comment and
+          // buildLocalLayoutAndWidgets' matching reconstruction step, which reads these same
+          // keys back out. A real chartLibrary widget doesn't need this (its type is always
+          // implied by simply being in `attachedWidgets` at all).
+          ...(w && LOCAL_PERSISTABLE_TYPES.has(w.type) ? { type: w.type, title: w.title } : {}),
+          // Slicer — just enough to relink this tile to its real backend slicer record on the
+          // next load (type/title/slicerId), same reasoning as Text Box/Shape above. The
+          // slicer's own data (available_values/selected_values) stays backend-owned via
+          // createSlicer/updateSlicer, not duplicated here.
+          ...(w?.type === 'slicer' && w.dataSource?.slicerId ? { type: 'slicer', title: w.title, slicerId: w.dataSource.slicerId } : {}),
+        };
       });
+      // Tabs list rides along as one extra reserved-id entry in the same layout array (see
+      // TABS_SENTINEL_ID's own doc comment above) — appended here, at save time, rather than
+      // being part of `layoutWithStyle` itself, since it isn't a per-widget entry.
+      const layoutToSave = tabs && tabs.length > 0
+        ? [...layoutWithStyle, { i: TABS_SENTINEL_ID, tabs }]
+        : layoutWithStyle;
       let dashboard;
       let backendId = editingExisting?.backendId;
       if (backendId) {
-        ({ dashboard } = await updateDashboard(backendId, { name, layout: layoutWithStyle }));
+        ({ dashboard } = await updateDashboard(backendId, { name, layout: layoutToSave }));
       } else {
         // Phase 19c — carries along whatever style/theme/filters were staged in the
         // editor's popovers before this first save (only reaches here via
         // onDashboardStyleState/onFiltersState, since the editor itself has no backendId
         // yet to persist against on its own).
         ({ dashboard } = await createDashboard({
-          name, layout: layoutWithStyle, theme: pendingDashboardStyle, theme_id: pendingThemeId,
+          name, layout: layoutToSave, theme: pendingDashboardStyle, theme_id: pendingThemeId,
           global_filters: pendingGlobalFilters,
         }));
         backendId = dashboard.id;
@@ -598,16 +803,18 @@ const DashboardBuilder = () => {
     // regions (the preview panel/canvas above). Exactly filling the parent means there's
     // nothing left to overflow, so that outer scroll never activates for this page.
     <div className="flex flex-col h-full overflow-hidden p-5 gap-4">
-      {/* Overrides the global index.css scrollbar rule (always-visible orange thumb) just
-          for this preview region — hidden at rest, thin and neutral-colored only on hover,
-          same pattern KpiMonitoringDashboard.jsx already uses for its own table widgets. */}
+      {/* Overrides the global index.css scrollbar rule (an always-visible, 4px orange thumb,
+          applied to every scrollable element in the app) for just this preview region — hidden
+          entirely, still fully scrollable by wheel/drag/keyboard. A bare class selector like
+          .dbe-preview-scroll::-webkit-scrollbar loses to that global rule on specificity (its
+          `html[data-theme]` ancestor selector out-scores this rule's plain class), which is why
+          this was stuck always-on despite the code already trying to hide it — same bug, same
+          fix, as DashboardCanvasEditor.jsx's own .dbe-left-panel/.dbe-chart-list/.dbe-canvas-wrap
+          (see that file for the fuller writeup). Scoped to this one class only — doesn't touch
+          the global rule or any other page's own scrollbar. */}
       <style>{`
         .dbe-preview-scroll { scrollbar-width: none; }
-        .dbe-preview-scroll::-webkit-scrollbar { width: 0; height: 0; }
-        .dbe-preview-scroll:hover { scrollbar-width: thin; }
-        .dbe-preview-scroll:hover::-webkit-scrollbar { width: 6px; height: 6px; }
-        .dbe-preview-scroll:hover::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.25); border-radius: 3px; }
-        .dbe-preview-scroll:hover::-webkit-scrollbar-track { background: transparent; }
+        html .dbe-preview-scroll::-webkit-scrollbar { width: 0; height: 0; }
       `}</style>
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -673,7 +880,7 @@ const DashboardBuilder = () => {
           own two-card row below (each child owns its own rounded/border/shadow/bg card
           instead of one shared card wrapping both — see ChartLibrary.jsx's own left-column
           and side-panel divs for where that styling now lives). */}
-      <div className={`flex-1 min-h-0 ${view === 'charts' ? 'flex' : 'hidden'}`}>
+      <div className={`flex-1 min-h-0 min-w-0 ${view === 'charts' ? 'flex' : 'hidden'}`}>
         <ChartLibrary
           ref={chartLibraryRef}
           prefill={chartsPrefill}
@@ -734,6 +941,7 @@ const DashboardBuilder = () => {
                     initialName={editingExisting?.name}
                     initialLayout={editingExisting?.layout}
                     initialWidgets={editingExisting?.widgets}
+                    initialTabs={editingExisting?.tabs || []}
                     editable
                     onSave={handleSave}
                     onCancel={backToBrowse}
@@ -749,8 +957,8 @@ const DashboardBuilder = () => {
               </div>
             ) : previewDashboard ? (
               <>
-                <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-white/40">
-                  <div className="flex items-center gap-4">
+                <div className="shrink-0 flex items-center gap-3 flex-wrap px-4 py-2.5 border-b border-white/40">
+                  <div className="shrink-0 flex items-center gap-4">
                     <div>
                       <div className="flex items-center gap-2">
                         <div className="text-sm font-semibold text-slate-800">{previewDashboard.name}</div>
@@ -765,7 +973,7 @@ const DashboardBuilder = () => {
                       <div className="text-xs text-slate-400">
                         {previewDashboard.static
                           ? previewDashboard.description
-                          : `${Object.keys(previewDashboard.widgets || {}).length} widget(s) · custom`}
+                          : `${Object.keys(previewDashboard.widgets || {}).length} widget(s)`}
                       </div>
                     </div>
                     {/* Pinned to the extreme left, right next to the dashboard name — not
@@ -773,10 +981,6 @@ const DashboardBuilder = () => {
                         right, so Filters reads as a distinct dashboard-level control. */}
                     {!previewDashboard.static && previewDashboard.backendId && (
                       <div className="flex items-center gap-2 pl-4 ml-1 border-l border-slate-200">
-                        {/* Only the "Add and edit filters" gear stays here — the filter-VALUE
-                            strip itself renders as its own full-width strap above the canvas
-                            below (matches DashboardCanvasEditor.jsx's own editable/embedded
-                            strap, instead of squeezing the value controls into this header). */}
                         <FiltersToggleButton
                           filters={previewFilters}
                           datasourceOptions={previewFilterDatasourceOptions}
@@ -785,18 +989,39 @@ const DashboardBuilder = () => {
                       </div>
                     )}
                   </div>
+                  {/* The filter-VALUE strip itself fills the header's own unused middle space —
+                      same treatment as DashboardCanvasEditor.jsx's own toolbar (see its doc
+                      comment) — instead of always reserving its own full-width strap below,
+                      even collapsed to its compact chip. previewFilters.length check: FilterPanel
+                      renders nothing with none configured, so skip the space for it entirely. */}
+                  {!previewDashboard.static && previewDashboard.backendId && previewFilters.length > 0 && (
+                    <div className="min-w-[200px]" style={{ flex: 1 }}>
+                      <FilterPanel
+                        filters={previewFilters}
+                        onApply={(rows) => previewEditorRef.current?.applyFilters(rows)}
+                        onClear={() => previewEditorRef.current?.clearFilterValues()}
+                        datasourceOptions={previewFilterDatasourceOptions}
+                      />
+                    </div>
+                  )}
                   {!previewDashboard.static && (
-                    <div className="flex items-center gap-2">
+                    <div className="shrink-0 flex items-center gap-2 ml-auto">
                       <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        title="Preview fullscreen (read-only, as it'll look embedded elsewhere)"
-                        aria-label="Preview fullscreen"
-                        onClick={() => setPreviewFullscreen(true)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
-                      >
-                        <Maximize2 size={14} />
-                      </button>
+                      <CustomTooltip text={previewDashboard.published ? 'Preview fullscreen (read-only, as it\'ll look embedded elsewhere)' : 'Publish this dashboard first to preview it fullscreen'}>
+                        <button
+                          type="button"
+                          aria-label="Preview fullscreen"
+                          disabled={!previewDashboard.published}
+                          onClick={() => setPreviewFullscreen(true)}
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-colors ${
+                            previewDashboard.published
+                              ? 'text-slate-500 border-slate-200 bg-white hover:bg-slate-50'
+                              : 'text-slate-300 border-slate-100 bg-slate-50 cursor-not-allowed'
+                          }`}
+                        >
+                          <Maximize2 size={14} />
+                        </button>
+                      </CustomTooltip>
                       <Button variant="secondary" size="sm" className="h-8" icon={<Pencil size={14} />} onClick={() => openEditor(previewDashboard)}>
                         Edit
                       </Button>
@@ -825,7 +1050,13 @@ const DashboardBuilder = () => {
                         type="button"
                         title="Clone dashboard"
                         aria-label="Clone dashboard"
-                        onClick={() => cloneDashboard(previewDashboard)}
+                        onClick={() => {
+                          setCloneDuplicateWidgets(false);
+                          setCloneTarget(previewDashboard);
+                          setCloneWidgetNames({});
+                          const existingNames = new Set(allDashboards.map((d) => d.name));
+                          setCloneName(nextCopyName(baseDashboardName(previewDashboard.name), existingNames));
+                        }}
                         className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
                       >
                         <Copy size={14} />
@@ -861,17 +1092,22 @@ const DashboardBuilder = () => {
                     <button type="button" className="text-amber-500 hover:text-amber-700" onClick={() => setSyncError(null)}>Dismiss</button>
                   </div>
                 )}
-                <div className="dbe-preview-scroll flex-1 min-h-0 overflow-y-auto p-3">
-                  {!previewDashboard.static && previewDashboard.backendId && (
-                    <div className="dbe-filter-strap mb-2">
-                      <FilterPanel
-                        filters={previewFilters}
-                        onApply={(rows) => previewEditorRef.current?.applyFilters(rows)}
-                        onClear={() => previewEditorRef.current?.clearFilterValues()}
-                        datasourceOptions={previewFilterDatasourceOptions}
-                      />
-                    </div>
-                  )}
+                {/* flex flex-col + overflow-hidden here, NOT overflow-y-auto — this wrapper
+                    used to be a plain block with its own overflow-y-auto around BOTH the filter
+                    strap and DashboardCanvasEditor. DashboardCanvasEditor's own root assumes
+                    height:100% of its immediate parent, but a plain (non-flex) block ancestor
+                    can't account for a preceding sibling's height (the filter strap) — so it
+                    was always measured a bit taller than the space actually left for it,
+                    tripping this OUTER overflow at the same time DashboardCanvasEditor's own
+                    INNER .dbe-canvas-wrap correctly scrolled its content — two scrollbars for
+                    the same overflow. Matches the working editable-mode wrapper just above
+                    (flex-1 flex flex-col overflow-hidden), which has never had this problem —
+                    same shrink-0-header + flex-1-min-h-0-content split, just with an extra
+                    shrink-0 filter strap this mode alone has. */}
+                {/* The filter strip moved up into the header row above (see its own doc
+                    comment there) — no longer reserved as its own strap here. */}
+                <div className="dbe-preview-scroll flex-1 min-h-0 overflow-hidden p-3 flex flex-col">
+                  <div className="flex-1 min-h-0">
                   {previewDashboard.static ? (
                     previewDashboard.render()
                   ) : !previewDashboard.detailLoaded ? (
@@ -887,6 +1123,7 @@ const DashboardBuilder = () => {
                       initialName={previewDashboard.name}
                       initialLayout={previewDashboard.layout}
                       initialWidgets={previewDashboard.widgets}
+                      initialTabs={previewDashboard.tabs || []}
                       editable={false}
                       showFiltersInline={false}
                       onSave={handleSave}
@@ -897,6 +1134,7 @@ const DashboardBuilder = () => {
                       }}
                     />
                   )}
+                  </div>
                 </div>
                 {previewFullscreen && previewDashboard.backendId && (
                   <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
@@ -933,7 +1171,7 @@ const DashboardBuilder = () => {
               entirely, so a dashboard is still one click away without the list eating
               horizontal space the preview could use. */}
           <div
-            className={`relative shrink-0 overflow-y-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0 transition-[width] duration-200 ${
+            className={`relative shrink-0 flex flex-col overflow-hidden rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0 transition-[width] duration-200 ${
               sidebarCollapsed ? 'w-12' : 'w-72'
             }`}
             style={{ background: 'rgba(255,255,255,0.55)' }}
@@ -968,6 +1206,12 @@ const DashboardBuilder = () => {
               </div>
             )}
             {sidebarCollapsed && <div className="h-9" />}
+            {/* Only this region scrolls now — the "New dashboard"/Search row above (and the
+                collapse toggle, position:absolute) stay fixed in place instead of scrolling
+                away with the list, per the app's own "only the specific inner region that has
+                more content than fits should scroll" convention (CLAUDE.md §8) — see the
+                conversation this was reported in. */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
             {!sidebarCollapsed && dashboardsLoading && (
               <div className="p-4 text-xs text-slate-400 text-center">Loading dashboards…</div>
             )}
@@ -1005,6 +1249,7 @@ const DashboardBuilder = () => {
             {!sidebarCollapsed && allDashboards.length > 0 && visibleDashboards.length === 0 && (
               <div className="p-4 text-xs text-slate-400 text-center">No dashboards match "{dashboardSearch.trim()}".</div>
             )}
+            </div>
           </div>
         </div>
       <FormModal
@@ -1019,6 +1264,52 @@ const DashboardBuilder = () => {
             Delete <strong>{deleteTarget?.name}</strong>?
           </p>
           <p className="text-xs text-red-400">This cannot be undone.</p>
+          {(() => {
+            const deletableWidgets = realChartWidgetEntries(deleteTarget?.widgets)
+              .map(([, w]) => ({ id: w.dataSource.widgetId, title: w.title }))
+              .filter((w) => w.id);
+            if (!deletableWidgets.length) return null;
+            const allIds = deletableWidgets.map((w) => w.id);
+            const allSelected = allIds.every((id) => deleteWidgetIds.has(id));
+            return (
+              <div className="w-full text-left">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-slate-700">Also delete these widgets:</span>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteWidgetIds(allSelected ? new Set() : new Set(allIds))}
+                    className="text-xs font-semibold text-[#EC7D09] hover:opacity-80"
+                  >
+                    {allSelected ? 'Clear all' : 'Select all'}
+                  </button>
+                </div>
+                {/* Off default reasoning per-widget, not blanket — a widget might be shared
+                    with another dashboard (e.g. a duplicate_widgets:false clone, or reused
+                    manually), and there's no existing endpoint to check that automatically —
+                    see confirmDelete's own doc comment. Picking exactly which ones is safer
+                    than an all-or-nothing toggle. */}
+                <div className="mt-1.5 flex flex-col gap-1 max-h-40 overflow-y-auto border border-slate-100 rounded-lg p-2">
+                  {deletableWidgets.map((w) => (
+                    <label key={w.id} className="flex items-center gap-2 text-xs text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={deleteWidgetIds.has(w.id)}
+                        onChange={(e) => setDeleteWidgetIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(w.id); else next.delete(w.id);
+                          return next;
+                        })}
+                      />
+                      <span className="truncate">{w.title}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  Unchecked widgets stay in the Chart Library, reusable elsewhere. Checked ones are permanently deleted too — only safe if they aren't used on any OTHER dashboard.
+                </div>
+              </div>
+            );
+          })()}
         </div>
         <div className="flex justify-end gap-3 mt-2">
           <button
@@ -1045,6 +1336,90 @@ const DashboardBuilder = () => {
         message={pendingNewDashboardConfirm?.message}
         onCancel={() => setPendingNewDashboardConfirm(null)}
         onConfirm={() => { setPendingNewDashboardConfirm(null); startNewDashboard(); }}
+      />
+
+      {/* Per the backend team's own note on the `duplicate_widgets` clone param (dashboard-
+          level, not per-widget) — asks up front rather than always defaulting to the
+          shared-reference behavior silently. */}
+      <ConfirmModal
+        isOpen={!!cloneTarget}
+        title="Clone Dashboard"
+        confirmLabel="Clone"
+        message={(
+          <>
+            <p>Clone "{cloneTarget?.name}"?</p>
+            {/* Defaults to the next free "<base name> (N)" (see nextCopyName) rather than
+                always "(Copy)" — cloning the same dashboard repeatedly used to suggest the
+                identical name every time, so a second/third clone needed a manual rename
+                anyway just to tell them apart in the list. Still freely editable here — this
+                is just a smarter starting point, not a forced scheme. */}
+            <label className="mt-3 flex flex-col gap-1 text-sm text-slate-700">
+              New dashboard name
+              <input
+                type="text"
+                value={cloneName}
+                onChange={(e) => setCloneName(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
+              />
+            </label>
+            <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={cloneDuplicateWidgets}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setCloneDuplicateWidgets(checked);
+                  // Only fetched once actually needed (unchecked = shared references, no new
+                  // widgets ever get created, so there's nothing to suggest names for).
+                  if (checked && cloneTarget) loadCloneWidgetNameSuggestions(cloneTarget);
+                }}
+              />
+              <span>
+                Also duplicate all widgets (make them independent)
+                <span className="block text-xs text-slate-400">
+                  Off: the clone shares this dashboard's widgets — editing one edits both. On: the clone gets its own copy of every widget.
+                </span>
+              </span>
+            </label>
+            {/* Per-widget name overrides — same "smarter default, freely editable" pattern as
+                the dashboard name above, just one row per widget instead of one field. Only
+                shown once duplicate_widgets is on, since that's the only case where NEW widget
+                records (needing their own name) actually get created at all. */}
+            {cloneDuplicateWidgets && (
+              <div className="mt-3 flex flex-col gap-1.5">
+                <span className="text-sm text-slate-700">Widget names</span>
+                {cloneWidgetNamesLoading ? (
+                  <div className="text-xs text-slate-400 px-1 py-2">Loading suggested names…</div>
+                ) : (
+                  <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto border border-slate-100 rounded-lg p-2">
+                    {(cloneTarget?.layout || [])
+                      .filter((l) => cloneTarget.widgets?.[l.i]?.dataSource?.type === 'chartLibrary')
+                      .map((l) => (
+                        <label key={l.i} className="flex items-center gap-2 text-xs text-slate-500">
+                          {/* 40/60 split via flex-grow ratios (basis-0 so the ratio applies to
+                              the row's full width, not just space left after each element's
+                              own content width) rather than a fixed w-28 label — matches the
+                              requested proportion instead of an arbitrary fixed pixel width. */}
+                          <span className="basis-0 grow-[2] min-w-0 truncate" title={cloneTarget.widgets[l.i].title}>
+                            {cloneTarget.widgets[l.i].title}
+                          </span>
+                          <input
+                            type="text"
+                            value={cloneWidgetNames[l.i] ?? ''}
+                            onChange={(e) => setCloneWidgetNames((prev) => ({ ...prev, [l.i]: e.target.value }))}
+                            className="basis-0 grow-[3] min-w-0 px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-700"
+                          />
+                        </label>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        onCancel={() => setCloneTarget(null)}
+        onConfirm={() => { cloneDashboard(cloneTarget, cloneDuplicateWidgets, cloneName.trim(), cloneWidgetNames); setCloneTarget(null); }}
       />
     </div>
   );

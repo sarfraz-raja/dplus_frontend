@@ -1,5 +1,6 @@
 import React from 'react';
 import { QUERY_ROLES_BY_DATA_SHAPE } from '../utils/queryRoles';
+import ColumnMultiSelect from '../ColumnMultiSelect';
 
 /**
  * Generic per-widget data-mapping form — driven entirely by the selected widget's
@@ -30,12 +31,6 @@ export default function DataMappingFields({ dataShape, columns = [], value = {},
 
   const setAggregation = (roleKey, agg) => onChange({ ...value, [`${roleKey}Aggregation`]: agg });
 
-  const toggleColumn = (roleKey, columnName) => {
-    const current = value[roleKey] || [];
-    const next = current.includes(columnName) ? current.filter((c) => c !== columnName) : [...current, columnName];
-    onChange({ ...value, [roleKey]: next });
-  };
-
   const addFilter = () => onChange({ ...value, filters: [...filters, { column: '', op: '=', value: '' }] });
   const updateFilter = (i, patch) => onChange({ ...value, filters: filters.map((f, idx) => (idx === i ? { ...f, ...patch } : f)) });
   const removeFilter = (i) => onChange({ ...value, filters: filters.filter((_, idx) => idx !== i) });
@@ -50,29 +45,14 @@ export default function DataMappingFields({ dataShape, columns = [], value = {},
     <>
       {roles.map((r) => {
         if (r.role === 'multi') {
-          const selected = value[r.key] || [];
-          const allSelected = columns.length > 0 && selected.length === columns.length;
           return (
-            <label key={r.key}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                {r.label}
-                <button
-                  type="button"
-                  onClick={() => onChange({ ...value, [r.key]: allSelected ? [] : columns.map((c) => c.column_name) })}
-                  style={{ fontSize: 11, color: '#EC7D09', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  {allSelected ? 'Clear all' : 'Select all'}
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 140, overflowY: 'auto', border: '1px solid rgb(203 213 225)', borderRadius: 6, padding: 4, marginTop: 4 }}>
-                {columns.map((c) => (
-                  <label key={c.column_name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
-                    <input type="checkbox" checked={selected.includes(c.column_name)} onChange={() => toggleColumn(r.key, c.column_name)} />
-                    {c.display_name || c.column_name}
-                  </label>
-                ))}
-              </div>
-            </label>
+            <ColumnMultiSelect
+              key={r.key}
+              label={r.label}
+              columns={columns}
+              selected={value[r.key] || []}
+              onChange={(next) => onChange({ ...value, [r.key]: next })}
+            />
           );
         }
         const options = r.role === 'measure' ? measureCols : dimensionCols;

@@ -166,10 +166,27 @@ export function fromDateTimeLocalInput(value) {
  * this immediately before sending `filters` to getDashboardData/getStandaloneWidgetData —
  * never persist its output back to dashboard.global_filters.
  */
+// Drops a filter whose value is blank (empty string, empty array, or an unresolvable/empty
+// BETWEEN range) instead of sending it through — a blanked filter (Clear all, or clearing one
+// tag from FilterPanel.jsx's collapsed row) used to still get forwarded as a real WHERE clause
+// with an empty-string value, which the backend can't compare a numeric/date column against and
+// fails the whole widget's query (Postgres: `invalid input syntax for type real: ""`) — see the
+// conversation this was reported in. `hasValue` here intentionally mirrors FilterPanel.jsx's own
+// (same three-way empty check), but this file has no dependency on that component, so it's kept
+// as its own small copy rather than a cross-import.
+function hasValue(f) {
+  if (f.operator === 'BETWEEN') {
+    const [from, to] = resolveTimeRangeValue(f.value) || [];
+    return !!from && !!to;
+  }
+  if (Array.isArray(f.value)) return f.value.length > 0;
+  return f.value !== undefined && f.value !== null && f.value !== '';
+}
+
 export function resolveFiltersForQuery(filters) {
-  return (filters || []).map((f) => (
-    f.operator === 'BETWEEN' ? { ...f, value: resolveTimeRangeValue(f.value) } : f
-  ));
+  return (filters || [])
+    .map((f) => (f.operator === 'BETWEEN' ? { ...f, value: resolveTimeRangeValue(f.value) } : f))
+    .filter(hasValue);
 }
 
 // A KPI_CARD's own per-card date filter (see CHART_TYPE_FIELDS's KPI_CARD entry in
@@ -258,14 +275,14 @@ export function buildComparisonFilters(filters, preset) {
 
 // "Compare to: Custom" (mapping.compare_to === 'Custom' — see SINGLE_VALUE_COMPARISON_GROUP
 // in ChartLibrary.jsx) — for the cases the preset shifts above can't express: most notably
-// `aggregation === 'LATEST'`, which has no "current window" to shift at all (its
-// date_filter_column is deliberately hidden/cleared — see LATEST_BY_FIELD's own comment — so
-// buildComparisonFilters above has nothing to work with).
+// `date_filter_range === 'Latest'`, which has no "current window" to shift at all (there's no
+// BETWEEN filter for buildComparisonFilters above to work with — 'Latest' resolves to no
+// request-level filter at all, see buildDateFilterFromPreset).
 //
 // Three distinct shapes, chosen by which args are given:
-// - `latestByColumn` set (LATEST aggregation): returns a `<=` cutoff on that column —
-//   "the latest reading at or before this date" — mirroring what the live LATEST query itself
-//   does (`ORDER BY latest_by DESC LIMIT 1`), just anchored at a past date instead of now. The
+// - `latestByColumn` set (date_filter_range: 'Latest'): returns a `<=` cutoff on that column —
+//   "the latest reading at or before this date" — mirroring what the live 'Latest' query itself
+//   does (most-recent-row-per-site as of now), just anchored at a past date instead of now. The
 //   one shape where a single instant is genuinely all that's meaningful (no window to speak of).
 // - `customFrom`/`customTo` both set (every other aggregation's current, preferred UI):
 //   the user's own explicit comparison window, applied directly — no inference at all about

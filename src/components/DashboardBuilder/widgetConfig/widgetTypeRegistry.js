@@ -1,7 +1,8 @@
 import {
   Hash, Gauge, LineChart, BarChart3, PieChart as PieChartIcon, BarChartHorizontal,
   AreaChart as AreaChartIcon, Grid3x3, Funnel, BarChart4, Boxes, ChartNoAxesCombined,
-  ScatterChart as ScatterChartIcon, Table, AlertTriangle, MapPin, Server, ListFilter,
+  ScatterChart as ScatterChartIcon, Table, AlertTriangle, MapPin, Server, ListFilter, Type, Square,
+  Circle, Minus, Triangle, Diamond, ArrowRight, Pentagon, Hexagon, Octagon, Star, Plus,
 } from 'lucide-react';
 import { FONT_FAMILY_OPTIONS } from '../../../theme/tokens';
 import { POSITION_OPTIONS } from '../../Widgets/titlePositions';
@@ -23,6 +24,8 @@ import StackedBarChart from '../../Widgets/StackedBarChart';
 import KpiTable from '../legacy/widgets/KpiTable';
 import DegradedCellsMap from '../legacy/widgets/DegradedCellsMap';
 import DegradedCellsTable from '../legacy/KpiDashboard/DegradedCellsTable';
+import TextBox from '../../Widgets/TextBox';
+import Shape from '../../Widgets/Shape';
 
 /**
  * Catalog of widget *types* available in the Dashboard Builder palette. Each entry
@@ -77,8 +80,13 @@ const FONT_WEIGHT_FIELD_OPTIONS = [
  * stay exactly as they already are — this is a pure DRY-up of the *declarations*, not a
  * rename of anything already wired through resolveWidgetProps/the widget components.
  */
-function textStyleFields({ colorKey, colorLabel, weightKey, weightLabel, sizeKey, sizeLabel, sizeDefault = null, fontKey, fontLabel }) {
-  const fields = [{ key: colorKey, label: colorLabel, type: 'color', default: null }];
+function textStyleFields({ colorKey, colorLabel, weightKey, weightLabel, sizeKey, sizeLabel, sizeDefault = null, fontKey, fontLabel, contrastBg = 'auto' }) {
+  // `contrastBg: 'auto'` — every field this generator makes a color for (title/value/axis/row
+  // text) renders as text on top of this widget's own resolved background, so ColorRow can
+  // warn if the two are too close to read (see WidgetStyleFields.jsx's own contrast-check —
+  // built after a near-white Title color shipped invisible against a white background). Title
+  // color overrides this to check its own Title background first (see the call site below).
+  const fields = [{ key: colorKey, label: colorLabel, type: 'color', default: null, contrastBg }];
   if (weightKey) {
     fields.push({ key: weightKey, label: weightLabel, type: 'select', options: FONT_WEIGHT_FIELD_OPTIONS, default: 'normal' });
   }
@@ -118,7 +126,7 @@ const ACCENT_COLOR_FIELD = { key: 'color', label: 'Accent color', type: 'color',
 // dashboard level the same way bgColor already does. Mutually exclusive with bgColor at
 // render time (every widget component checks bgGradient first) — set either, not both.
 const BG_GRADIENT_FIELDS = [
-  { key: 'bgGradientFrom', label: 'Background gradient from', type: 'color', default: null },
+  { key: 'bgGradientFrom', label: 'Background gradient from', type: 'color', default: null, hint: 'Overrides Background color when set — pick either a solid color or a gradient, not both.' },
   { key: 'bgGradientTo', label: 'Background gradient to', type: 'color', default: null },
 ];
 
@@ -132,17 +140,32 @@ const BG_GRADIENT_FIELDS = [
 // titleFont props (DashboardCanvasEditor.jsx's resolveWidgetProps already computes and
 // passes finalTitleWeight/finalTitleSize/finalTitleFont through) — the UI to set them per-
 // chart was simply missing.
-const TITLE_TEXT_STYLE_FIELDS = textStyleFields({
+// Show/hide the title outright — every chart_type has one (see textStyleFields below), and
+// every one of them can have a reason to hide it (a KPI card meant to read as just a bare
+// number, a chart embedded somewhere its own name is already shown elsewhere, etc.), not just
+// TABLE (where this started — see the conversation it was first built for). Defaults to
+// 'show' so nothing already relying on a title changes. Prepended, not appended, so it reads
+// first in the Title section — the on/off gate for every other field below it.
+const SHOW_TITLE_FIELD = { key: 'showTitle', label: 'Show title', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] };
+const TITLE_TEXT_STYLE_FIELDS = [SHOW_TITLE_FIELD, ...textStyleFields({
   colorKey: 'titleColor', colorLabel: 'Title color',
   weightKey: 'titleWeight', weightLabel: 'Title weight',
   sizeKey: 'titleSize', sizeLabel: 'Title size (px)',
   fontKey: 'titleFont', fontLabel: 'Title font',
-});
+  // The title sits on its own Title background (titleBgColor, pushed below) when one is set —
+  // only fall back to the widget's overall background when it isn't.
+  contrastBg: ['titleBgColor', 'auto'],
+})];
 // Where in the widget's 3x3 layout the title sits — universal (every widget renders its
 // title as plain HTML outside the chart canvas, see TitleValueOverlay.jsx), unlike
 // VALUE_POSITION_FIELD below which only applies to the few widgets with a movable value.
 const TITLE_POSITION_FIELD = { key: 'titlePosition', label: 'Title position', type: 'position', default: 'top-left', options: POSITION_OPTIONS };
 TITLE_TEXT_STYLE_FIELDS.push(TITLE_POSITION_FIELD);
+// A fill behind just the title's own row/overlay, distinct from the card's overall
+// Background — e.g. a title bar tinted to stand out from the card body beneath it, the way
+// Table's own header row (headerBgColor) already can. `default: null` so it stays fully
+// transparent (the card's own background shows through) until explicitly set.
+TITLE_TEXT_STYLE_FIELDS.push({ key: 'titleBgColor', label: 'Title background', type: 'color', default: null });
 // Not part of any shared bundle — only added directly to the handful of widget types that
 // actually have a separate, movable value/total text element (see VALUE_TEXT_STYLE_FIELDS'
 // own comment below for why: that bundle is reused by types with NO such element, e.g. Pie's
@@ -347,6 +370,72 @@ const WIDGET_TYPE_REGISTRY = {
     // Superset slicer convention), not a one-line dropdown, so it needs real vertical room.
     label: 'Slicer', icon: ListFilter, iconColor: '#0891B2', component: SlicerWidgetCard, defaultSize: { w: 30, h: 42 }, dataShape: null,
   },
+  // Static text, no datasource at all (dataShape: null, same as Slicer above) — Power BI's
+  // own "Text box" (Insert ribbon). Content lives on `style.text`, edited in place via
+  // TextBox.jsx's own double-click-to-edit textarea, not through the generic
+  // WidgetCreateWizard (see DashboardCanvasEditor.jsx's addWidget 'textBox' branch, which
+  // places a default instance immediately — there's no data-source step to run).
+  textBox: {
+    label: 'Text Box', icon: Type, iconColor: '#64748B', component: TextBox, defaultSize: { w: 36, h: 12 }, dataShape: null,
+    styleFields: [
+      { key: 'text', label: 'Text', type: 'textarea', default: '' },
+      { key: 'fontFamily', label: 'Font', type: 'select', options: FONT_FAMILY_OPTIONS, default: '' },
+      { key: 'fontSize', label: 'Font size (px)', type: 'number', min: 8, max: 96, default: 14 },
+      { key: 'fontWeight', label: 'Weight', type: 'select', options: FONT_WEIGHT_FIELD_OPTIONS, default: 'normal' },
+      // `default: null` — TextBox.jsx itself computes a real default (black or white,
+      // whichever actually reads) from the widget's own resolved background, rather than one
+      // hardcoded hex that goes invisible the moment bgColor is dark (see TextBox.jsx's own
+      // `pickReadableTextColor` — the bug this default was previously causing).
+      { key: 'color', label: 'Text color', type: 'color', default: null, contrastBg: 'bgColor' },
+      { key: 'textAlign', label: 'Align', type: 'select', default: 'left', options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
+      BG_COLOR_FIELD,
+    ],
+  },
+  // Basic static shapes — no datasource (dataShape: null, same as Text Box above). One type
+  // with a `shapeKind` select rather than a separate palette entry per shape — see Shape.jsx's
+  // own doc comment.
+  shape: {
+    label: 'Shape', icon: Square, iconColor: '#7C3AED', component: Shape, defaultSize: { w: 32, h: 20 }, dataShape: null,
+    styleFields: [
+      {
+        key: 'shapeKind', label: 'Shape', type: 'iconSelect', default: 'rectangle',
+        options: [
+          { value: 'rectangle', label: 'Rectangle', icon: Square },
+          { value: 'ellipse', label: 'Ellipse', icon: Circle },
+          { value: 'triangle', label: 'Triangle', icon: Triangle },
+          { value: 'diamond', label: 'Diamond', icon: Diamond },
+          { value: 'pentagon', label: 'Pentagon', icon: Pentagon },
+          { value: 'hexagon', label: 'Hexagon', icon: Hexagon },
+          { value: 'octagon', label: 'Octagon', icon: Octagon },
+          { value: 'star', label: 'Star', icon: Star },
+          { value: 'cross', label: 'Cross', icon: Plus },
+          { value: 'arrow', label: 'Arrow', icon: ArrowRight },
+          { value: 'line', label: 'Line', icon: Minus },
+        ],
+      },
+      { key: 'fillColor', label: 'Fill color', type: 'color', default: '#94A3B8' },
+      // Line's own doc comment (Shape.jsx) — borderWidth doubles as thickness for a line,
+      // borderColor as its actual color, since a line has no separate fill area.
+      { key: 'borderColor', label: 'Border color', type: 'color', default: null },
+      { key: 'borderWidth', label: 'Border width (px)', type: 'number', min: 0, max: 20, default: 0 },
+      { key: 'cornerRadius', label: 'Corner radius (px)', type: 'number', min: 0, max: 100, default: 0, hint: 'Rectangle only.' },
+      { key: 'rotation', label: 'Rotation (deg)', type: 'number', min: -180, max: 180, default: 0 },
+      { key: 'opacity', label: 'Opacity (%)', type: 'number', min: 0, max: 100, default: 100 },
+      // Every shape but Line can also hold text (Shape.jsx's own doc comment — any real shape
+      // tool lets a shape be a labeled box, not just a plain outline). Not offered for Line —
+      // a bare divider has no "inside" for a label to sit in, same as Word never offering Add
+      // Text on its own line shapes.
+      { key: 'text', label: 'Text', type: 'textarea', default: '', hint: 'Not for Line — double-click the shape on canvas to edit in place too.' },
+      { key: 'fontFamily', label: 'Font', type: 'select', options: FONT_FAMILY_OPTIONS, default: '' },
+      { key: 'fontSize', label: 'Font size (px)', type: 'number', min: 8, max: 96, default: 14 },
+      { key: 'fontWeight', label: 'Weight', type: 'select', options: FONT_WEIGHT_FIELD_OPTIONS, default: 'normal' },
+      // `default: null` — Shape.jsx itself computes a real default (black or white, whichever
+      // actually reads) from the shape's own Fill color, same reasoning as Text Box's own
+      // `color` field (see its own comment in this file).
+      { key: 'textColor', label: 'Text color', type: 'color', default: null, contrastBg: 'fillColor' },
+      { key: 'textAlign', label: 'Align', type: 'select', default: 'center', options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
+    ],
+  },
   degradedCellsTable: {
     label: 'Top Degraded Cells', icon: AlertTriangle, iconColor: '#EF4444', component: DegradedCellsTable, defaultSize: { w: 72, h: 60 }, dataShape: 'table', builderVisible: false,
     styleFields: ROW_TEXT_STYLE_FIELDS,
@@ -523,6 +612,36 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   FUNNEL: [PALETTE_FIELD, ...CROSS_FILTER_FIELDS],
   WATERFALL: [...CROSS_FILTER_FIELDS],
   TREEMAP: [PALETTE_FIELD, ...CROSS_FILTER_FIELDS],
+  // General "table style" banding — same zebra-stripe concept as Word/Excel's built-in table
+  // styles (alternating row shading for scan-ability), independent of per-value Conditional
+  // Formatting (ChartLibrary.jsx's own ConditionalFormatRules, which needs the live column
+  // list and so isn't a plain styleFields entry — see that component's own doc comment).
+  // Conditional-format colors still win per-cell (VirtualizedTable.jsx only paints the band
+  // on cells no rule already colored), so banding always reads as the "default," rules as the
+  // override on top of it. No separate on/off toggle — same "picking a color IS turning it
+  // on, the × clears it back off" convention every other color field here already uses
+  // (bgColor, titleColor, etc.) rather than a redundant second control.
+  TABLE: [
+    // `showTitle` used to live here alone (Table's title being the only opt-in one) — now
+    // shared by every chart_type via TITLE_TEXT_STYLE_FIELDS/SHOW_TITLE_FIELD above.
+    // `hint` flags the composition with `bgColor` (below) — Band color only paints
+    // alternating rows, `bgColor` shows through on every row it doesn't; a Band color too
+    // close to the Background color just makes the stripe invisible, not broken — see
+    // ColorRow's own hint rendering in WidgetStyleFields.jsx.
+    { key: 'bandColor', label: 'Band color', type: 'color', default: '#F1F5F9', hint: 'Alternating rows only — other rows show Background color underneath.' },
+    // Optional — a picked Band color (especially a dark one, like a themed table) can leave
+    // the table's one shared `valueTextColor` illegible against it; this overrides text color
+    // on banded rows only, same as bandColor itself only paints those rows. Unset (the common
+    // case) just keeps valueTextColor everywhere, no behavior change.
+    { key: 'bandTextColor', label: 'Band text color', type: 'color', default: null, hint: 'Alternating rows only — other rows use Value text color.', contrastBg: 'bandColor' },
+    // Separate from `bgColor` (the whole table container's base background, shared with every
+    // other chart type) — this one's specific to the header row, which otherwise has no
+    // per-widget color control at all (fixed to a hardcoded light-gray/navy pair — see
+    // VirtualizedTable.jsx's `<th>` classes). Same "picking a color IS turning it on" — a
+    // header with no explicit color just keeps that hardcoded default.
+    { key: 'headerBgColor', label: 'Header background color', type: 'color', default: null },
+    { key: 'headerTextColor', label: 'Header text color', type: 'color', default: null, contrastBg: 'headerBgColor' },
+  ],
 };
 
 // Which real backend chart_types actually have a visible axis, or an inline value label —

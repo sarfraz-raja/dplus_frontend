@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import renderChartWidget from './renderChartWidget';
 import DrillContextMenu from './DrillContextMenu';
+import { useTheme } from '../../../context/ThemeContext';
 
 /**
  * Renders one Chart Library widget bound into the Dashboard Builder canvas (see the
@@ -21,17 +22,19 @@ import DrillContextMenu from './DrillContextMenu';
 export default function ChartLibraryWidgetView({
   chartType, name, mapping, rows, loading, error, picked, height, style, onPointClick, onDrillUp,
   drillDown, drilling, comparison, crossFilterEnabled, onPointCrossFilter, showWarnings = true,
+  onReorderColumns, onColumnResize, onColumnLabelChange, isDark: isDarkProp = null,
 }) {
   const [menu, setMenu] = useState(null); // { label, x, y } | null
+  // Same isDark-resolution fallback every widget component does: an explicit prop (e.g. the
+  // Charts-tab preview forcing a mode) wins, else the app theme.
+  const { theme } = useTheme();
+  const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
 
   if (!picked) {
     return <div className="text-xs text-slate-400 p-2">Pick a widget from the library in the side panel.</div>;
   }
   if (loading) {
     return <div className="text-xs text-slate-400 p-2">Loading…</div>;
-  }
-  if (error) {
-    return <div className="text-xs text-red-500 p-2">{error}</div>;
   }
 
   const canDrillUp = (drillDown?.path?.length || 0) > 0;
@@ -64,7 +67,19 @@ export default function ChartLibraryWidgetView({
 
   return (
     <div className="relative h-full flex flex-col">
-      {truncationWarning && (
+      {/* A query error used to replace the ENTIRE widget with a bare line of red text — no
+          title, no column headers, nothing recognizable as "this was the Cell With Impacts
+          table." The widget's own title/columns/axes are metadata, not data — those should
+          stay visible even when the actual rows failed to load, the same way the truncation
+          warning above already sits as a banner over a chart that still renders normally, not
+          in place of it. So on error this now still calls renderChartWidget with rows:[] (its
+          normal "no data" empty state, per chart_type), with the error as a banner over it
+          instead of instead of it — see the conversation this was reported in. */}
+      {error ? (
+        <div className="absolute top-1 left-1 right-1 z-10 px-2 py-1 rounded-md bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 text-[11px] text-red-700 dark:text-red-300 text-center max-h-16 overflow-y-auto">
+          {error}
+        </div>
+      ) : truncationWarning && (
         <div className="absolute top-1 left-1 right-1 z-10 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-[11px] text-amber-700 dark:text-amber-300 text-center">
           {truncationWarning}
         </div>
@@ -75,7 +90,7 @@ export default function ChartLibraryWidgetView({
         </div>
       )}
       {renderChartWidget({
-        chartType, name, mapping, rows: rows || [], height, style, onPointClick, comparison, drillDown,
+        chartType, name, mapping, rows: error ? [] : (rows || []), height, style, isDark, onPointClick, comparison, drillDown, onReorderColumns, onColumnResize, onColumnLabelChange,
         // Menu is offered whenever EITHER feature is reachable from this point, not just
         // drilling — a widget with both drill-down and cross-filter configured needs the menu
         // to expose cross-filter too, since left-click there is claimed by drilling (see

@@ -12,6 +12,7 @@ import map from "./reducers/map-reducer"
 import cxix from "./reducers/cxix-reducer"
 import insightsEngine from "./reducers/insightsEngine-reducer"
 import kpiEngine from "./reducers/kpiEngine-reducer"
+import assurance from "./reducers/assurance-reducer"
 
 const store = configureStore({
     reducer: {
@@ -28,6 +29,7 @@ const store = configureStore({
         cxix,
         insightsEngine,
         kpiEngine,
+        assurance,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

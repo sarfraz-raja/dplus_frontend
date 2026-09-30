@@ -134,7 +134,11 @@ export async function getDatasourceDetail(id) {
   if (!body?.datasource || !Array.isArray(body.columns)) {
     throw new Error(`Unexpected response shape from GET /dashboard-builder/datasources/${id} (see console).`);
   }
-  return { datasource: body.datasource, columns: body.columns };
+  // Phase A — `metrics` (saved calculated columns/ratios) is a new, additive key on this same
+  // response (per the backend's own note: existing `columns` is unchanged, non-breaking) —
+  // defaults to [] for a backend that hasn't shipped it yet / a datasource with none saved,
+  // rather than requiring every caller to guard against it being missing.
+  return { datasource: body.datasource, columns: body.columns, metrics: body.metrics || [] };
 }
 
 /**
@@ -252,6 +256,105 @@ export async function updateDatasourceColumn(datasourceId, columnId, patch) {
 }
 
 /**
+ * Phase A — saved metrics / calculated columns at the datasource level (Superset's own
+ * "calculated columns" concept): a reusable named expression, picked in the widget builder
+ * exactly like a real column (see ChartLibrary.jsx's `columns` merge). `kind: "metric"` is a
+ * self-contained aggregate (must contain SUM/AVG/COUNT/MIN/MAX — applied as-is, no extra
+ * aggregation layered on top); `kind: "column"` is a calculated dimension (must NOT contain an
+ * aggregate — usable like a normal column, or aggregated as a measure). The backend validates
+ * and dry-runs the expression on save (422 with a clear message on failure) — same underlying
+ * check Phase B's validateDatasourceExpression previews ahead of time.
+ *
+ * The API doc's create/update example doesn't show the metric object's own `id` (same gap
+ * updateDatasourceColumn's own doc comment flags for columns) — checking both `id` and
+ * `metric_id` defensively, same reasoning as `columnId` in DatasourceManager.jsx.
+ */
+export async function listDatasourceMetrics(datasourceId) {
+  const res = await Api.get({ url: `${Urls.dashboardBuilder_datasources}/${datasourceId}/metrics` });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Fetching metrics for datasource ${datasourceId} failed with status ${res.status}.`);
+  }
+  const metrics = res.data?.data;
+  if (!Array.isArray(metrics)) {
+    throw new Error(`Unexpected response shape from GET .../datasources/${datasourceId}/metrics (see console).`);
+  }
+  return metrics;
+}
+
+export async function createDatasourceMetric(datasourceId, metric) {
+  const res = await Api.post({ url: `${Urls.dashboardBuilder_datasources}/${datasourceId}/metrics`, data: metric });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200 && res.status !== 201) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Creating metric failed with status ${res.status}.`);
+  }
+  const created = res.data?.data;
+  if (!created) {
+    throw new Error(`Unexpected response shape from POST .../datasources/${datasourceId}/metrics (see console).`);
+  }
+  return created;
+}
+
+export async function updateDatasourceMetric(datasourceId, metricId, patch) {
+  const res = await Api.patch({ url: `${Urls.dashboardBuilder_datasources}/${datasourceId}/metrics/${metricId}`, data: patch });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Updating metric ${metricId} failed with status ${res.status}.`);
+  }
+  const updated = res.data?.data;
+  if (!updated) {
+    throw new Error(`Unexpected response shape from PATCH .../metrics/${metricId} (see console).`);
+  }
+  return updated;
+}
+
+export async function deleteDatasourceMetric(datasourceId, metricId) {
+  const res = await Api.delete({ url: `${Urls.dashboardBuilder_datasources}/${datasourceId}/metrics/${metricId}` });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200 && res.status !== 204) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Deleting metric ${metricId} failed with status ${res.status}.`);
+  }
+}
+
+/**
+ * Phase B (ad-hoc per-widget custom SQL) — checks a free-form expression (an ad-hoc y_axis
+ * measure, or a custom_where/custom_having condition) against a datasource without saving or
+ * attaching it anywhere: same validation Phase A's saved metrics go through (single safe
+ * expression, references only known columns/metrics, correct aggregate-presence for the given
+ * `kind`, plus a dry-run) — just as a preview. Returns `{ dataType }` on success; throws with
+ * the backend's own message (422 on an unsafe/invalid expression) on failure, same as every
+ * other action here — callers show that message inline next to the expression box rather than
+ * a generic toast, since it's usually specific ("aggregate not allowed in WHERE" etc.).
+ */
+export async function validateDatasourceExpression(datasourceId, expression) {
+  const res = await Api.post({
+    url: `${Urls.dashboardBuilder_datasources}/${datasourceId}/validate-expression`,
+    data: { expression },
+  });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Validating expression failed with status ${res.status}.`);
+  }
+  const body = res.data?.data || res.data;
+  return { dataType: body?.data_type };
+}
+
+/**
  * Re-runs a small LIMIT-10 sample query against a datasource's *live* current data. This is
  * the piece getDatasourceDetail is missing — detail gives full column metadata but no rows,
  * so this is how a saved datasource's data gets previewed again after the fact (e.g. to
@@ -278,6 +381,39 @@ export async function sampleDatasource(id) {
     throw new Error(`Unexpected response shape from GET /dashboard-builder/datasources/${id}/sample (see console).`);
   }
   return { columnNames: body.columns, rows: body.rows };
+}
+
+/**
+ * Real distinct-values lookup for one physical column — replaces the old best-effort
+ * "sample 10 rows and de-dupe" workaround (sampleDatasource, still used elsewhere for row
+ * previews) that FilterPanel.jsx/FilterEditorModal.jsx's value dropdowns used to rely on: a
+ * 10-row sample regularly missed real values entirely (e.g. "No values found" for a column
+ * that clearly has values, just not within whichever 10 rows happened to come back) — this
+ * queries the actual column instead, bounded server-side (`limit`, default 100, capped 500 —
+ * a bounded list, not a full column dump). Only real physical columns are supported — a
+ * calculated column/metric name (Phase A) gets a 422, which callers should treat the same as
+ * "no suggestions available" rather than a hard failure.
+ */
+export async function getColumnDistinctValues(datasourceId, columnName, limit) {
+  // Api.get only takes {url, contentType, inst} — no separate query-params option (unlike
+  // axios directly) — so the query string is built into `url` itself, same as every other
+  // action here that needs one.
+  const query = limit ? `?limit=${encodeURIComponent(limit)}` : '';
+  const res = await Api.get({
+    url: `${Urls.dashboardBuilder_datasources}/${datasourceId}/columns/${encodeURIComponent(columnName)}/distinct-values${query}`,
+  });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Fetching distinct values for ${columnName} failed with status ${res.status}.`);
+  }
+  const values = res.data?.data;
+  if (!Array.isArray(values)) {
+    throw new Error(`Unexpected response shape from GET .../columns/${columnName}/distinct-values (see console).`);
+  }
+  return values.map(String);
 }
 
 // ── Dashboards ──────────────────────────────────────────────────────────────────────
@@ -382,11 +518,18 @@ export async function deleteDashboardBackend(id) {
   return true;
 }
 
-/** Named distinctly from DashboardBuilder.jsx's local-only `cloneDashboard` — this is the backend call it invokes to get a fresh, distinct backend id for the clone. */
-export async function cloneDashboardBackend(id, { name } = {}) {
+/** Named distinctly from DashboardBuilder.jsx's local-only `cloneDashboard` — this is the backend
+ * call it invokes to get a fresh, distinct backend id for the clone.
+ * `duplicateWidgets` (optional, default false) — dashboard-level, not per-widget: false (the
+ * default, and what every existing caller gets by omitting it) reuses the same widget records
+ * as the original (shared reference — editing one edits both); true gives the CLONE its own
+ * independent copy of every one of its widgets (new widget_id each), so editing either
+ * dashboard's widgets no longer affects the other. No selective/partial option yet (per-widget
+ * choice), per the backend team's own note. */
+export async function cloneDashboardBackend(id, { name, duplicateWidgets = false } = {}) {
   const res = await Api.post({
     url: `${Urls.dashboardBuilder_dashboards}/${id}/clone`,
-    data: { name },
+    data: { name, duplicate_widgets: duplicateWidgets },
   });
   if (!res) {
     throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
@@ -498,8 +641,10 @@ export async function detachWidget(dashboardId, widgetId) {
 // GET/POST /dashboards/{id}/data call — no separate "apply" endpoint.
 
 /** Creates a slicer on a dashboard. `position` is `{x,y}`; `available_values` comes back
- * populated from the live datasource. */
-export async function createSlicer(dashboardId, { datasourceId, columnName, label, position }) {
+ * populated from the live datasource. `tabId` is optional — omit it (or pass null/undefined)
+ * to keep the slicer global (applies across every tab); pass a tab's id/slug to scope it to
+ * that tab only. */
+export async function createSlicer(dashboardId, { datasourceId, columnName, label, position, tabId }) {
   const res = await Api.post({
     url: `${Urls.dashboardBuilder_dashboards}/${dashboardId}/slicers`,
     data: {
@@ -507,6 +652,7 @@ export async function createSlicer(dashboardId, { datasourceId, columnName, labe
       column_name: columnName,
       label,
       position,
+      ...(tabId !== undefined ? { tab_id: tabId } : {}),
     },
   });
   if (!res) {
@@ -536,14 +682,16 @@ export async function listSlicers(dashboardId) {
   return res.data?.data || [];
 }
 
-/** Updates a slicer — `selected_values`, `label`, and `position` are all editable here.
- * `selected_values` must be a subset of the slicer's own `available_values`, or the backend
- * returns a 422 (surfaced via the thrown error's message). */
-export async function updateSlicer(slicerId, { selectedValues, label, position } = {}) {
+/** Updates a slicer — `selected_values`, `label`, `position`, and `tabId` are all editable
+ * here. `selected_values` must be a subset of the slicer's own `available_values`, or the
+ * backend returns a 422 (surfaced via the thrown error's message). Pass `tabId: null` to make
+ * a previously tab-scoped slicer global again. */
+export async function updateSlicer(slicerId, { selectedValues, label, position, tabId } = {}) {
   const data = {};
   if (selectedValues !== undefined) data.selected_values = selectedValues;
   if (label !== undefined) data.label = label;
   if (position !== undefined) data.position = position;
+  if (tabId !== undefined) data.tab_id = tabId;
   const res = await Api.patch({ url: `${Urls.dashboardBuilder_slicers}/${slicerId}`, data });
   if (!res) {
     throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
@@ -614,11 +762,17 @@ export async function getWidgetData(dashboardId, widgetId, { filters, drillPath 
  * saved on the dashboard. Omit it entirely (don't pass an empty object's `filters` key) to
  * have the backend auto-apply the dashboard's own saved `global_filters` instead; pass `[]`
  * explicitly to force no filters for this one call regardless of what's saved.
+ *
+ * `tabId` scopes which tab's slicers apply (plus global ones) — omit it to apply only global
+ * slicers. Must be re-sent on every tab switch; the backend doesn't remember the active tab.
  */
-export async function getDashboardData(dashboardId, { filters } = {}) {
+export async function getDashboardData(dashboardId, { filters, tabId } = {}) {
+  const data = {};
+  if (filters !== undefined) data.filters = filters;
+  if (tabId !== undefined) data.tab_id = tabId;
   const res = await Api.post({
     url: `${Urls.dashboardBuilder_dashboards}/${dashboardId}/data`,
-    data: filters !== undefined ? { filters } : {},
+    data,
   });
   if (!res) {
     throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");

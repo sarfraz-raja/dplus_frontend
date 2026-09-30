@@ -3,6 +3,9 @@ import ReactDOM from "react-dom";
 import FormModal from "../../components/FormModal";
 import Api from "../../utils/api";
 import { toast } from "react-hot-toast";
+import { Urls } from "../../utils/url";
+import { getApiErrorMessage } from "../../utils/common";
+import { TELECOM_CONSTANTS } from "./ticketConstants";
 
 function EnterpriseTagInput({
   options = [],
@@ -58,8 +61,12 @@ function EnterpriseTagInput({
         setSearchTerm("");
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    // Capture phase on purpose: FormModal's card calls stopPropagation() on
+    // mousedown, which (React 17+) also halts the native event before it reaches
+    // `document` in the bubble phase — so a bubble-phase listener never sees
+    // clicks made anywhere inside the modal, only on its backdrop.
+    document.addEventListener("mousedown", handleClickOutside, true);
+    return () => document.removeEventListener("mousedown", handleClickOutside, true);
   }, []);
 
   const handleKeyDown = (e) => {
@@ -237,8 +244,9 @@ function EnterpriseSelect({
         setIsOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    // Capture phase — same FormModal stopPropagation() reason as EnterpriseTagInput above.
+    document.addEventListener("mousedown", handleClickOutside, true);
+    return () => document.removeEventListener("mousedown", handleClickOutside, true);
   }, []);
 
   const dropdown = isOpen && !disabled && (
@@ -310,19 +318,7 @@ function FormSection({ title, children }) {
 }
 
 /* ---------- TELECOM CONSTANTS ---------- */
-const TELECOM_CONSTANTS = {
-  TECHNOLOGY: ["2G", "3G", "4G", "5G"],
-  ISSUE_CATEGORIES: ["RF", "Transmission", "Hardware", "Performance"],
-  PRIORITIES: ["Critical", "High", "Medium", "Low"],
-  SEVERITIES: ["S1", "S2", "S3", "S4"],
-  REGIONS: ["North", "South", "East", "West", "Central"],
-  TEAMS: {
-    RF: "RF Team",
-    Transmission: "TX Team",
-    Hardware: "Hardware Team",
-    Performance: "Performance Team"
-  }
-};
+// Moved to ./ticketConstants (shared with the detail popup's inline editing).
 
 /* ---------- INITIAL STATE ---------- */
 const INITIAL_FORM = {
@@ -331,7 +327,7 @@ const INITIAL_FORM = {
   description: "",
   technology: "4G",
   issuecategory: "",
-  severity: "S3",
+  severity: "Minor",
   priority: "Medium",
   region: "",
   assignedteam: "",
@@ -347,12 +343,18 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
   const [allCells, setAllCells] = useState([]);
   const [cellOptions, setCellOptions] = useState([]);
   const [userList, setUserList] = useState([]);
+  // Groups from Group Management (GET /groups): [{ id, name, memberIds }] — the "Assigned Team" choices.
+  const [groupList, setGroupList] = useState([]);
+  // User ids that were added to "Assign to Users" by the currently chosen team, so switching or
+  // clearing the team removes exactly those and never touches users picked by hand.
+  const [teamAddedIds, setTeamAddedIds] = useState([]);
 
   // Loading states
   const [loading, setLoading] = useState(false);
   const [loadingSites, setLoadingSites] = useState(false);
   const [loadingCells, setLoadingCells] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingGroups, setLoadingGroups] = useState(false);
 
   // Error states
   const [errors, setErrors] = useState({});
@@ -379,9 +381,10 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
   const fetchInitialData = async () => {
     setLoadingSites(true);
     setLoadingUsers(true);
+    setLoadingGroups(true);
 
     try {
-      const [siteRes, userRes] = await Promise.all([
+      const [siteRes, userRes, groupRes] = await Promise.all([
         Api.get({ url: "/tickets/siteList" }).catch(() => {
           setSiteError("Failed to load sites");
           return { data: { data: [] } };
@@ -389,16 +392,23 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
         Api.get({ url: "/tickets/users" }).catch(() => {
           setUserError("Failed to load users");
           return { data: { data: [] } };
-        })
+        }),
+        Api.get({ url: Urls.groups }).catch(() => ({ data: { data: [] } }))
       ]);
 
       setSiteList(siteRes?.data?.data || []);
       setUserList(userRes?.data?.data || []);
+      setGroupList(
+        (groupRes?.data?.data || [])
+          .filter((g) => g.group_name)
+          .map((g) => ({ id: g.id, name: g.group_name, memberIds: g.member_ids || [] }))
+      );
     } catch (err) {
       toast.error("Failed to load form data");
     } finally {
       setLoadingSites(false);
       setLoadingUsers(false);
+      setLoadingGroups(false);
     }
   };
 
@@ -423,17 +433,23 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
     setFormData(INITIAL_FORM);
     setCellOptions([]);
     setErrors({});
+    setTeamAddedIds([]);
   };
 
-  // Smart team assignment
-  useEffect(() => {
-    if (formData.issuecategory) {
-      setFormData(prev => ({
-        ...prev,
-        assignedteam: TELECOM_CONSTANTS.TEAMS[formData.issuecategory] || ""
-      }));
-    }
-  }, [formData.issuecategory]);
+  // (No category → team auto-fill any more: the team is now picked from real groups, and the
+  // old hardcoded "RF Team"/"TX Team" names don't correspond to any group.)
+
+  // Choosing a team also assigns that group's members. Only members that exist in the loaded user
+  // list are added (so no bare ids show up as tags), users already picked by hand are kept as-is,
+  // and switching/clearing the team removes just the ones the previous team added.
+  const handleTeamChange = (name) => {
+    const group = groupList.find((g) => g.name === name);
+    const members = (group?.memberIds || []).filter((id) => userList.some((u) => u.id === id));
+    const base = formData.assignedusers.filter((id) => !teamAddedIds.includes(id));
+    const added = members.filter((id) => !base.includes(id));
+    setTeamAddedIds(added);
+    setFormData({ ...formData, assignedteam: name, assignedusers: [...base, ...added] });
+  };
 
   const handleChange = (field, value) => {
     setErrors(prev => ({ ...prev, [field]: null }));
@@ -496,23 +512,31 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
     setLoading(true);
 
     try {
-      const ticketid = `TKT-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-
+      // Only fields POST /tickets/create actually reads. The ticket code (TKT-…) and creation time
+      // are both generated server-side, so neither is sent.
       const payload = {
-        ticketid,
         ...formData,
         description: formData.description.trim(),
         title: formData.title.trim(),
         sitename: formData.datasettype === "SITE" ? formData.sitename : null,
-        createdat: new Date().toISOString()
       };
 
-      await Api.post({ url: "/tickets/create", data: payload });
+      // Api.post never rejects on an HTTP error status — it resolves with the error response
+      // (see utils/api.js) — so a rejected create must be caught here, not in `catch`. Without
+      // this a 422/500 (or the read-only-mode block) still toasted "Ticket Created" and closed.
+      const res = await Api.post({ url: "/tickets/create", data: payload });
+      if (!(res?.status >= 200 && res?.status < 300)) {
+        toast.error(getApiErrorMessage(res));
+        return;
+      }
 
+      // The server assigns the ticket code (data.ticketCode, e.g. "TKT-20260924065116952") — show
+      // that one; data.ticketId is the ticket's UUID (`id`).
+      const createdCode = res?.data?.data?.ticketCode;
       toast.success(
         <div>
           <div className="font-medium">Ticket Created</div>
-          <div className="text-xs opacity-75">{ticketid}</div>
+          {createdCode && <div className="text-xs opacity-75">{createdCode}</div>}
         </div>
       );
 
@@ -748,7 +772,7 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
                   value={formData.priority}
                   onChange={(e) => handleChange("priority", e.target.value)}
                 >
-                  <option value="">Select Priority</option>
+                  {/* Required and pre-filled (Medium), same as Severity — no empty option. */}
                   {TELECOM_CONSTANTS.PRIORITIES.map(pri => (
                     <option key={pri} value={pri}>{pri}</option>
                   ))}
@@ -757,14 +781,35 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Team</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all"
-                  placeholder="e.g. RF Team"
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Assigned Team</label>
+                  {formData.assignedteam && (
+                    <button
+                      type="button"
+                      onClick={() => handleTeamChange("")}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <EnterpriseSelect
+                  options={groupList.map((g) => g.name)}
                   value={formData.assignedteam}
-                  onChange={(e) => handleChange("assignedteam", e.target.value)}
+                  onChange={handleTeamChange}
+                  placeholder={
+                    loadingGroups ? "Loading groups..."
+                      : groupList.length === 0 ? "No groups yet (Admin → Group Management)"
+                      : "Select group..."
+                  }
+                  loading={loadingGroups}
+                  disabled={!loadingGroups && groupList.length === 0}
                 />
+                {formData.assignedteam && teamAddedIds.length > 0 && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Added {teamAddedIds.length} member{teamAddedIds.length === 1 ? "" : "s"} of this group to "Assign to Users" — remove any you don't want.
+                  </p>
+                )}
               </div>
             </div>
 

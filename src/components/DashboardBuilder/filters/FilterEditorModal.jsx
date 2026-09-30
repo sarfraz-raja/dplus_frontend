@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Trash2, Plus } from 'lucide-react';
 import FormModal from '../../FormModal';
 import Button from '../../Button';
-import { getDatasourceDetail, sampleDatasource } from '../../../store/actions/dashboardBuilder-actions';
+import { getDatasourceDetail, getColumnDistinctValues } from '../../../store/actions/dashboardBuilder-actions';
 import MultiSelectFilterInput from './MultiSelectFilterInput';
 import { resolveTimeRangeValue, toDateTimeLocalInput, fromDateTimeLocalInput } from '../utils/resolveTimeRange';
 
@@ -95,7 +95,7 @@ function toSavedFilter(row) {
  * dashboard's filters, a right-side form for whichever row is selected. Saving writes the
  * whole edited array back via onSave (parent persists it as dashboard.global_filters).
  */
-export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = [], datasourceOptions = [], onSave }) {
+export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = [], datasourceOptions = [], defaultDatasourceId = '', onSave }) {
   const [rows, setRows] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [columns, setColumns] = useState([]);
@@ -148,9 +148,13 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
 
   const selected = rows.find((r) => r.id === selectedId) || null;
 
-  // Loads the picked datasource's discovered columns (for the Column datalist) and a small
-  // set of sample values for whichever column is currently chosen (best-effort suggestions —
-  // no distinct-values endpoint exists yet, see Phase 18 plan's confirmed v1 scope).
+  // Loads the picked datasource's discovered columns (for the Column datalist) and real
+  // distinct values for whichever column is currently chosen, via the actual
+  // GET .../columns/<column>/distinct-values endpoint — replaces the old "sample 10 rows and
+  // de-dupe" guess (sampleDatasource), which regularly came back empty for a column that
+  // clearly had values just not within whichever 10 rows happened to be sampled. A calculated
+  // column/metric (Phase A) 422s here (only real physical columns are supported) — treated the
+  // same as "no suggestions," not a hard failure, same as any other lookup miss.
   useEffect(() => {
     if (!selected?.datasourceId) { setColumns([]); setValueSuggestions([]); return; }
     let cancelled = false;
@@ -159,12 +163,9 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
       .then(({ columns: cols }) => { if (!cancelled) setColumns(cols || []); })
       .catch(() => { if (!cancelled) setColumns([]); })
       .finally(() => { if (!cancelled) setColumnsLoading(false); });
-    sampleDatasource(selected.datasourceId)
-      .then(({ rows: sampleRows }) => {
-        if (cancelled || !selected.column) return;
-        const values = [...new Set((sampleRows || []).map((r) => r[selected.column]).filter((v) => v !== null && v !== undefined))];
-        setValueSuggestions(values.map(String));
-      })
+    if (!selected.column) { setValueSuggestions([]); return undefined; }
+    getColumnDistinctValues(selected.datasourceId, selected.column)
+      .then((values) => { if (!cancelled) setValueSuggestions(values); })
       .catch(() => { if (!cancelled) setValueSuggestions([]); });
     return () => { cancelled = true; };
   }, [selected?.datasourceId, selected?.column]);
@@ -174,7 +175,12 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
   };
 
   const addFilter = () => {
-    const row = { id: nextLocalId(), label: '', column: '', operator: '=', value: '', datasourceId: datasourceOptions[0]?.id || '' };
+    // Prefer the caller's own datasource (e.g. the widget this filter belongs to, when opened
+    // from a widget's own Filter action — see DashboardCanvasEditor.jsx) over just picking
+    // datasourceOptions[0], which is only correct by coincidence once a dashboard has more
+    // than one datasource. Falls back to datasourceOptions[0] for the dashboard-wide "Filters"
+    // button (FiltersToggleButton), which has no single "owning" widget to default to.
+    const row = { id: nextLocalId(), label: '', column: '', operator: '=', value: '', datasourceId: defaultDatasourceId || datasourceOptions[0]?.id || '' };
     setRows((prev) => [...prev, row]);
     setSelectedId(row.id);
   };
@@ -185,18 +191,28 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
   };
 
   const handleSave = async () => {
-    const invalid = rows.some((r) => {
-      if (!r.column) return true;
-      if (r.operator === 'BETWEEN') {
-        if (rangeModeOf(r.value) === 'relative') return !r.value?.amount || !r.value?.unit;
-        if (rangeModeOf(r.value) === 'thisPeriod') return !r.value?.unit;
-        const resolved = resolveTimeRangeValue(r.value);
-        return !resolved?.[0] || !resolved?.[1];
-      }
-      if (r.operator === 'IN' || r.operator === 'NOT IN') return !r.value || r.value.length === 0;
-      return !r.value;
-    });
-    if (invalid) { setError('Every filter needs a column and a value.'); return; }
+    // Checks EVERY row in the list, not just whichever one is currently selected — the error
+    // used to just say "Every filter needs a column and a value" with no indication of WHICH
+    // one, so fixing the row you're actually looking at (already valid) did nothing and the
+    // message looked like it was contradicting itself. Now it also selects the first bad row,
+    // so the thing that needs fixing is what's actually on screen.
+    //
+    // Only `column` is required now — a value is deliberately allowed to stay blank, so a
+    // filter can be DEFINED now and given a value later from the Active Filters bar, without
+    // needing to reopen this modal. Every consumer downstream already treats a value-less
+    // filter as a valid "not yet active" state, not a broken one: FilterPanel's own hasValue()
+    // check already only shows filters WITH a value as an active chip; FilterPanelExpanded
+    // already renders an editable row for every defined filter, blank or not; and
+    // resolveFiltersForQuery (utils/resolveTimeRange.js) already drops any value-less filter
+    // before it ever reaches a query. This Save gate used to be the one place stricter than
+    // everything around it — see the conversation this was relaxed in.
+    const isRowInvalid = (r) => !r.column;
+    const firstInvalid = rows.find(isRowInvalid);
+    if (firstInvalid) {
+      setSelectedId(firstInvalid.id);
+      setError(`"${firstInvalid.label || 'This filter'}" needs a column.`);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {

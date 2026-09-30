@@ -2,11 +2,16 @@ import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Plus, Play, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, LayoutGrid, Settings2, Palette, AlertTriangle, BarChart3 } from 'lucide-react';
 import MappingFields from './MappingFields';
+import { measureKey } from './renderChartWidget';
+import AdvancedSqlFields from './AdvancedSqlFields';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
+import StyleModeSwitch from '../widgetConfig/StyleModeSwitch';
+import ConditionalFormatRules from '../widgetConfig/ConditionalFormatRules';
 import Button from '../../Button';
 import ConfirmModal from '../../ConfirmModal';
 import CustomTooltip from '../../CustomTooltip';
 import ChartListItem from './ChartListItem';
+import ChartStylePicker from './ChartStylePicker';
 import ChartListSearchBar from './ChartListSearchBar';
 import useChartListFilter from './useChartListFilter';
 import { chartLibraryStyleFieldsFor } from '../widgetConfig/widgetTypeRegistry';
@@ -15,6 +20,7 @@ import ChartLibraryWidgetView from './ChartLibraryWidgetView';
 import CHART_TYPE_META, { CHART_TYPES } from './chartTypeMeta';
 import { useTheme } from '../../../context/ThemeContext';
 import { chartTokens } from '../../../theme/tokens';
+import { resolveStyleForMode, setModeColor, copyStyleFields, countCopiedSettings, surfaceBg } from '../utils/themedStyle';
 import {
   listDatasources,
   getDatasourceDetail,
@@ -32,14 +38,74 @@ import { sortWidgetsByRecency, withDatasourceOnly } from './sortWidgets';
 import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
 import { DEFAULT_TIME_AXIS_FORMAT, TIME_AXIS_FORMAT_OPTIONS, DEFAULT_TICK_INTERVAL_UNIT, TICK_INTERVAL_UNIT_MAX } from './axisTypeUtils';
 
+// Phase A — merges a saved metric into the SAME `columns` array the measure/dimension pickers
+// already read (see loadColumnsFor below), rather than a separate list the picker would need
+// its own merge logic for. `expression_type: 'SQL'` distinguishes it from a real physical
+// column for anything that ever needs to tell the two apart (per the backend's own naming);
+// `kind` is kept alongside it so IS_SAVED_METRIC below can single out just the self-contained-
+// aggregate case. Flags derived from `kind` (the backend doesn't return is_dimension/is_measure
+// for a metric — there's no real column metadata to have those in the first place):
+// kind 'metric' -> measure-only (a self-contained aggregate, never a raw per-row value, so it
+// can't be a dimension); kind 'column' -> both, per the backend's own description ("usable like
+// a normal column in x_axis/series/label, or aggregated as y_axis").
+function metricToColumn(m) {
+  return {
+    column_name: m.name,
+    // 𝑓x prefix — same "this isn't a real physical column, it's a saved expression" visual
+    // marker Superset itself uses (see the conversation's own screenshots of it), so a saved
+    // metric doesn't read as indistinguishable from a real column in the picker.
+    display_name: `𝑓x ${m.name}`,
+    data_type: undefined,
+    is_measure: true,
+    is_dimension: m.kind === 'column',
+    filterable: true,
+    sortable: true,
+    expression_type: 'SQL',
+    kind: m.kind,
+  };
+}
+
 const AGGREGATIONS = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX', 'LATEST'];
+// KPI_CARD/GAUGE-only: excludes 'LATEST'. Those two chart_types have no dimension/GROUP BY
+// (see SINGLE_VALUE_DATE_FILTER_GROUP's own comment) — a `date_filter_range: 'Latest'` there
+// (below) picks the most-recent-timestamp's rows across every site/cell, same as any other
+// range value, and this aggregation is what reduces them to one number, same as it already
+// does for every other range. 'LATEST' as an aggregation instead used to mean "just take
+// whichever row comes back first" with no reduction at all — silently wrong the moment more
+// than one row shares that timestamp (which is the normal case here: one row per site/cell).
+// LINE/BAR/AREA/STACKED_BAR keep 'LATEST' in the full AGGREGATIONS list above — those have a
+// real dimension/GROUP BY, so "DISTINCT ON (dims) ORDER BY dims, latest_by DESC" already
+// yields exactly one row per category with nothing left to reduce.
+const SINGLE_VALUE_AGGREGATIONS = AGGREGATIONS.filter((a) => a !== 'LATEST');
 
 // mapping is a free-form key/value bag (no fixed schema server-side) — the field keys used
 // here are just the conventions this codebase picks per chart_type, matching whatever the
 // backend's SQL-generation logic reads for that type. Each entry is a field-descriptor
 // array consumed by MappingFields.jsx (same generic-renderer pattern WidgetStyleFields.jsx
 // already established for per-widget-type style controls).
-const AGG_FIELD = { key: 'aggregation', label: 'Aggregation', type: 'select', options: AGGREGATIONS, default: 'SUM' };
+// Hidden once the paired y_axis measure is a Custom SQL expression (Phase B) — that expression
+// is already a self-contained aggregate (same rule the backend gave for Phase A's saved
+// "metric"-kind metrics: "hide the Aggregation dropdown... the expression is already a
+// self-contained aggregate"), so a separate Aggregation pick would be meaningless at best and
+// misleadingly wrong at worst (see onMappingChange's matching cleanup, which deletes
+// mapping.aggregation the moment y_axis switches to SQL mode, so this stays in sync with what's
+// actually sent). Every group these two fields appear in always pairs them with a `y_axis`
+// field in the same group (see CHART_TYPE_FIELDS below) — safe to check `m.y_axis` directly.
+// `columns` (2nd arg, threaded through from MappingFields.jsx's showIf call) — also true when
+// y_axis is a plain string naming a saved Phase A metric of kind 'metric' (its own expression
+// is likewise already a self-contained aggregate, same reasoning as the Phase B ad-hoc case;
+// kind 'column' is NOT self-contained-aggregate — it's a raw calculated value, still needs a
+// normal Aggregation pick same as any other column).
+const IS_SQL_MEASURE = (m, columns) => {
+  if (m.y_axis && typeof m.y_axis === 'object' && m.y_axis.type === 'sql') return true;
+  if (typeof m.y_axis === 'string' && m.y_axis && columns) {
+    const col = columns.find((c) => c.column_name === m.y_axis);
+    if (col?.expression_type === 'SQL' && col?.kind === 'metric') return true;
+  }
+  return false;
+};
+const AGG_FIELD = { key: 'aggregation', label: 'Aggregation', type: 'select', options: AGGREGATIONS, default: 'SUM', showIf: (m, columns) => !IS_SQL_MEASURE(m, columns) };
+const SINGLE_VALUE_AGG_FIELD = { key: 'aggregation', label: 'Aggregation', type: 'select', options: SINGLE_VALUE_AGGREGATIONS, default: 'SUM', showIf: (m, columns) => !IS_SQL_MEASURE(m, columns) };
 // Optional, appended to every chart_type below whose primary dimension (x_axis/Category) can
 // have a drill-down hierarchy under it — lets a chart's own definition declare "drilling into
 // this bar/slice should walk through these columns, in this order" (mapping.drill_down; see
@@ -123,13 +189,14 @@ const X_AXIS_TICK_INTERVAL_FIELD = {
   unitMax: TICK_INTERVAL_UNIT_MAX,
 };
 
-// "LATEST" (aggregation: 'LATEST') needs a date/timestamp column to order by — the backend
-// requires mapping.latest_by whenever aggregation is LATEST (validate_widget_mapping rejects
-// its absence), translating to `SELECT DISTINCT ON (dims) ... ORDER BY dims, latest_by DESC`
-// (or a plain `ORDER BY latest_by DESC LIMIT 1` with no dimension) instead of wrapping y_axis
-// in a SQL aggregate — the most-recent-row-per-category (or overall) reading, not a sum/average
-// over a range. Only shown once LATEST is actually selected (`showIf`, see MappingFields.jsx)
-// so it doesn't clutter/block save for the other five aggregations that don't need it.
+// "LATEST" (aggregation: 'LATEST', LINE/BAR/AREA/STACKED_BAR only — see SINGLE_VALUE_AGGREGATIONS'
+// own comment for why KPI_CARD/GAUGE don't offer this) needs a date/timestamp column to order
+// by — the backend requires mapping.latest_by whenever aggregation is LATEST
+// (validate_widget_mapping rejects its absence), translating to
+// `SELECT DISTINCT ON (dims) ... ORDER BY dims, latest_by DESC` — the most-recent-row-per-
+// category reading, not a sum/average over a range. Only shown once LATEST is actually
+// selected (`showIf`, see MappingFields.jsx) so it doesn't clutter/block save for the other
+// five aggregations that don't need it.
 const LATEST_BY_FIELD = {
   key: 'latest_by', label: 'Latest by (date column)', type: 'column', role: 'date',
   showIf: (mapping) => mapping.aggregation === 'LATEST',
@@ -140,25 +207,34 @@ const LATEST_BY_FIELD = {
 // "compare to" are defined and behave identically everywhere they appear, instead of each
 // chart_type declaring its own near-identical copy. See each field's own original doc
 // comment (moved here unchanged) for why every individual choice below is what it is.
+//
+// 'Latest' (date_filter_range) — the no-dimension equivalent of LINE/BAR's 'LATEST'
+// aggregation: picks the rows at the single most-recent `date_filter_column` value (across
+// every site/cell, since there's no dimension to group by here), same as any other range
+// value picks "the rows in this window" — then `aggregation` (SINGLE_VALUE_AGGREGATIONS,
+// no 'LATEST' — see its own comment) reduces THOSE rows to one number, exactly like it
+// already does for 'Last hour'/'This quarter'/etc. `date_filter_column` doubles as the
+// ordering column here (the old, now-removed `latest_by` field's job) — kept visible/enabled
+// for every range value, 'Latest' included, rather than hidden as it was under the old
+// LATEST-aggregation scheme.
 const SINGLE_VALUE_DATE_FILTER_GROUP = { key: 'date_filter_group', label: 'Date Filter', type: 'group', fields: [
-  { key: 'date_filter_column', label: 'Column', type: 'column', role: 'date', optional: true, showIf: (m) => m.aggregation !== 'LATEST' },
-  { key: 'date_filter_range', label: 'Range', type: 'select', options: ['Last hour', 'Last 24 hours', 'Last 7 days', 'Last 30 days', 'This month', 'This quarter', 'This year'], default: 'Last 7 days', showIf: (m) => m.aggregation !== 'LATEST' },
+  { key: 'date_filter_column', label: 'Column', type: 'column', role: 'date', optional: true },
+  { key: 'date_filter_range', label: 'Range', type: 'select', options: ['Latest', 'Last hour', 'Last 24 hours', 'Last 7 days', 'Last 30 days', 'This month', 'This quarter', 'This year'], default: 'Last 7 days' },
 ] };
 const SINGLE_VALUE_COMPARISON_GROUP = { key: 'comparison_group', label: 'Comparison', type: 'group', fields: [
   {
     key: 'compare_to', label: 'Compare to', type: 'select', default: 'None',
-    options: (m) => (m.aggregation === 'LATEST' ? ['None', 'Custom'] : ['None', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom']),
+    options: (m) => (m.date_filter_range === 'Latest' ? ['None', 'Custom'] : ['None', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom']),
   },
-  // LATEST has no "current window" to shift (its own date_filter_column is hidden/cleared —
-  // see LATEST_BY_FIELD's comment) — its own Custom is a single cutoff instant ("the latest
-  // reading at or before this date"), so one date/time picker is the right, unambiguous
-  // input there. Every other aggregation DOES have a real current window (date_filter_range,
-  // e.g. "This year") — comparing that against a single picked instant was ambiguous (what's
-  // actually being diffed against?), so it takes an explicit from/to range instead, matching
-  // the same shape Date Filter's own Range picker implies.
-  { key: 'compare_custom_date', label: 'Compare to date/time', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.aggregation === 'LATEST' },
-  { key: 'compare_custom_from', label: 'Compare from', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.aggregation !== 'LATEST' },
-  { key: 'compare_custom_to', label: 'Compare to', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.aggregation !== 'LATEST' },
+  // Range 'Latest' has no "current window" to shift — its own Custom is a single cutoff
+  // instant ("the latest reading at or before this date"), so one date/time picker is the
+  // right, unambiguous input there. Every other range DOES have a real current window
+  // (date_filter_range, e.g. "This year") — comparing that against a single picked instant
+  // was ambiguous (what's actually being diffed against?), so it takes an explicit from/to
+  // range instead, matching the same shape Date Filter's own Range picker implies.
+  { key: 'compare_custom_date', label: 'Compare to date/time', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.date_filter_range === 'Latest' },
+  { key: 'compare_custom_from', label: 'Compare from', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.date_filter_range !== 'Latest' },
+  { key: 'compare_custom_to', label: 'Compare to', type: 'dateInput', showIf: (m) => m.compare_to === 'Custom' && m.date_filter_range !== 'Latest' },
   { key: 'delta_format', label: 'Delta format', type: 'select', options: ['Percent', 'Number'], default: 'Percent' },
 ] };
 
@@ -217,13 +293,21 @@ const SERIES_PALETTE_FIELD = { key: 'palette', label: 'Series colors', type: 'pa
 // category values still benefit from Date format, though — it just governs how each row's
 // own label is displayed, not tick spacing along a timeline — so that field stays available
 // while tick spacing doesn't.
-function buildAxisFields(xLabel = 'Dimension', yLabel = 'Measure', showTitles = true, showTimeAxis = false, showYAxisBounds = false, showSeries = false, xGroupLabel = 'X Axis', yGroupLabel = 'Y Axis', showTickInterval = showTimeAxis) {
+// `showDateFormat` (defaults to mirroring `showTimeAxis`, like `showTickInterval` above) —
+// split out separately so a chart_type whose dimension is a *discrete* label (a slice, a
+// stage, a rectangle — no axis at all, unlike HORIZONTAL_BAR's ranked axis) can still opt
+// into Date format without opting into `showTimeAxis`'s continuous-time-axis behavior
+// (isTimeAxis/tickInterval), which has nothing to render against there. PIE/FUNNEL/TREEMAP/
+// WATERFALL/HEAT_MAP each set this true while leaving showTimeAxis false — see each's own
+// CHART_TYPE_FIELDS entry below and renderChartWidget.jsx's formatSeriesLabels for the
+// discrete-label formatting this feeds.
+function buildAxisFields(xLabel = 'Dimension', yLabel = 'Measure', showTitles = true, showTimeAxis = false, showYAxisBounds = false, showSeries = false, xGroupLabel = 'X Axis', yGroupLabel = 'Y Axis', showTickInterval = showTimeAxis, showDateFormat = showTimeAxis) {
   return [
     { key: 'x_axis_group', label: xGroupLabel, type: 'group', fields: [
       { key: 'x_axis', label: xLabel, type: 'column', role: 'dimension' },
       ...(showSeries ? [SERIES_FIELD, SERIES_PALETTE_FIELD] : []),
       ...(showTitles ? [{ ...X_AXIS_TITLE_FIELD, label: `${xGroupLabel} title` }] : []),
-      ...(showTimeAxis ? [X_AXIS_DATE_FORMAT_FIELD] : []),
+      ...(showDateFormat ? [X_AXIS_DATE_FORMAT_FIELD] : []),
       ...(showTickInterval ? [X_AXIS_TICK_INTERVAL_FIELD] : []),
     ] },
     // Aggregation (and LATEST's own "latest by" column) only ever apply to the measure —
@@ -248,15 +332,16 @@ const CHART_TYPE_FIELDS = {
   LINE: [...buildAxisFields('Dimension', 'Measure', true, true, true, true), DRILL_DOWN_FIELD],
   BAR: [...buildAxisFields('Dimension', 'Measure', true, true, true, true), DRILL_DOWN_FIELD],
   AREA: [...buildAxisFields('Dimension', 'Measure', true, true, true, true), DRILL_DOWN_FIELD],
-  PIE: [...buildAxisFields('Category', 'Value (measure)', false), DRILL_DOWN_FIELD],
+  PIE: [...buildAxisFields('Category', 'Value (measure)', false, false, false, false, 'X Axis', 'Y Axis', false, true), DRILL_DOWN_FIELD],
   KPI_CARD: [
     // Measure + Aggregation grouped together, same reasoning as buildAxisFields' Y Axis
     // group above — Aggregation is a direct modifier of the measure column, so it sits right
-    // beside it rather than floating loose in the panel.
+    // beside it rather than floating loose in the panel. SINGLE_VALUE_AGG_FIELD (no 'LATEST'
+    // option) — see its own comment: "latest" for a no-dimension chart_type is a Date
+    // Filter range choice (SINGLE_VALUE_DATE_FILTER_GROUP's 'Latest'), not an aggregation.
     { key: 'measure_group', label: 'Measure', type: 'group', fields: [
       { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
-      AGG_FIELD,
-      LATEST_BY_FIELD,
+      SINGLE_VALUE_AGG_FIELD,
     ] },
     SINGLE_VALUE_DATE_FILTER_GROUP,
     SINGLE_VALUE_COMPARISON_GROUP,
@@ -264,8 +349,7 @@ const CHART_TYPE_FIELDS = {
   GAUGE: [
     { key: 'measure_group', label: 'Measure', type: 'group', fields: [
       { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
-      AGG_FIELD,
-      LATEST_BY_FIELD,
+      SINGLE_VALUE_AGG_FIELD,
     ] },
     // Same single-value comparison feature as KPI_CARD, reusing the exact same field
     // descriptors/groups (see SINGLE_VALUE_DATE_FILTER_GROUP/SINGLE_VALUE_COMPARISON_GROUP's
@@ -295,19 +379,36 @@ const CHART_TYPE_FIELDS = {
     // wired into ScatterChart's own `name` per point + tooltip (see renderChartWidget.jsx's
     // SCATTER case), which already supported this, just never had anything to populate it.
     { key: 'label', label: 'Label (dimension)', type: 'column', role: 'dimension', optional: true },
+    // Only relevant once Label is actually set — otherwise there's no dimension value on this
+    // chart_type for a date format to apply to (both axes are raw numeric measures).
+    // Own `label_date_format` key (not `x_axis_date_format`) — SCATTER has no x_axis at all
+    // (both axes are raw measures), so reusing that key would misleadingly imply an axis this
+    // chart_type doesn't have.
+    { ...X_AXIS_DATE_FORMAT_FIELD, key: 'label_date_format', showIf: (m) => !!m.label, fullWidth: true },
   ],
-  TABLE: [{ key: 'columns', label: 'Columns to display', type: 'multiColumn' }],
-  HEAT_MAP: [...buildAxisFields('Dimension', 'Measure'), DRILL_DOWN_FIELD],
+  // `table_date_format` applies to whichever displayed column looks like a date/timestamp
+  // (auto-detected from the row data at render time — see VirtualizedTable.jsx's own
+  // isTimeValue-based column detection) rather than naming a specific column here, since
+  // `columns` is a free-pick multi-select and the datetime column isn't known until a
+  // datasource is chosen. Assumes at most one datetime column is displayed at a time; if more
+  // than one is ever selected, all of them share this one format rather than needing a
+  // separate per-column picker.
+  TABLE: [
+    { key: 'columns', label: 'Columns to display', type: 'multiColumn' },
+    { key: 'table_date_format', label: 'Date format', type: 'select', options: TIME_AXIS_FORMAT_OPTIONS, default: DEFAULT_TIME_AXIS_FORMAT, optional: true, hint: 'Applied to any date/time column', fullWidth: true },
+  ],
+  HEAT_MAP: [...buildAxisFields('Dimension', 'Measure', true, false, false, false, 'X Axis', 'Y Axis', false, true), DRILL_DOWN_FIELD],
   HORIZONTAL_BAR: [...buildAxisFields('Category', 'Measure', true, true, true, true, 'Category', 'Measure', false), DRILL_DOWN_FIELD],
-  FUNNEL: [...buildAxisFields('Stage', 'Value (measure)', false), DRILL_DOWN_FIELD],
-  WATERFALL: [...buildAxisFields('Step', 'Delta (measure)', true, false, true), DRILL_DOWN_FIELD],
-  TREEMAP: [...buildAxisFields('Category', 'Value (measure)', false), DRILL_DOWN_FIELD],
+  FUNNEL: [...buildAxisFields('Stage', 'Value (measure)', false, false, false, false, 'X Axis', 'Y Axis', false, true), DRILL_DOWN_FIELD],
+  WATERFALL: [...buildAxisFields('Step', 'Delta (measure)', true, false, true, false, 'X Axis', 'Y Axis', false, true), DRILL_DOWN_FIELD],
+  TREEMAP: [...buildAxisFields('Category', 'Value (measure)', false, false, false, false, 'X Axis', 'Y Axis', false, true), DRILL_DOWN_FIELD],
   STACKED_BAR: [
     { key: 'x_axis_group', label: 'X Axis', type: 'group', fields: [
       { key: 'x_axis', label: 'Category', type: 'column', role: 'dimension' },
       { key: 'series', label: 'Series (grouping dimension)', type: 'column', role: 'dimension' },
       SERIES_PALETTE_FIELD,
       X_AXIS_TITLE_FIELD,
+      X_AXIS_DATE_FORMAT_FIELD,
     ] },
     { key: 'y_axis_group', label: 'Y Axis', type: 'group', fields: [
       { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
@@ -362,16 +463,28 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // below it.
   const [vizTypeCollapsed, setVizTypeCollapsed] = useState(false);
   const PANEL_MIN_WIDTH = 320;
-  const PANEL_MAX_WIDTH = 720;
+  // Was 720 — comfortably wider than the left preview column can actually spare once the
+  // app's own left icon sidebar + this column's realistic minimum are accounted for on a
+  // laptop-width (not necessarily maximized) browser window, which is exactly what pushed the
+  // panel (and the whole row) past the visible frame with nothing to scroll it back into view
+  // — see the conversation this was reported in. A smaller ceiling doesn't fix "not truly
+  // viewport-aware" (that's the JS-measurement approach already tried three times and
+  // reverted, per the comment below), but it shrinks the window in which the static clamp
+  // alone isn't enough.
+  const PANEL_MAX_WIDTH = 560;
   const [activeTab, setActiveTab] = useState('data');
 
   // Same theme-token derivation DashboardCanvasEditor.jsx uses for its own Style panel's
   // resolvedDefaults — without this, every unset color field showed a plain black swatch
   // regardless of what the preview is actually rendering with.
   const { theme } = useTheme();
-  const isDark = theme === 'dark';
+  // Which mode's colors the Style tab edits AND the preview renders in — starts on the app's
+  // current theme, but can be flipped to design the other mode without leaving this theme
+  // (see themedStyle.js for how per-mode colors are stored/resolved).
+  const [styleMode, setStyleMode] = useState(theme === 'dark' ? 'dark' : 'light');
+  const isDark = styleMode === 'dark';
   const { text: resolvedTextColor, sub: resolvedSubColor } = chartTokens(isDark);
-  const resolvedBgColor = isDark ? '#22273C' : '#ffffff';
+  const resolvedBgColor = surfaceBg(isDark);
 
   const [datasources, setDatasources] = useState([]);
   // "Charts" tab list items only carry datasource_id, not a name — resolved against this
@@ -387,6 +500,22 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   const [columnsLoading, setColumnsLoading] = useState(false);
   const [chartType, setChartType] = useState('BAR');
   const [mapping, setMapping] = useState({});
+  // Style tab, per-mode colors — declared after chartType/mapping (it reads both). Legacy flat
+  // colors count as both modes; see themedStyle.js.
+  const styleFields = chartLibraryStyleFieldsFor(chartType);
+  // `palette` is per-mode too, but is edited in the Data tab (SERIES_PALETTE_FIELD) for series
+  // charts, so it's not necessarily in `styleFields` — always treat it as a mode color here.
+  const styleColorKeys = new Set([...styleFields.filter((f) => f.type === 'color').map((f) => f.key), 'palette']);
+  const styleModeView = resolveStyleForMode(mapping.style, isDark) || {};
+  const onStyleFieldChange = (key, val) => {
+    setMapping((prev) => ({
+      ...prev,
+      style: styleColorKeys.has(key)
+        ? setModeColor(prev.style, key, val, isDark, styleColorKeys)
+        : { ...(prev.style || {}), [key]: val },
+    }));
+    markDirty();
+  };
   const [dirty, setDirty] = useState(false); // unsaved changes since last successful save
 
   const [saving, setSaving] = useState(false);
@@ -457,6 +586,17 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     panelResizeStartRef.current = { x: e.clientX, width: panelWidth };
     setIsResizingPanel(true);
   };
+  // Reverted back to the plain static PANEL_MIN_WIDTH/PANEL_MAX_WIDTH clamp this originally
+  // had — three increasingly elaborate attempts at a "dynamic, viewport-aware" max (a fixed
+  // guessed offset, then outerRowRef.clientWidth, then getBoundingClientRect().left) each
+  // introduced their own new bug rather than fixing the actual one, per the conversation this
+  // was reported in repeatedly, and the last one had a real logic error (`Math.max(PANEL_MIN_
+  // WIDTH, computedMax)` forces the width back UP to 320 even when the true available space is
+  // narrower than that, which can itself push the panel off-screen). The actual fix for
+  // "content forces the panel wider than its own declared width" is the CSS-level
+  // `overflow-x-hidden` on the panel below (correct per the flexbox spec regardless of what's
+  // inside), not JS math trying to predict how much room is left — keeping this resize logic
+  // simple and known-working, and letting overflow-x-hidden be the real guarantee.
   useEffect(() => {
     if (!isResizingPanel) return undefined;
     const onMove = (e) => {
@@ -466,6 +606,18 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       // to a smaller clientX) should WIDEN the panel, the opposite sign of a left-edge panel.
       const next = start.width + (start.x - e.clientX);
       setPanelWidth(Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, next)));
+      // The left preview column DOES shrink correctly (CSS flex/overflow, unaffected by
+      // whether a chart is loaded) — what doesn't follow is a mounted ECharts instance's own
+      // <canvas>: echarts-for-react only re-measures on the *browser window's* own resize
+      // event, never on a CSS-only/flexbox-driven container resize like dragging this handle
+      // (the browser window itself never changes size), so a loaded preview chart's canvas
+      // just sits at whatever pixel width it first rendered at — with no chart mounted there's
+      // nothing to visibly stay wide, which is why this only shows up once a chart is loaded —
+      // see the conversation this was reported in. Firing a synthetic window resize event is
+      // the standard, minimal way to make echarts-for-react's own built-in listener pick this
+      // up and call chart.resize(), without touching the render chain (renderChartWidget.jsx/
+      // LineAreaChart.jsx etc.) at all.
+      window.dispatchEvent(new Event('resize'));
     };
     const onUp = () => setIsResizingPanel(false);
     // Selecting the preview text/labels mid-drag is a common accidental side effect of a fast
@@ -507,8 +659,8 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     }
     setColumnsLoading(true);
     try {
-      const { columns: cols } = await getDatasourceDetail(id);
-      setColumns(cols);
+      const { columns: cols, metrics } = await getDatasourceDetail(id);
+      setColumns([...cols, ...metrics.map(metricToColumn)]);
     } catch (err) {
       setColumns([]);
     } finally {
@@ -518,14 +670,58 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
 
   const markDirty = () => setDirty(true);
 
+  // "Copy style from another chart" (Style tab) — applies the source chart's style to the live
+  // preview right away; `copyPreview` holds the pre-copy style so Undo can restore it, and
+  // Apply just accepts it (nothing is persisted until the chart itself is saved).
+  const [copyingStyle, setCopyingStyle] = useState(false);
+  const [copyPreview, setCopyPreview] = useState(null);
+  const copyStyleFrom = async (sourceId) => {
+    const source = widgets.find((w) => String(w.id) === String(sourceId));
+    setCopyingStyle(true);
+    try {
+      const detail = await getWidgetDetail(sourceId);
+      const fields = chartLibraryStyleFieldsFor(chartType, mapping);
+      // 'palette' is always copied (per mode) — for series charts it lives in the Data tab, so
+      // it isn't among the style fields above.
+      const allowed = new Set([...fields.map((f) => f.key), 'palette']);
+      const colorKeys = new Set([...fields.filter((f) => f.type === 'color').map((f) => f.key), 'palette']);
+      // Replace, not merge: every style field this chart type has is taken from the source —
+      // shared settings AND both modes' colors — so a key the source never set is cleared here
+      // too (otherwise e.g. this chart's own saved white title color would survive a copy from
+      // a chart that just uses the default). Keys outside the style fields (column_widths,
+      // cellFormatRules…) are left untouched. See themedStyle.js's copyStyleFields.
+      // While a copy is being experimented with, always diff against the style from before the
+      // FIRST copy, so Undo returns to the original however many charts were tried in between.
+      const baseStyle = copyPreview ? copyPreview.prevStyle : (mapping.style || {});
+      const { style: nextStyle, copied, cleared, skipped } = copyStyleFields(baseStyle, detail?.mapping?.style, allowed, colorKeys);
+      setCopyPreview({ sourceId: String(sourceId), name: source?.name || 'chart', copied, skipped, cleared, prevStyle: baseStyle });
+      setMapping((prev) => ({ ...prev, style: nextStyle }));
+      markDirty();
+    } catch (err) {
+      toast.error(err?.message || 'Could not copy style');
+    } finally {
+      setCopyingStyle(false);
+    }
+  };
+  const undoCopyStyle = () => {
+    if (copyPreview) setMapping((prev) => ({ ...prev, style: copyPreview.prevStyle }));
+    setCopyPreview(null);
+  };
+
   const resetForm = () => {
     setEditingId(null);
+    // A previous widget's dragged-wide panel (up to PANEL_MAX_WIDTH) otherwise silently
+    // carried into an unrelated brand-new widget, since panelWidth is scoped to this whole
+    // component's lifetime, not per-widget — see the conversation this was reported in (a
+    // fresh "New widget" showing an oddly wide, sparse-looking panel with no chart open yet).
+    setPanelWidth(384);
     setName('');
     setDatasourceId('');
     setColumns([]);
     setChartType('BAR');
     setMapping({});
     setDirty(false);
+    setCopyPreview(null);
     setSaveError(null);
     setConfirmingDelete(false);
     setDeleteError(null);
@@ -541,8 +737,66 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setActiveTab('data');
   };
 
+  // Shared by editWidget() (loading an already-saved widget) and runPreview() (after an
+  // explicit save) — both need the identical filtering/comparison logic. Previously editWidget
+  // had its own simpler fetch that skipped mapping.date_filter_column/range AND never computed
+  // a comparison at all, so the same widget could show a very different value/delta just from
+  // being loaded here instead of via Preview. `requestId` must be bumped by the caller
+  // (`++previewRequestIdRef.current`) and passed in, so editWidget's and runPreview's fetches
+  // guard against each other the same way runPreview's own fetches already guarded against one
+  // another — whichever call is still current when a fetch resolves wins.
+  const runQueryAndComparison = async (requestId, widgetId, mappingArg, chartTypeArg) => {
+    const dateFilter = mappingArg.date_filter_column
+      ? buildDateFilterFromPreset(mappingArg.date_filter_column, mappingArg.date_filter_range || 'Last 7 days')
+      : null;
+    const filters = dateFilter ? resolveFiltersForQuery([dateFilter]) : undefined;
+    const data = await getStandaloneWidgetData(widgetId, { filters });
+    if (previewRequestIdRef.current !== requestId) return; // superseded by a newer call
+    setPreviewData(data);
+    hasPreviewedRef.current = true;
+
+    const isLatestCustom = mappingArg.compare_to === 'Custom' && mappingArg.date_filter_range === 'Latest';
+    if ((chartTypeArg === 'KPI_CARD' || chartTypeArg === 'GAUGE') && mappingArg.compare_to && mappingArg.compare_to !== 'None' && (dateFilter || isLatestCustom)) {
+      const compareFilters = mappingArg.compare_to === 'Custom'
+        ? buildCustomComparisonFilters({
+          filters: dateFilter ? [dateFilter] : [],
+          customDate: mappingArg.compare_custom_date,
+          customFrom: mappingArg.compare_custom_from,
+          customTo: mappingArg.compare_custom_to,
+          latestByColumn: isLatestCustom ? mappingArg.date_filter_column : null,
+        })
+        : buildComparisonFilters([dateFilter], mappingArg.compare_to);
+      if (compareFilters) {
+        try {
+          const compareData = await getStandaloneWidgetData(widgetId, { filters: compareFilters });
+          if (previewRequestIdRef.current !== requestId) return;
+          const yAxis = mappingArg.y_axis;
+          const currentVal = Number(data.rows?.[0]?.[yAxis]) || 0;
+          const pastVal = Number(compareData.rows?.[0]?.[yAxis]) || 0;
+          const delta = currentVal - pastVal;
+          setPreviewComparison({ delta, deltaPercent: pastVal !== 0 ? (delta / pastVal) * 100 : null, deltaUp: delta >= 0 });
+        } catch {
+          if (previewRequestIdRef.current === requestId) setPreviewComparison(null);
+        }
+      } else {
+        setPreviewComparison(undefined);
+      }
+    } else {
+      setPreviewComparison(undefined);
+    }
+  };
+
   const editWidget = async (summary) => {
     setEditingId(summary.id);
+    // Same stale-carryover bug resetForm's own panelWidth reset was fixed for (opening "New
+    // widget" after dragging the panel wide elsewhere) — this is the OTHER door into the
+    // editor that was missed: opening a DIFFERENT existing chart from the list, via this
+    // function, never went through resetForm at all, so a previously-dragged-wide panelWidth
+    // carried straight into it too — see the conversation this was reported in (a loaded
+    // chart's preview column not "collapsing," really the panel/toolbar still holding an old,
+    // too-wide panelWidth from editing a prior chart).
+    setPanelWidth(384);
+    setCopyPreview(null);
     setSaveError(null);
     setConfirmingDelete(false);
     setDeleteError(null);
@@ -553,6 +807,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setRunStatus('');
     setDirty(false);
     setDetailLoading(true);
+    const requestId = ++previewRequestIdRef.current;
     try {
       const widget = await getWidgetDetail(summary.id);
       setName(widget.name);
@@ -563,20 +818,25 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       setDetailLoading(false);
 
       // Already-saved chart — run it immediately so selecting one from the list shows its
-      // data right away, no separate Preview click needed. Uses `summary.id` directly
-      // rather than the `editingId` state (which may not have re-rendered yet) to avoid a
-      // race. Best-effort: a failure here shows as a normal preview error, not a save error.
+      // data right away, no separate Preview click needed. Uses `summary.id`/`widget.mapping`/
+      // `widget.chart_type` directly rather than the `editingId`/`mapping`/`chartType` state
+      // (which won't have re-rendered yet) to avoid a stale-closure race. Applies the same
+      // date filter + comparison logic runPreview() uses (via runQueryAndComparison), so a
+      // freshly-opened widget matches what Preview would show instead of an unfiltered,
+      // comparison-less approximation. Best-effort: a failure here shows as a normal preview
+      // error, not a save error.
       setRunning(true);
       setRunStatus('Running query…');
       try {
-        setPreviewData(await getStandaloneWidgetData(summary.id));
-        hasPreviewedRef.current = true;
-        setRunStatus('');
+        await runQueryAndComparison(requestId, summary.id, widget.mapping || {}, widget.chart_type);
+        if (previewRequestIdRef.current === requestId) setRunStatus('');
       } catch (err) {
-        setRunStatus('');
-        setPreviewError(err.message);
+        if (previewRequestIdRef.current === requestId) {
+          setRunStatus('');
+          setPreviewError(err.message);
+        }
       } finally {
-        setRunning(false);
+        if (previewRequestIdRef.current === requestId) setRunning(false);
       }
     } catch (err) {
       setSaveError(err.message);
@@ -688,6 +948,47 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       if (key === 'aggregation' && val !== 'LATEST' && prev.aggregation === 'LATEST' && next.compare_to === 'Custom') {
         delete next.compare_custom_date;
       }
+      // KPI_CARD/GAUGE's own equivalent of the two LATEST blocks above, now keyed off
+      // date_filter_range === 'Latest' instead of aggregation === 'LATEST' (see
+      // SINGLE_VALUE_DATE_FILTER_GROUP's own comment) — date_filter_column is deliberately
+      // NOT cleared here (unlike the LATEST-aggregation case above): it stays as the ordering
+      // column 'Latest' needs, it just stops being a filter range and starts being "which
+      // column to find the most recent value of".
+      if (key === 'date_filter_range' && val === 'Latest') {
+        if (next.compare_to && next.compare_to !== 'None' && next.compare_to !== 'Custom') {
+          delete next.compare_to;
+          delete next.compare_custom_date;
+        }
+        if (next.compare_to === 'Custom') {
+          delete next.compare_custom_from;
+          delete next.compare_custom_to;
+        }
+      }
+      if (key === 'date_filter_range' && val !== 'Latest' && prev.date_filter_range === 'Latest' && next.compare_to === 'Custom') {
+        delete next.compare_custom_date;
+      }
+      // Phase B — switching the measure to a Custom SQL expression (see MappingFields.jsx's
+      // 'Use custom SQL' toggle): the expression is already a self-contained aggregate (backend:
+      // "applied as-is — no extra aggregation is layered on top"), so a leftover
+      // mapping.aggregation from before the switch must not linger and get sent — same
+      // staleness guard as the LATEST cleanup above, just for this field pairing instead.
+      // AGG_FIELD/SINGLE_VALUE_AGG_FIELD's own showIf (ChartLibrary.jsx) hides the dropdown the
+      // same instant, so this keeps what's sent matching what's shown.
+      if (key === 'y_axis' && val && typeof val === 'object' && val.type === 'sql') {
+        delete next.aggregation;
+        delete next.latest_by;
+      }
+      // Phase A equivalent of the block above — picking a saved metric of kind 'metric' by
+      // name (a plain string, same as picking a real column) is just as self-contained an
+      // aggregate as an ad-hoc SQL y_axis, so it gets the same aggregation cleanup. `columns`
+      // is this component's own state (not a param here), already in scope via closure.
+      if (key === 'y_axis' && typeof val === 'string' && val) {
+        const col = columns.find((c) => c.column_name === val);
+        if (col?.expression_type === 'SQL' && col?.kind === 'metric') {
+          delete next.aggregation;
+          delete next.latest_by;
+        }
+      }
       return next;
     });
     markDirty();
@@ -711,7 +1012,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       // 'LATEST' — see LATEST_BY_FIELD's showIf) never blocks Save while it isn't shown;
       // MappingFields.jsx applies the exact same showIf check to decide what to render, so
       // this always matches what's actually on screen.
-      if (f.showIf && !f.showIf(mapping)) return true;
+      if (f.showIf && !f.showIf(mapping, columns)) return true;
       // 'palette' is a display-only style field whose real value lives in mapping.style.palette,
       // never in the flat mapping[f.key] this check reads — so it must never gate Save/Preview,
       // or picking a series (which flips SERIES_PALETTE_FIELD's showIf on) locks canSave false
@@ -750,6 +1051,9 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setSaveError(null);
     try {
       const widget = await saveWidget();
+      // Only an explicit Save ends the copy-style experiment — Preview's implicit auto-save
+      // routes through saveWidget too and must not drop the Undo bar mid-experiment.
+      setCopyPreview(null);
       toast.success('Saved');
       // "Edit chart" from a dashboard placement (see DashboardBuilder.jsx's
       // handleEditInChartsTab) — the chart's already attached there, so saving just
@@ -784,60 +1088,15 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       const widget = await saveWidget();
       if (isAuto) toast('Auto-saved for preview', { icon: '↻' });
       setRunStatus('Running query…');
-      // KPI_CARD's own date filter (mapping.date_filter_column/range) — same reasoning as
-      // DashboardCanvasEditor.jsx's own fetch effect: resolved and sent as a request-level
-      // filter, never written into the saved mapping.filters (which the backend applies
-      // literally, with no re-resolution). No dashboard context exists here at all (this is
-      // the standalone preview, not a placed dashboard widget), so unlike the canvas version
-      // there's no dashboard-global filter to merge with/exclude — just this card's own.
-      const dateFilter = mapping.date_filter_column
-        ? buildDateFilterFromPreset(mapping.date_filter_column, mapping.date_filter_range || 'Last 7 days')
-        : null;
-      const filters = dateFilter ? resolveFiltersForQuery([dateFilter]) : undefined;
-      const data = await getStandaloneWidgetData(widget.id, { filters });
-      // A newer run (e.g. the user changed another field while this one was still in
-      // flight) already landed — discard this now-superseded response instead of
-      // clobbering it.
-      if (previewRequestIdRef.current !== requestId) return;
-      setPreviewData(data);
-      hasPreviewedRef.current = true;
-      setRunStatus('');
-
-      // "Compare to" — for the preset shifts, only possible here when a date_filter_column is
-      // set (there's no dashboard-level filter to fall back to in this standalone preview,
-      // unlike the canvas version's kpiEffectiveFilters). 'Custom' with LATEST doesn't need
-      // dateFilter at all — it uses latest_by directly (see buildCustomComparisonFilters).
-      // Best-effort: any failure just clears the delta rather than surfacing as a preview
-      // error, since the base chart itself still loaded fine.
-      const isLatestCustom = mapping.compare_to === 'Custom' && mapping.aggregation === 'LATEST';
-      if ((chartType === 'KPI_CARD' || chartType === 'GAUGE') && mapping.compare_to && mapping.compare_to !== 'None' && (dateFilter || isLatestCustom)) {
-        const compareFilters = mapping.compare_to === 'Custom'
-          ? buildCustomComparisonFilters({
-            filters: dateFilter ? [dateFilter] : [],
-            customDate: mapping.compare_custom_date,
-            customFrom: mapping.compare_custom_from,
-            customTo: mapping.compare_custom_to,
-            latestByColumn: isLatestCustom ? mapping.latest_by : null,
-          })
-          : buildComparisonFilters([dateFilter], mapping.compare_to);
-        if (compareFilters) {
-          try {
-            const compareData = await getStandaloneWidgetData(widget.id, { filters: compareFilters });
-            if (previewRequestIdRef.current !== requestId) return;
-            const yAxis = mapping.y_axis;
-            const currentVal = Number(data.rows?.[0]?.[yAxis]) || 0;
-            const pastVal = Number(compareData.rows?.[0]?.[yAxis]) || 0;
-            const delta = currentVal - pastVal;
-            setPreviewComparison({ delta, deltaPercent: pastVal !== 0 ? (delta / pastVal) * 100 : null, deltaUp: delta >= 0 });
-          } catch {
-            if (previewRequestIdRef.current === requestId) setPreviewComparison(null);
-          }
-        } else {
-          setPreviewComparison(undefined);
-        }
-      } else {
-        setPreviewComparison(undefined);
-      }
+      // Date filter + comparison logic lives in runQueryAndComparison, shared with editWidget()
+      // — see its own doc comment. `filters`/`mapping.filters` reasoning: resolved and sent as
+      // a request-level filter, never written into the saved mapping.filters (which the
+      // backend applies literally, with no re-resolution). No dashboard context exists here at
+      // all (this is the standalone preview, not a placed dashboard widget), so unlike the
+      // canvas version there's no dashboard-global filter to merge with/exclude — just this
+      // card's own.
+      await runQueryAndComparison(requestId, widget.id, mapping, chartType);
+      if (previewRequestIdRef.current === requestId) setRunStatus('');
     } catch (err) {
       if (previewRequestIdRef.current !== requestId) return;
       setRunStatus('');
@@ -886,6 +1145,9 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     try {
       setRunStatus('Saving…');
       const widget = await saveWidget();
+      // Only an explicit Save ends the copy-style experiment — Preview's implicit auto-save
+      // routes through saveWidget too and must not drop the Undo bar mid-experiment.
+      setCopyPreview(null);
       toast.success('Saved');
       setRunStatus('');
       onSavedForDashboard(widget.id);
@@ -1000,7 +1262,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     const path = previewData.drillDown.path || [];
     const canUp = path.length > 0;
     const xAxis = previewData.drillDown.dimension || mapping.x_axis;
-    const yAxis = mapping.y_axis;
+    const yAxis = measureKey(mapping.y_axis);
     const topRow = previewData.drillDown.has_next_level && previewData.rows?.length
       ? previewData.rows.reduce((best, r) => (best == null || Number(r[yAxis]) > Number(best[yAxis]) ? r : best), null)
       : null;
@@ -1046,8 +1308,14 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           // conversion for the real dashboard-canvas render path), so a toggle set here
           // previously had no visible effect — every string value, including the literal
           // "hide", is truthy.
+          // Renders in the Style tab's selected Light/Dark mode. The chart components' own card
+          // background follows the APP theme (Tailwind `dark:`), which can't be forced per
+          // subtree, so the mode's surface color is passed explicitly as the default bgColor —
+          // otherwise designing dark colors while the app is light would draw them on white.
+          isDark={isDark}
           style={{
-            ...(mapping.style || {}),
+            ...(resolveStyleForMode(mapping.style, isDark) || {}),
+            bgColor: resolveStyleForMode(mapping.style, isDark)?.bgColor || resolvedBgColor,
             donut: mapping.style?.donut === 'donut',
             showLegend: mapping.style?.showLegend !== 'hide',
             showDataPoints: mapping.style?.showDataPoints !== 'hide',
@@ -1058,6 +1326,33 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           onDrillUp={handlePreviewDrillUp}
           drillDown={previewData.drillDown}
           comparison={previewComparison}
+          // Drag-to-reorder directly on the TABLE preview's own column headers — writes
+          // straight back into mapping.columns, the same array ColumnMultiSelect's "Select
+          // all"/checkbox toggling already reorders by append order. Only meaningful for
+          // TABLE (VirtualizedTable is the only renderChartWidget case that reads this), but
+          // harmless to always pass — every other chart_type's component simply ignores an
+          // unused prop, same as every other style prop threaded through uniformly here.
+          onReorderColumns={(next) => onMappingChange('columns', next)}
+          // Column width — lives in mapping.style (a visual/layout concern, same bucket as
+          // bandColor/headerBgColor etc.), keyed per-column so each one keeps its own drag
+          // result independently.
+          onColumnResize={(col, px) => {
+            setMapping((prev) => ({ ...prev, style: { ...(prev.style || {}), column_widths: { ...(prev.style?.column_widths || {}), [col]: px } } }));
+            markDirty();
+          }}
+          // Column label — lives in mapping itself (not style), same bucket as x_axis_title/
+          // y_axis_title: a display-only override of the raw column name, per column here
+          // instead of the one axis those fields cover. An empty/whitespace-only rename clears
+          // the override entirely (reverts to the raw column name) rather than storing a
+          // meaningless blank label forever.
+          onColumnLabelChange={(col, label) => {
+            setMapping((prev) => {
+              const next = { ...(prev.column_labels || {}) };
+              if (label) next[col] = label; else delete next[col];
+              return { ...prev, column_labels: next };
+            });
+            markDirty();
+          }}
         />
       </div>
     );
@@ -1076,7 +1371,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   } = useChartListFilter(sortedWidgets);
 
   return (
-    <div className="flex gap-4 flex-1 min-h-0 h-full">
+    <div className="flex gap-4 flex-1 min-h-0 min-w-0 h-full">
       {/* Left column: toolbar + preview canvas, stacked — the toolbar only spans THIS column's
           width, not the side panel's too (see the conversation this was reported in: it used
           to span the full width above both, pushing the side panel's own Data/Style/Charts
@@ -1251,9 +1546,29 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           Tabs: Data (name/datasource/chart type/field mapping), Style (this chart's own
           default style), Charts (the reusable chart list + New chart). */}
       <div
-        className={`relative shrink-0 flex flex-col overflow-y-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg p-3 pl-5 ${
-          isResizingPanel ? '' : 'transition-[width] duration-200'
-        } ${panelCollapsed ? 'w-10 px-1' : ''}`}
+        // `overflow-x-hidden` (in addition to overflow-y-auto) — a fixed-width flex item still
+        // has an "automatic minimum size" based on its own content's min-content width by
+        // default, which can push it wider than `panelWidth` regardless of the explicit style
+        // below (see the conversation this was reported in — a chart-list row or a wide select
+        // inside either tab was enough to force this panel past its own declared width and off
+        // the right edge of the screen, with nothing to scroll it back into view). Explicit
+        // horizontal clipping here is the actual guarantee "never go out of frame" needs,
+        // rather than relying on every current and future child to individually get its own
+        // min-width:0 right.
+        // No width transition (removed — was `transition-[width] duration-200` outside an
+        // active drag). It animated a programmatic reset (opening a different chart, or the
+        // collapse toggle) instead of snapping instantly, so a mounted ECharts instance —
+        // which measures its container the moment it renders, and never re-measures on its
+        // own afterward (same underlying limitation the drag-resize fix below works around) —
+        // captured the panel's mid-animation width, not its final one. A synthetic resize
+        // dispatch on transition-end was tried as a fix here and reverted: it's a global,
+        // unscoped `window` event with no way to know what else in the app might be listening
+        // to it, which is worse than the problem it was solving. Removing the animation
+        // outright removes the whole timing window instead — the panel just snaps to its new
+        // width immediately, so whatever ECharts measures on render IS the final size, always.
+        className={`relative shrink-0 flex flex-col overflow-y-auto overflow-x-hidden rounded-xl backdrop-blur-md border border-white/60 shadow-lg p-3 pl-5 ${
+          panelCollapsed ? 'w-10 px-1' : ''
+        }`}
         style={{ ...(panelCollapsed ? undefined : { width: panelWidth }), background: 'rgba(255,255,255,0.55)' }}
       >
         {/* Drag handle — a thin strip straddling the panel's own left border, widened past its
@@ -1397,9 +1712,28 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                   onChange={onMappingChange}
                   columns={columns}
                   columnsLoading={columnsLoading}
-                  styleValue={mapping.style || {}}
-                  onStyleChange={(key, val) => { setMapping((prev) => ({ ...prev, style: { ...(prev.style || {}), [key]: val } })); markDirty(); }}
+                  styleValue={styleModeView}
+                  onStyleChange={onStyleFieldChange}
+                  paletteHeader={<StyleModeSwitch value={styleMode} onChange={setStyleMode} className="!mb-1" hint={<>Series colors for <b>{styleMode}</b> mode</>} />}
+                  datasourceId={datasourceId}
                 />
+
+                {/* Phase B — ad-hoc per-widget custom SQL for WHERE/HAVING (the y_axis-level
+                    "Custom SQL" toggle lives inside MappingFields' own 'column' case instead,
+                    since that's per-measure, not per-widget). Mapping-level, not tied to any
+                    one chart_type's field group — every chart type generates a WHERE/GROUP
+                    BY/HAVING query underneath, so these coexist with every existing field
+                    rather than replacing anything. Collapsed by default (advanced/opt-in,
+                    matches "extra way to make it easier" — most widgets never need this). */}
+                {datasourceId && (
+                  <AdvancedSqlFields
+                    whereValue={mapping.custom_where || ''}
+                    havingValue={mapping.custom_having || ''}
+                    onWhereChange={(v) => onMappingChange('custom_where', v)}
+                    onHavingChange={(v) => onMappingChange('custom_having', v)}
+                    datasourceId={datasourceId}
+                  />
+                )}
 
                 {showDimensionHint && (
                   <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -1418,25 +1752,60 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
               // per-placement Style edit in the editor still wins over both, same override
               // order used everywhere else in this cascade.
               <div className="overflow-y-auto">
-                {Object.keys(mapping.style || {}).length > 0 && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    fullWidth
-                    className="mb-2.5"
-                    onClick={() => setPendingConfirm({
-                      title: 'Reset Chart Style',
-                      message: "Reset this chart's default style? This clears all style overrides saved with it.",
-                      run: () => setMapping((prev) => ({ ...prev, style: {} })),
-                    })}
-                  >
-                    Reset to Default
-                  </Button>
-                )}
+                {/* Always shown (disabled while there's nothing to reset) so the control doesn't
+                    appear/disappear as style overrides come and go. */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  fullWidth
+                  className="mb-2.5"
+                  disabled={Object.keys(mapping.style || {}).length === 0}
+                  onClick={() => setPendingConfirm({
+                    title: 'Reset Chart Style',
+                    message: "Reset this chart's default style? This clears all style overrides saved with it.",
+                    run: () => { setMapping((prev) => ({ ...prev, style: {} })); setCopyPreview(null); },
+                  })}
+                >
+                  Reset to Default
+                </Button>
+                {/* Copy style from another chart — merges that chart's style keys (only the ones
+                    this chart type actually has fields for) into this chart's mapping.style. Saving
+                    then updates every dashboard placement that hasn't set its own override. */}
+                <div className="mb-2.5 rounded-xl border border-slate-200 bg-white p-2.5">
+                  <ChartStylePicker
+                    options={widgets.filter((w) => w.id !== editingId)}
+                    currentType={chartType}
+                    value={copyPreview?.sourceId || ''}
+                    disabled={copyingStyle}
+                    loading={copyingStyle}
+                    onSelect={copyStyleFrom}
+                  />
+                  {copyPreview && (
+                    <div className="mt-2 border-t border-dashed border-slate-200 pt-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-[11px] text-slate-500">
+                          Copied from <b className="text-slate-700">{copyPreview.name}</b> · {countCopiedSettings(copyPreview.copied)} settings
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1">
+                          <button type="button" onClick={undoCopyStyle} className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100">Undo</button>
+                        </span>
+                      </div>
+                      <details className="mt-1.5">
+                        <summary className="cursor-pointer text-[10px] text-slate-400 hover:text-slate-600">View copied keys</summary>
+                        <pre className="mt-1 max-h-40 overflow-auto rounded-md bg-slate-50 p-2 text-[10px] leading-snug text-slate-700">{JSON.stringify(copyPreview.copied, null, 2)}</pre>
+                        {copyPreview.cleared?.length > 0 && <p className="mt-1 text-[10px] text-slate-400">Cleared back to default: {copyPreview.cleared.join(', ')}</p>}
+                        {copyPreview.skipped.length > 0 && <p className="mt-1 text-[10px] text-slate-400">Skipped (n/a for this type): {copyPreview.skipped.join(', ')}</p>}
+                      </details>
+                    </div>
+                  )}
+                </div>
+                {/* Light/Dark switch — color fields below are edited for the selected mode; the
+                    preview renders in that mode too. Sizes/fonts/positions are shared. */}
+                <StyleModeSwitch value={styleMode} onChange={setStyleMode} />
                 <WidgetStyleFields
-                  fields={chartLibraryStyleFieldsFor(chartType)}
-                  value={mapping.style || {}}
-                  onChange={(key, val) => setMapping((prev) => ({ ...prev, style: { ...(prev.style || {}), [key]: val } }))}
+                  fields={styleFields}
+                  value={styleModeView}
+                  onChange={onStyleFieldChange}
                   resolvedDefaults={{
                     bgColor: resolvedBgColor,
                     titleColor: resolvedSubColor,
@@ -1445,6 +1814,17 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                   }}
                   columns={2}
                 />
+                {chartType === 'TABLE' && (() => {
+                  const displayedColumns = (mapping.columns || []).map((name) => columns.find((c) => c.column_name === name)).filter(Boolean);
+                  const displayedNames = new Set(displayedColumns.map((c) => c.column_name));
+                  return (
+                    <ConditionalFormatRules
+                      columns={displayedColumns}
+                      value={(mapping.style?.cellFormatRules || []).filter((entry) => displayedNames.has(entry.column))}
+                      onChange={(next) => { setMapping((prev) => ({ ...prev, style: { ...(prev.style || {}), cellFormatRules: next } })); markDirty(); }}
+                    />
+                  );
+                })()}
               </div>
             )}
 

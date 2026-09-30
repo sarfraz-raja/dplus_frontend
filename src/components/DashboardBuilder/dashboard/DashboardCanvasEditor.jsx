@@ -1,18 +1,22 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ResponsiveGridLayout } from 'react-grid-layout';
-import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, Pencil, Palette } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, Pencil, Palette, Filter, Maximize2 } from 'lucide-react';
 import 'react-grid-layout/css/styles.css';
 import Button from '../../Button';
 import ConfirmModal from '../../ConfirmModal';
+import DashboardTabBar from './DashboardTabBar';
 import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields } from '../widgetConfig/widgetTypeRegistry';
 import MOCK_DATA_SOURCES from '../legacy/mock/mockDataSources';
+import { measureKey } from '../charts/renderChartWidget';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
 import PaletteEditor from '../themes/PaletteEditor';
 import SeriesColorFields from '../widgetConfig/SeriesColorFields';
 import { useTheme } from '../../../context/ThemeContext';
 import { chartTokens, CHART_PALETTE, darkenHex } from '../../../theme/tokens';
 import { DEFAULT_STATUS_COLORS, STATUS_LABELS } from '../legacy/widgets/KpiTable';
-import { exportWidgetCSV, exportWidgetPNG, exportDashboardCSV, exportDashboardPNG, exportDashboardPDF, exportRowsCSV } from '../utils/exportUtils';
+import { resolveStyleForMode, mergeStyleLayers, setModeColor, surfaceBg } from '../utils/themedStyle';
+import StyleModeSwitch from '../widgetConfig/StyleModeSwitch';
+import { exportWidgetCSV, exportWidgetPNG, exportDashboardCSV, exportDashboardPNG, exportDashboardPDF, exportDashboardPDFMultiPage, compositeDashboardCanvas, exportRowsCSV } from '../utils/exportUtils';
 import { loadDatasources } from '../datasource/dashboardDatasources';
 import { aggregateDatasourceRows } from '../legacy/mock/dbDataSource';
 import {
@@ -24,7 +28,7 @@ import {
   createSlicer, listSlicers, updateSlicer, refreshSlicerValues, deleteSlicer,
 } from '../../../store/actions/dashboardBuilder-actions';
 import { subscribeWidgetsChanged, notifyWidgetsChanged } from '../../../store/actions/widgetEvents';
-import CHART_TYPE_META, { MOCK_TYPE_TO_CHART_TYPE } from '../charts/chartTypeMeta';
+import CHART_TYPE_META, { CHART_TYPES, CHART_TYPE_TO_MOCK_TYPE, MOCK_TYPE_TO_CHART_TYPE } from '../charts/chartTypeMeta';
 import ChartListItem from '../charts/ChartListItem';
 import ChartListSearchBar from '../charts/ChartListSearchBar';
 import useChartListFilter from '../charts/useChartListFilter';
@@ -32,9 +36,13 @@ import WidgetCreateWizard from '../charts/WidgetCreateWizard';
 import DASHBOARD_STYLE_FIELDS from '../themes/dashboardStyleFields';
 import FilterPanel from '../filters/FilterPanel';
 import FiltersToggleButton from '../filters/FiltersToggleButton';
+import FilterEditorModal from '../filters/FilterEditorModal';
 import AddSlicerModal from '../filters/AddSlicerModal';
 import { sortWidgetsByRecency, withDatasourceOnly } from '../charts/sortWidgets';
 import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
+
+// Dashboard-level color fields — stored per mode (light/dark), see utils/themedStyle.js.
+const DASHBOARD_COLOR_KEYS = new Set([...DASHBOARD_STYLE_FIELDS.filter((f) => f.type === 'color').map((f) => f.key), 'palette']);
 
 // Widget types whose legend/slice colors come from the shared theme palette (cycling by
 // position) — Phase 8b lets each of these pin a specific color per category name instead.
@@ -52,6 +60,11 @@ function categoryNamesFor(type, resolved) {
 
 let uid = 0;
 const nextId = () => `w${Date.now()}_${uid++}`;
+// Same shape as DashboardTabBar.jsx's own private tab-id generator (kept separate — that one
+// only needs to run in response to a user click there; copyTab below needs one too, and tabIds
+// only need to be unique, never cross-referenced by format).
+let tabUid = 0;
+const nextTabId = () => `tab${Date.now()}_${tabUid++}`;
 
 // Must match the rowHeight/margin passed to <ResponsiveGridLayout> below (cols varies per
 // breakpoint via COLS_BY_BREAKPOINT, but rowHeight/margin stay constant) — kept as one
@@ -66,6 +79,11 @@ const nextId = () => `w${Date.now()}_${uid++}`;
 // colWidth = containerWidth / cols, so more columns means each x/w unit is fewer pixels.
 // margin[0] stays 8 (unchanged) so same-row card-to-card gaps don't shift.
 const GRID_CONFIG = { cols: 144, rowHeight: 5, margin: [8, 10] };
+// Focus mode's own fixed body height (see .dbe-focus-body's CSS — must match exactly, since
+// this is handed to renderWidget as an explicit pixelHeight override rather than one derived
+// from a grid row-count, so the chart inside renders at the SAME height this container
+// actually is, not a mismatched guess).
+const DBE_FOCUS_PIXEL_HEIGHT = 560;
 
 // Below ~900px, a plain GridLayout just shrinks colWidth instead of reflowing — every
 // widget keeps its desktop column-span and squeezes into unreadable slivers, and (in an
@@ -135,8 +153,11 @@ function resolveWidgetProps(widget, ctx) {
     axisTextSize: dashboardAxisTextSize, axisTextFont: dashboardAxisTextFont,
     bgGradientFrom: dashboardBgGradientFrom, bgGradientTo: dashboardBgGradientTo,
     valueDecimals: dashboardValueDecimals,
+    valueTextColor: dashboardValueTextColor, valueTextSize: dashboardValueTextSize, titleBgColor: dashboardTitleBgColor,
+    headerBgColor: dashboardHeaderBgColor, headerTextColor: dashboardHeaderTextColor,
+    bandColor: dashboardBandColor, bandTextColor: dashboardBandTextColor,
     widgetId, onPointClick: onWidgetPointClick, onDrillUp: onWidgetDrillUp,
-    onPointCrossFilter: onWidgetPointCrossFilter, editable,
+    onPointCrossFilter: onWidgetPointCrossFilter, editable, onTextChange: onWidgetTextChange,
   } = ctx || {};
   // For a real (chartLibrary) widget, its own definition — edited via the Charts tab,
   // stored in dataSource.mapping.style — is the base default for EVERY placement of that
@@ -146,9 +167,16 @@ function resolveWidgetProps(widget, ctx) {
   // chart at the moment it was first placed (a one-time seed), never any dashboard it was
   // already sitting on — the exact "one edit path, works everywhere" cascade every other
   // style field here already follows (theme -> dashboard -> widget).
-  const baseStyle = dataSource?.type === 'chartLibrary'
-    ? { ...(dataSource.mapping?.style || {}), ...(widget.style || {}) }
-    : widget.style;
+  // Per-mode colors (`style.colors.{light,dark}`, see themedStyle.js) are merged per layer and
+  // flattened for the active theme HERE, before resolveWidgetStyle (which only keeps registered
+  // flat keys) and before any dashboard-level fallback below — so a widget's own dark/light
+  // color always beats the dashboard default for that mode, exactly like a flat color did.
+  const baseStyle = resolveStyleForMode(
+    dataSource?.type === 'chartLibrary'
+      ? mergeStyleLayers(dataSource.mapping?.style, widget.style)
+      : widget.style,
+    isDark === true,
+  );
   const style = resolveWidgetStyle(type, baseStyle);
 
   let resolved = {};
@@ -233,6 +261,10 @@ function resolveWidgetProps(widget, ctx) {
   const finalTitleSize = style.titleSize || dashboardTitleSize;
   const finalTitleFont = style.titleFont || dashboardTitleFont;
   const finalTitlePosition = style.titlePosition || dashboardTitlePosition;
+  // No dashboard-level fallback — titleBgColor isn't a DASHBOARD_STYLE_FIELDS entry, so this
+  // is chart-base -> placement-override only, same as `style` itself already resolves it.
+  // (Now falls back to the theme/dashboard's own Title background — see DASHBOARD_STYLE_FIELDS.)
+  const finalTitleBgColor = style.titleBgColor || dashboardTitleBgColor;
   // Resolved series/slice palette for multi-series chart types (Pie/Stacked Bar/Funnel/
   // Treemap/BAR_SERIES) — this widget's own `style.palette` (the "Series colors" style field —
   // see PALETTE_FIELD in widgetTypeRegistry.js) wins first, then a bound Theme's own `palette`
@@ -240,7 +272,11 @@ function resolveWidgetProps(widget, ctx) {
   // style field here uses (widget > dashboard theme > static default). Always resolves to a
   // real array (never undefined) so each chart component's explicit per-index color assignment
   // always has something to cycle through.
-  const finalPalette = (Array.isArray(style.palette) && style.palette.length > 0 && style.palette) || dashboardPalette || CHART_PALETTE;
+  // Read off the mode-flattened `baseStyle` (not the registry-filtered `style`, which drops a
+  // palette for chart types that only have it as a Data-tab field) so a per-mode chart palette
+  // — `colors.{light,dark}.palette` — actually reaches the render.
+  const ownPalette = baseStyle?.palette;
+  const finalPalette = (Array.isArray(ownPalette) && ownPalette.length > 0 && ownPalette) || dashboardPalette || CHART_PALETTE;
   // Chart widgets need an explicit pixel height (ECharts doesn't fill a resizable
   // container on its own) — leave room for the widget's own title row + chrome.
   const chartHeight = pixelHeight ? Math.max(60, pixelHeight - 40) : undefined;
@@ -251,8 +287,18 @@ function resolveWidgetProps(widget, ctx) {
   // `??` (not `||`) since 0 decimal places is a meaningful, valid value that must not be
   // clobbered by the fallback chain — defaults to 2 when neither the widget nor the theme/
   // dashboard has ever set one.
-  const finalValueDecimals = style.valueDecimals ?? dashboardValueDecimals ?? 2;
-  const valueText = { valueTextColor: style.valueTextColor, valueTextSize: style.valueTextSize, valueDecimals: finalValueDecimals };
+  // The registry gives every widget a non-null default (2), so `style.valueDecimals` alone always
+  // "wins" — the widget's own explicit pick (`baseStyle`) has to be checked first for the
+  // theme/dashboard value to ever apply.
+  const finalValueDecimals = baseStyle?.valueDecimals ?? dashboardValueDecimals ?? style.valueDecimals ?? 2;
+  // Value text color/size also cascade from the theme/dashboard now. Size checks the widget's own
+  // explicit pick (`baseStyle`) first, since a few widget types register a non-null default size
+  // that would otherwise always win over the theme.
+  const valueText = {
+    valueTextColor: style.valueTextColor || dashboardValueTextColor,
+    valueTextSize: baseStyle?.valueTextSize || dashboardValueTextSize || style.valueTextSize,
+    valueDecimals: finalValueDecimals,
+  };
   // Axis styling now cascades from the theme/dashboard level the same way title styling
   // already does — previously these were per-widget-only (`style.axisTextColor` raw, no
   // fallback), so a Theme's axis settings were entirely inert.
@@ -396,7 +442,7 @@ function resolveWidgetProps(widget, ctx) {
           ? (point) => onWidgetPointCrossFilter(widgetId, point)
           : undefined,
         style: {
-          titleColor: finalTitleColor, titleWeight: finalTitleWeight, titleSize: finalTitleSize, titleFont: finalTitleFont, titlePosition: finalTitlePosition, bgColor: finalBgColor, bgGradient: finalBgGradient, palette: finalPalette, ...valueText, ...axisText,
+          titleColor: finalTitleColor, titleWeight: finalTitleWeight, titleSize: finalTitleSize, titleFont: finalTitleFont, titlePosition: finalTitlePosition, titleBgColor: finalTitleBgColor, bgColor: finalBgColor, bgGradient: finalBgGradient, palette: finalPalette, ...valueText, ...axisText,
           donut: extraStyle.donut === 'donut',
           showLegend: extraStyle.showLegend !== 'hide',
           showDataPoints: extraStyle.showDataPoints !== 'hide',
@@ -416,9 +462,52 @@ function resolveWidgetProps(widget, ctx) {
           // (only 4 real chart_types even have a movable value element), so it's chart-base
           // -> placement-override only, same as extraStyle's other per-chart_type fields.
           valuePosition: extraStyle.valuePosition,
+          // TABLE-only fields (see CHART_TYPE_EXTRA_STYLE_FIELDS.TABLE) — same cascade as
+          // every other extraStyle field above, just added later and initially missed here,
+          // which meant they worked in ChartLibrary.jsx's own standalone preview (reads
+          // mapping.style directly) but never showed up once the chart was actually placed on
+          // a dashboard, since this hand-assembled object is what a placed widget really
+          // renders with, and it silently drops any key not explicitly listed here.
+          showTitle: extraStyle.showTitle,
+          // Table colors cascade widget -> theme/dashboard -> registry default. Band color has a
+          // non-null registry default, so the widget's own explicit pick is read off `baseStyle`.
+          bandColor: baseStyle?.bandColor || dashboardBandColor || extraStyle.bandColor,
+          bandTextColor: extraStyle.bandTextColor || dashboardBandTextColor,
+          headerBgColor: extraStyle.headerBgColor || dashboardHeaderBgColor,
+          headerTextColor: extraStyle.headerTextColor || dashboardHeaderTextColor,
+          // Not a declared styleField (ConditionalFormatRules.jsx is a standalone component,
+          // not part of the WidgetStyleFields field system — see its own doc comment on why),
+          // so resolveWidgetStyle/extraStyle would drop it regardless of being listed in
+          // CHART_TYPE_EXTRA_STYLE_FIELDS — read straight off baseStyle instead, which already
+          // has the correct chart-default -> placement-override merge applied above.
+          cellFormatRules: baseStyle?.cellFormatRules,
         },
       };
     }
+    // No datasource, no `resolved.*` fields to read (dataShape: null — see
+    // widgetTypeRegistry.js's own textBox entry) — every prop here comes straight off this
+    // widget's own `style` (already resolved with defaults applied at the top of this
+    // function) plus the edit-in-place callback TextBox.jsx's textarea commits through.
+    case 'textBox':
+      return {
+        text: style.text || '', fontFamily: style.fontFamily, fontSize: style.fontSize, fontWeight: style.fontWeight,
+        color: style.color, textAlign: style.textAlign, bgColor: finalBgColor, isDark,
+        editable: !!editable,
+        onTextChange: (onWidgetTextChange && widgetId) ? (newText) => onWidgetTextChange(widgetId, newText) : undefined,
+      };
+    // No datasource, no `resolved.*` — pure style, same as textBox above.
+    case 'shape':
+      return {
+        shapeKind: style.shapeKind, fillColor: style.fillColor, borderColor: style.borderColor,
+        borderWidth: style.borderWidth, cornerRadius: style.cornerRadius, rotation: style.rotation,
+        opacity: style.opacity,
+        // Same edit-in-place wiring as textBox above — a shape can hold text too (see
+        // Shape.jsx's own doc comment).
+        text: style.text || '', fontFamily: style.fontFamily, fontSize: style.fontSize, fontWeight: style.fontWeight,
+        textColor: style.textColor, textAlign: style.textAlign, isDark,
+        editable: !!editable,
+        onTextChange: (onWidgetTextChange && widgetId) ? (newText) => onWidgetTextChange(widgetId, newText) : undefined,
+      };
     default:
       return {};
   }
@@ -498,9 +587,10 @@ const WidgetContent = React.memo(function WidgetContent({
   titleColor, bgColor, titleWeight, titleSize, titleFont, titlePosition,
   palette, accentColor, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
   bgGradientFrom, bgGradientTo, valueDecimals,
+  valueTextColor, valueTextSize, titleBgColor, headerBgColor, headerTextColor, bandColor, bandTextColor,
   mockDataCache, datasources, chartLibraryEntry, comparisonEntry,
   widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable,
-  slicer, onSlicerChange, onSlicerRefresh, slicerBusy,
+  slicer, onSlicerChange, onSlicerRefresh, slicerBusy, onTextChange,
 }) {
   const Comp = WIDGET_TYPE_REGISTRY[widget.type]?.component;
   if (!Comp) return null;
@@ -519,11 +609,12 @@ const WidgetContent = React.memo(function WidgetContent({
     titleColor, bgColor, titleWeight, titleSize, titleFont, titlePosition,
     palette, accentColor, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
     bgGradientFrom, bgGradientTo, valueDecimals,
+    valueTextColor, valueTextSize, titleBgColor, headerBgColor, headerTextColor, bandColor, bandTextColor,
     dataCache: mockDataCache, datasources,
     chartLibraryData: widget.dataSource?.widgetId && chartLibraryEntry
       ? { [widget.dataSource.widgetId]: { ...chartLibraryEntry, comparison: comparisonEntry } }
       : {},
-    widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable,
+    widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable, onTextChange,
   });
   return <Comp {...props} />;
 });
@@ -541,7 +632,7 @@ const SINGLE_VALUE_CHART_TYPES = new Set(['KPI_CARD', 'GAUGE']);
  * static grid) when `editable` is false.
  */
 const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
-  initialLayout = [], initialWidgets = {}, initialName = '', editable = true, onSave, onCancel,
+  initialLayout = [], initialWidgets = {}, initialName = '', initialTabs = [], editable = true, onSave, onCancel,
   kpiLiveData = null, isDark = null, titleColor = null,
   showChrome = true, onLayoutChange, onCreateViaChartsTab, onEditInChartsTab, dashboardId,
   // Real backend dashboard id (distinct from `dashboardId` above, which is the local/editor
@@ -582,7 +673,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     }
     setSavingLocal(true);
     try {
-      await onSave?.({ name: name.trim(), layout, widgets });
+      await onSave?.({ name: name.trim(), layout, widgets, tabs });
     } catch (err) {
       showNameError(err.message || 'Could not save this dashboard.');
     } finally {
@@ -592,6 +683,24 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const [name, setName] = useState(initialName);
   const [layout, setLayout] = useState(initialLayout);
   const [widgets, setWidgets] = useState(initialWidgets);
+  // Tabs — a purely frontend concept (see plan): a dashboard with no tabs renders exactly as
+  // before (no tab bar, every layout entry visible). `activeTabId` defaults to the first tab
+  // when tabs exist, else null (meaning "no tab filtering applies").
+  const [tabs, setTabs] = useState(initialTabs);
+  const [activeTabId, setActiveTabId] = useState(initialTabs[0]?.id || null);
+  // Normalizes any widget missing a tabId onto the first tab, once, on mount — covers a
+  // dashboard that already has tabs (this editor opened with initialTabs.length > 0) but also
+  // has a widget attached with no tabId (e.g. attached before tabs existed on this dashboard,
+  // or via some path that predates tab-stamping). Without this, that widget reads as "global"
+  // and renders on every tab including ones created afterward — confusing and not what "add a
+  // new empty tab" should do. addTab's own first-tab-creation absorption (see addTab below)
+  // covers the live in-session case; this covers the same gap for whatever's already saved.
+  useEffect(() => {
+    if (initialTabs.length > 0) {
+      setLayout((prev) => prev.map((l) => (l.tabId ? l : { ...l, tabId: initialTabs[0].id })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time migration, deliberately mount-only
+  }, []);
   const [selectedId, setSelectedId] = useState(null);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   // The left panel's "Add Widget"/"Selected Widget"/"Selected Widget Style"/"Category
@@ -636,6 +745,22 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const widgetNodeRefs = useRef({});
   // Which widget's export menu (CSV/PNG) is currently open, if any — only one at a time.
   const [exportMenuId, setExportMenuId] = useState(null);
+  // "Focus mode" — which widget (layout id, `l.i`) is currently shown large in an overlay, if
+  // any. Available in both editable and read-only/published views (gated on `showChrome` only,
+  // same as Export) — seeing a chart bigger is just as useful when only viewing a dashboard as
+  // when building one.
+  const [focusedWidgetId, setFocusedWidgetId] = useState(null);
+  useEffect(() => {
+    if (!focusedWidgetId) return undefined;
+    const onKeyDown = (e) => { if (e.key === 'Escape') setFocusedWidgetId(null); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [focusedWidgetId]);
+  // Live "w x h" badge shown on a widget while its resize handle is being dragged — { id, w,
+  // h } in the grid's own 144-col/rowHeight=5px units, converted to a human-readable size (px
+  // + % of the canvas width) right in the badge's own render below. `id` matches a layout
+  // entry's `l.i`, same key space renderWidget already uses.
+  const [resizeBadge, setResizeBadge] = useState(null);
   // Chart Library integration: the pickable list (loaded once, editor-only) and a
   // widgetId -> {rows} | {error} cache for real backend widgets placed on this canvas
   // (see resolveWidgetProps' 'chartLibrary' branch, which only reads from this cache —
@@ -644,11 +769,31 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const [chartListActionError, setChartListActionError] = useState(null);
   const [chartLibraryData, setChartLibraryData] = useState({});
   const chartLibraryFetchingRef = useRef(new Set());
+  // A single widget PLACEMENT's own filters (Filter action in the widget's own action strip,
+  // distinct from the dashboard-wide `dashboardFilters`/FilterPanel) — keyed by layout id
+  // (`l.i`), not by the underlying chart's widgetId, since two placements of the same chart
+  // can carry different own-filters and must fetch/cache independently (see the fetch effect
+  // and chartLibraryEntry computation below). Which widget's Filter editor popover is open,
+  // if any — `l.i`, same key space as widgetFilterData.
+  const [widgetFilterData, setWidgetFilterData] = useState({});
+  const widgetFilterKeyRef = useRef(new Map());
+  const [widgetFilterModalId, setWidgetFilterModalId] = useState(null);
+  // Lifted out of FiltersToggleButton (now controllable — see its own updated comment) so
+  // FilterPanel's own "Edit in Filters" link (for a date-range filter, which can only really
+  // be edited in the full editor, not this compact strip) can open the SAME modal instead of
+  // needing its own separate one.
+  const [filterEditorOpen, setFilterEditorOpen] = useState(false);
   // KPI_CARD's "Compare to" (see resolveWidgetProps' 'chartLibrary' branch, and the fetch
   // effect below) — keyed by backend widgetId: { delta, deltaPercent, deltaUp }. Kept
   // separate from chartLibraryData since it's a second, independent query (only for KPI_CARD
   // widgets that opt in via mapping.compare_to), not part of the widget's own normal rows.
   const [comparisonData, setComparisonData] = useState({});
+  // Raw past-window rows the comparison fetch effect below retrieves, kept separate from the
+  // computed `comparisonData` delta itself — see the dedicated recompute effect further down
+  // for why: it lets the delta always be recomputed against whatever `chartLibraryData` (the
+  // widget's own current-window rows) most recently holds, instead of the value baked in at
+  // the moment the past-window fetch happened to resolve.
+  const [comparisonRawData, setComparisonRawData] = useState({});
   // Map of widgetId -> the cacheKey (widgetId+compare_to+resolved filters) already fetched or
   // in flight for it — checked BEFORE fetching, and set as soon as a fetch starts (not just
   // while in-flight), so a stale value doesn't get silently kept once its cacheKey has moved
@@ -664,6 +809,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // handleWidgetPointClickRef's assignment further down for the actual click logic.
   const [activeCrossFilter, setActiveCrossFilter] = useState(null);
   const [dashboardExportMenuOpen, setDashboardExportMenuOpen] = useState(false);
+  // True only while exportPDFAllTabs is looping through tabs — suppresses the grid's own
+  // reflow transition (see .dbe-no-transition above) so each tab's capture reflects its
+  // settled layout, not a mid-slide interpolation from the previous tab's positions.
+  const [isExportingAcrossTabs, setIsExportingAcrossTabs] = useState(false);
   // Phase 18 — dashboard-level global_filters, only meaningful when backendId is set.
   const [dashboardFilters, setDashboardFilters] = useState(initialGlobalFilters);
   const [filterDatasourceOptions, setFilterDatasourceOptions] = useState([]);
@@ -684,7 +833,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // naturally recaptures on that). Compared against current state in `isDirty` below, exposed
   // to DashboardBuilder.jsx so "New dashboard"/navigating away can warn before discarding
   // unsaved work instead of silently dropping it.
-  const initialSnapshotRef = useRef(JSON.stringify({ name: initialName, layout: initialLayout, widgets: initialWidgets, dashboardStyle: initialDashboardStyle }));
+  const initialSnapshotRef = useRef(JSON.stringify({ name: initialName, layout: initialLayout, widgets: initialWidgets, dashboardStyle: initialDashboardStyle, tabs: initialTabs }));
   // "Add and edit filters" trigger lives in the toolbar (FiltersToggleButton, shared with
   // DashboardBuilder.jsx's preview header) rather than as a gear icon on FilterPanel's own
   // strip (which only appears once a filter already exists) — reachable before the first
@@ -704,7 +853,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // time. Previously only used to seed brand-new widgets (addWidget) — bgColor/titleColor
   // changes to an already-placed widget's dashboard/theme never showed up until now, since
   // nothing re-read this after creation.
-  const effectiveDashboardStyle = { ...boundThemeStyle, ...dashboardStyle };
+  // Per-mode colors (`colors.{light,dark}`, themedStyle.js) merged theme -> dashboard, then
+  // flattened for the ACTIVE theme so every consumer below keeps reading plain flat keys.
+  // `rawDashboardStyle` keeps both modes for seeding new widgets and for the edit panels.
+  const { theme } = useTheme();
+  const effectiveIsDark = typeof isDark === 'boolean' ? isDark : theme === 'dark';
+  const rawDashboardStyle = mergeStyleLayers(boundThemeStyle, dashboardStyle);
+  const effectiveDashboardStyle = resolveStyleForMode(rawDashboardStyle, effectiveIsDark);
 
   // Gathers every widget's resolved data for a whole-dashboard CSV export — re-resolves
   // via the same resolveWidgetProps used for rendering (cheap: mock data is cached per
@@ -715,7 +870,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const w = widgets[l.i];
       if (!w) return null;
       const { __resolved } = resolveWidgetProps(w, {
-        kpiLiveData, pixelHeight: 0, isDark,
+        kpiLiveData, pixelHeight: 0, isDark: effectiveIsDark,
         titleColor: effectiveDashboardStyle.titleColor || titleColor,
         bgColor: effectiveDashboardStyle.bgColor,
         titleWeight: effectiveDashboardStyle.titleWeight,
@@ -726,6 +881,38 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     })
     .filter(Boolean);
 
+  // PDF export loops through every tab (one page each) since widgetNodeRefs only ever holds
+  // real DOM nodes for the currently-active tab — a hidden tab's widgets aren't mounted at
+  // all, so there's nothing to composite for them without actually switching to each tab in
+  // turn first. PNG stays single-image/active-tab-only (a multi-tab collage in one image
+  // wouldn't read sensibly) — see the "Export PNG" button label below for that scope.
+  const exportPDFAllTabs = async () => {
+    if (tabs.length === 0) {
+      await exportDashboardPDF(containerRef.current, Object.values(widgetNodeRefs.current), name);
+      return;
+    }
+    const originalTabId = activeTabId;
+    const pages = [];
+    // Same "visible on this tab" rule as visibleLayout (global entries with no tabId count
+    // toward every tab) — a tab with nothing to show gets no page, rather than an all-white one.
+    const nonEmptyTabs = tabs.filter((tab) => layout.some((l) => !l.tabId || l.tabId === tab.id));
+    setIsExportingAcrossTabs(true);
+    try {
+      for (const tab of nonEmptyTabs) {
+        setActiveTabId(tab.id);
+        // eslint-disable-next-line no-await-in-loop -- each tab must actually mount before capture
+        await new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(resolve)), 150));
+        // eslint-disable-next-line no-await-in-loop -- pages must be captured in tab order
+        const canvas = await compositeDashboardCanvas(containerRef.current, Object.values(widgetNodeRefs.current));
+        pages.push({ canvas, tabName: tab.name });
+      }
+    } finally {
+      setActiveTabId(originalTabId);
+      setIsExportingAcrossTabs(false);
+    }
+    exportDashboardPDFMultiPage(pages, name);
+  };
+
   // Exposes whole-dashboard export to parents that render this in read-only preview mode
   // (DashboardBuilder.jsx's browse view) — that context has its own header (name +
   // Edit/Clone/Delete) outside this component's own render tree, so the export trigger
@@ -735,10 +922,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   useImperativeHandle(ref, () => ({
     // True once name/layout/widgets/dashboardStyle have changed from what this editor opened
     // with — see initialSnapshotRef above.
-    isDirty: () => JSON.stringify({ name, layout, widgets, dashboardStyle }) !== initialSnapshotRef.current,
+    isDirty: () => JSON.stringify({ name, layout, widgets, dashboardStyle, tabs }) !== initialSnapshotRef.current,
     exportCSV: () => exportDashboardCSV(name, collectExportEntries()),
     exportPNG: () => exportDashboardPNG(containerRef.current, Object.values(widgetNodeRefs.current), name),
-    exportPDF: () => exportDashboardPDF(containerRef.current, Object.values(widgetNodeRefs.current), name),
+    exportPDF: () => exportPDFAllTabs(),
     // Called by DashboardBuilder.jsx after a widget started via onCreateViaChartsTab is
     // saved in the Charts tab and the user is routed back here — places it on the canvas
     // exactly like any "Your Charts" drag/click placement. Also refetches chartLibraryList
@@ -789,10 +976,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // Same isDark-resolution fallback every widget component already does — needed here so
   // the style panel's color swatches can show the *real* current default (theme-matched),
   // not an arbitrary placeholder, when a field has no saved override yet.
-  const { theme } = useTheme();
-  const effectiveIsDark = typeof isDark === 'boolean' ? isDark : theme === 'dark';
-  const { text: resolvedTextColor, sub: resolvedSubColor } = chartTokens(effectiveIsDark);
-  const resolvedBgColor = effectiveIsDark ? '#22273C' : '#ffffff';
+  // Light/Dark switch shared by the Dashboard Style popover and the Selected Widget Style panel:
+  // which mode's colors those panels edit (starts on the app's current theme). The canvas itself
+  // keeps following the app theme — flip the app theme to preview the other mode.
+  const [styleMode, setStyleMode] = useState(effectiveIsDark ? 'dark' : 'light');
+  const styleModeIsDark = styleMode === 'dark';
+  const { text: resolvedTextColor, sub: resolvedSubColor } = chartTokens(styleModeIsDark);
+  const resolvedBgColor = surfaceBg(styleModeIsDark);
+  // Dashboard/theme style as it resolves for the mode being edited — the panels' inherited defaults.
+  const styleModeDashboardStyle = resolveStyleForMode(rawDashboardStyle, styleModeIsDark);
 
   // `posOverride` is set when a widget is dropped from the palette at a specific grid
   // cell (see handleDrop below) — the click-to-add path still uses findFreeSlot's
@@ -805,8 +997,17 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const addWidget = (type, posOverride, chartId, mockSourceKey) => {
     const def = WIDGET_TYPE_REGISTRY[type];
     const id = nextId();
-    const { x, y } = posOverride || findFreeSlot(layout, def.defaultSize.w, def.defaultSize.h, GRID_CONFIG.cols);
-    setLayout((prev) => [...prev, { i: id, x, y, w: def.defaultSize.w, h: def.defaultSize.h }]);
+    // `findFreeSlot` computed off the outer `layout` closure here — stale the instant this
+    // fires a second time before a re-render commits, so two widgets added back-to-back could
+    // both compute the exact same "free" slot and land fully overlapping (see the conversation
+    // this was tracked down in: a freshly-added Shape, default zIndex -1, landed exactly under
+    // a Text Box added moments before and was completely hidden by its opaque background —
+    // not actually broken, just invisible underneath). Computing inside the functional updater
+    // reads the real latest layout, including anything just appended in the same tick.
+    setLayout((prev) => {
+      const { x, y } = posOverride || findFreeSlot(prev, def.defaultSize.w, def.defaultSize.h, GRID_CONFIG.cols);
+      return [...prev, { i: id, x, y, w: def.defaultSize.w, h: def.defaultSize.h, ...(activeTabId ? { tabId: activeTabId } : {}) }];
+    });
     // `dataShape` alone picks whichever mock source happens to be declared first in
     // mockDataSources.js — fine for widgets that can show any generic series (Bar,
     // Sparkline, Area), but wrong for ones that need a specifically-shaped default
@@ -820,9 +1021,17 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // touched by this — the dashboard layer only ever supplies a starting point (though it now
     // also applies live at render time for any field a widget hasn't explicitly set, see
     // resolveWidgetProps' finalBgColor/finalTitleColor).
+    // bgColor/titleColor are seeded per mode (not as one flat value) — a flat seed would bake
+    // whichever mode the dashboard happened to be viewed in into BOTH modes of the new widget.
+    const seedColors = Object.fromEntries(['light', 'dark'].map((m) => {
+      const s = resolveStyleForMode(rawDashboardStyle, m === 'dark');
+      return [m, {
+        ...(s.bgColor ? { bgColor: s.bgColor } : {}),
+        ...(s.titleColor ? { titleColor: s.titleColor } : {}),
+      }];
+    }));
     const dashboardStyleSeed = {
-      ...(effectiveDashboardStyle.bgColor ? { bgColor: effectiveDashboardStyle.bgColor } : {}),
-      ...(effectiveDashboardStyle.titleColor ? { titleColor: effectiveDashboardStyle.titleColor } : {}),
+      ...(Object.values(seedColors).some((c) => Object.keys(c).length > 0) ? { colors: seedColors } : {}),
       ...(effectiveDashboardStyle.titleWeight ? { titleWeight: effectiveDashboardStyle.titleWeight } : {}),
       ...(effectiveDashboardStyle.titleSize ? { titleSize: effectiveDashboardStyle.titleSize } : {}),
     };
@@ -857,7 +1066,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 type: 'chartLibrary', widgetId: chartId, chartType: detail.chart_type, mapping: detail.mapping,
                 datasourceId: detail.datasource_id, datasourceName,
               },
-              style: { ...dashboardStyleSeed, ...(detail.mapping?.style || {}) },
+              style: mergeStyleLayers(dashboardStyleSeed, detail.mapping?.style),
             });
           })
           .catch(() => {
@@ -867,6 +1076,29 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             // user fix it in the Charts tab.
           });
       }
+      return;
+    }
+    // No datasource at all (dataShape: null) — skip the mock-source lookup below entirely,
+    // unlike every chart-shaped type, which always needs *some* data source key even before
+    // the user picks a real one. `text` starts empty — TextBox.jsx renders its own hint span
+    // ("Double-click to add text…") whenever `text` is falsy, so a freshly-dropped box isn't
+    // silently blank. That's a real placeholder, not stored content — seeding actual text here
+    // instead meant double-clicking to type dropped you into a textarea already containing
+    // that literal sentence, which had to be selected and deleted before typing could start.
+    if (type === 'textBox') {
+      setWidgets((prev) => ({
+        ...prev,
+        [id]: { type, title: def.label, dataSource: null, style: { text: '', ...dashboardStyleSeed } },
+      }));
+      setSelectedId(id);
+      return;
+    }
+    if (type === 'shape') {
+      setWidgets((prev) => ({
+        ...prev,
+        [id]: { type, title: def.label, dataSource: null, style: { ...dashboardStyleSeed } },
+      }));
+      setSelectedId(id);
       return;
     }
     const defaultSourceKey = mockSourceKey || def.defaultDataSourceKey || dataSourceKeysFor(def.dataShape)[0]?.key || '';
@@ -904,6 +1136,14 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       setSlicerModalOpen(true);
       return;
     }
+    if (type === 'textBox') {
+      addWidget('textBox', pos);
+      return;
+    }
+    if (type === 'shape') {
+      addWidget('shape', pos);
+      return;
+    }
     // Same real-chart-only flow the click path already uses (see the palette icon's
     // onClick) — dragging a widget-type icon no longer instantly creates a mock widget,
     // it opens the same "choose a dataset" wizard. The exact drop position isn't preserved
@@ -930,6 +1170,96 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       return next;
     });
     setSelectedId((s) => (s === id ? null : s));
+  };
+
+  const addTab = (id) => {
+    setTabs((prev) => {
+      // The very first tab absorbs every widget that existed before tabs did (no tabId —
+      // previously rendered on the single untabbed canvas) so it keeps showing them, and
+      // every tab added afterward starts genuinely empty instead of also inheriting them.
+      if (prev.length === 0) {
+        setLayout((prevLayout) => prevLayout.map((l) => (l.tabId ? l : { ...l, tabId: id })));
+      }
+      return [...prev, { id, name: `Tab ${prev.length + 1}` }];
+    });
+    setActiveTabId(id);
+  };
+
+  const renameTab = (id, newName) => {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, name: newName } : t)));
+  };
+
+  // Copies every widget currently on `sourceTabId` onto a brand-new tab. Per explicit request,
+  // this is NOT the same as the "duplicate_widgets" toggle on dashboard clone (section reported
+  // in the conversation this was built in) — there's no shared-reference option here at all,
+  // every widget always becomes an independent copy, same reasoning duplicateWidget's own doc
+  // comment above gives for a single widget: without it, editing either tile's mapping/style
+  // would silently edit both (and every OTHER dashboard that chart is placed on too). Reuses
+  // that exact same per-widget duplication step (chartLibrary widgets get a real independent
+  // backend copy via duplicateChartLibraryWidgetDef; everything else — Text Box/Shape/Slicer —
+  // is already fully self-contained per-tile, so a plain JSON deep-clone is enough, matching
+  // duplicateWidget's own scope exactly) — just looped across a whole tab's worth of widgets
+  // and landing on a new tab instead of a findFreeSlot'd spot on the same one. One failed
+  // widget copy doesn't abort the rest — its own error surfaces via chartListActionError, same
+  // as duplicateWidget, but the tab and every other widget on it still gets created.
+  const copyTab = async (sourceTabId) => {
+    const sourceTab = tabs.find((t) => t.id === sourceTabId);
+    if (!sourceTab) return;
+    const sourceEntries = layout.filter((l) => l.tabId === sourceTabId);
+    const newTabId = nextTabId();
+    // Create + switch to the new (still-empty) tab BEFORE any of the await calls below, not
+    // after — otherwise the SOURCE tab stays the active, rendered grid for the entire
+    // duplicate-each-widget network round trip, which is exactly the window
+    // ResponsiveGridLayout's own onLayoutChange guard further down was built to protect
+    // against (a transient container-width blip auto-reflowing the CURRENTLY VISIBLE tab,
+    // then getting persisted as a real edit once things settle back to the 'lg' breakpoint) —
+    // see that guard's own comment. Switching first means the source tab is never the one
+    // exposed to that window; the new tab renders empty for a moment and fills in as each
+    // widget's duplicate call resolves, same as any other async-loading state.
+    setTabs((prev) => [...prev, { id: newTabId, name: `${sourceTab.name} (Copy)` }]);
+    setActiveTabId(newTabId);
+    const newLayoutEntries = [];
+    const newWidgetsPatch = {};
+    for (const srcLayout of sourceEntries) {
+      const src = widgets[srcLayout.i];
+      if (!src) continue;
+      const clone = JSON.parse(JSON.stringify(src));
+      if (clone.dataSource?.type === 'chartLibrary' && clone.dataSource.widgetId) {
+        try {
+          const copy = await duplicateChartLibraryWidgetDef(clone.dataSource.widgetId);
+          clone.dataSource.widgetId = copy.id;
+          clone.title = copy.name; // keep the tile's own title in sync with the new copy's name, same as duplicateWidget
+        } catch (err) {
+          setChartListActionError(err.message);
+          continue; // skip just this one widget — still copy the rest of the tab
+        }
+      }
+      const newId = nextId();
+      newLayoutEntries.push({ ...srcLayout, i: newId, tabId: newTabId });
+      newWidgetsPatch[newId] = clone;
+    }
+    setLayout((prev) => [...prev, ...newLayoutEntries]);
+    setWidgets((prev) => ({ ...prev, ...newWidgetsPatch }));
+    refreshChartLibraryList();
+    notifyWidgetsChanged();
+  };
+
+  // Deleting a tab orphans its widgets to "all tabs" (clears their tabId) rather than moving
+  // them to another tab — simpler, and matches how an entry with no tabId already renders on
+  // every tab, so nothing on the deleted tab silently disappears.
+  // Deletes every widget placed specifically on this tab (not global/no-tabId ones, which
+  // stay put) via the same removeWidget used for a manual per-widget delete — so a Chart
+  // Library widget only gets detached from this placement (its reusable definition stays in
+  // the library list untouched), a slicer's own backend resource is actually deleted (it has
+  // no separate library entry to fall back to), and everything else (text box, shape, inline
+  // widgets) is fully removed, exactly like clicking each widget's own trash icon would.
+  const deleteTab = (id) => {
+    layout.filter((l) => l.tabId === id).forEach((l) => removeWidget(l.i));
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.id !== id);
+      setActiveTabId((cur) => (cur === id ? (next[0]?.id || null) : cur));
+      return next;
+    });
   };
 
   const updateWidget = (id, patch) => {
@@ -976,7 +1306,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     }
     const newId = nextId();
     const { x, y } = findFreeSlot(layout, srcLayout.w, srcLayout.h, GRID_CONFIG.cols);
-    setLayout((prev) => [...prev, { i: newId, x, y, w: srcLayout.w, h: srcLayout.h }]);
+    setLayout((prev) => [...prev, { i: newId, x, y, w: srcLayout.w, h: srcLayout.h, ...(srcLayout.tabId ? { tabId: srcLayout.tabId } : {}) }]);
     setWidgets((prev) => ({ ...prev, [newId]: clone }));
     setSelectedId(newId);
   };
@@ -1082,9 +1412,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       if (w.dataSource?.type !== 'chartLibrary' || !id) return;
       if (chartLibraryData[id] || chartLibraryFetchingRef.current.has(id)) return;
       chartLibraryFetchingRef.current.add(id);
+      // This fetch never carries filters (it's a cache-fill for a brand-new widget, not a
+      // filtered refetch) — the start-time `chartLibraryData[id]` check above only guards
+      // against starting a redundant fetch, not against a slow one clobbering fresher data
+      // that arrived while it was in flight (e.g. persistAndApplyFilters' own filtered result
+      // landing first, then this unfiltered one resolving after and silently overwriting it —
+      // the "filter applies for a moment, then reverts" symptom). Re-checking `prev[id]` at
+      // resolution time closes that: only fill the gap if it's still actually empty by then.
       getStandaloneWidgetData(id)
-        .then((data) => setChartLibraryData((prev) => ({ ...prev, [id]: { rows: data.rows, drillDown: data.drillDown } })))
-        .catch((err) => setChartLibraryData((prev) => ({ ...prev, [id]: { error: err.message } })))
+        .then((data) => setChartLibraryData((prev) => (prev[id] ? prev : { ...prev, [id]: { rows: data.rows, drillDown: data.drillDown } })))
+        .catch((err) => setChartLibraryData((prev) => (prev[id] ? prev : { ...prev, [id]: { error: err.message } })))
         .finally(() => chartLibraryFetchingRef.current.delete(id));
     });
   }, [widgets, chartLibraryData, backendId]);
@@ -1135,15 +1472,51 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     });
   }, [widgets, dashboardFilters, backendId]);
 
+  // Per-widget-PLACEMENT own filters (`w.filters`, set via the Filter action in the widget's
+  // own action strip — see widgetFilterModalId/FilterEditorModal below), on top of whatever
+  // the dashboard's own global filters already are. Keyed by `l.i` (the layout/placement id),
+  // not the underlying chart's widgetId, mirroring the KPI date-filter effect just above but
+  // keeping its own cache so two placements of the same chart with different own-filters never
+  // clobber each other (see the chartLibraryEntry computation in the render loop).
+  useEffect(() => {
+    layout.forEach((l) => {
+      const w = widgets[l.i];
+      if (!w || w.dataSource?.type !== 'chartLibrary' || !w.filters?.length) return;
+      const widgetId = w.dataSource.widgetId;
+      if (!widgetId) return;
+      const filters = resolveFiltersForQuery([...dashboardFilters, ...w.filters]);
+      const cacheKey = `${widgetId}:${JSON.stringify(filters)}`;
+      if (widgetFilterKeyRef.current.get(l.i) === cacheKey) return;
+      widgetFilterKeyRef.current.set(l.i, cacheKey);
+      const fetchPromise = backendId
+        ? getWidgetData(backendId, widgetId, { filters })
+        : getStandaloneWidgetData(widgetId, { filters });
+      fetchPromise
+        .then((data) => {
+          if (widgetFilterKeyRef.current.get(l.i) !== cacheKey) return; // superseded
+          setWidgetFilterData((prev) => ({ ...prev, [l.i]: { rows: data.rows, drillDown: data.drillDown } }));
+        })
+        .catch((err) => {
+          if (widgetFilterKeyRef.current.get(l.i) === cacheKey) {
+            setWidgetFilterData((prev) => ({ ...prev, [l.i]: { error: err.message } }));
+          }
+        });
+    });
+  }, [layout, widgets, dashboardFilters, backendId]);
+
   // KPI_CARD "Compare to" — a second, independent fetch against a date-shifted filter set
   // (see buildComparisonFilters's own doc comment for why this can't just be a backend
   // parameter). Runs once this widget's own rows have already loaded (so the current value
   // it needs to diff against is available), and only for KPI_CARD widgets that actually opted
-  // in via mapping.compare_to. `comparisonData` is keyed by widgetId (what resolveWidgetProps
-  // looks it up by); `comparisonFetchingRef` instead tracks the full cacheKey (widgetId +
-  // compare_to + resolved filters) so a changed comparison target or filter set is recognized
-  // as needing a fresh fetch rather than silently keeping a now-stale value under the same
-  // widgetId slot.
+  // in via mapping.compare_to. Only fetches and stores the raw past-window rows here —
+  // `comparisonKeyRef` tracks the full cacheKey (widgetId + compare_to + resolved filters) so
+  // a changed comparison target or filter set is recognized as needing a fresh fetch rather
+  // than silently keeping a now-stale value under the same widgetId slot. The delta itself is
+  // computed by the recompute effect below, not here — see its doc comment for why: this
+  // fetch's own `.then` used to close over `entry.rows` (this widget's current-window rows at
+  // the moment the fetch STARTED), which could already be superseded by a newer
+  // `chartLibraryData[widgetId]` by the time the fetch resolved, producing a delta computed
+  // against a stale current value.
   useEffect(() => {
     Object.values(widgets).forEach((w) => {
       if (w.dataSource?.type !== 'chartLibrary' || !SINGLE_VALUE_CHART_TYPES.has(w.dataSource.chartType)) return;
@@ -1152,19 +1525,19 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const compareTo = mapping.compare_to;
       if (!widgetId || !compareTo || compareTo === 'None') return;
       const entry = chartLibraryData[widgetId];
-      const yAxis = mapping.y_axis;
+      const yAxis = measureKey(mapping.y_axis);
       if (!entry?.rows || !yAxis) return;
-      // 'Custom' has no "current window" to shift for LATEST (its date_filter_column is
-      // deliberately unset — see LATEST_BY_FIELD's comment), so it takes a fixed cutoff date
-      // instead — see buildCustomComparisonFilters's own doc comment for the two shapes this
-      // can produce depending on aggregation.
+      // 'Custom' has no "current window" to shift when date_filter_range is 'Latest' (there's
+      // no BETWEEN filter — see kpiEffectiveFilters/buildDateFilterFromPreset), so it takes a
+      // fixed cutoff date instead — see buildCustomComparisonFilters's own doc comment for the
+      // two shapes this can produce depending on the range.
       const compareFilters = compareTo === 'Custom'
         ? buildCustomComparisonFilters({
           filters: kpiEffectiveFilters(mapping),
           customDate: mapping.compare_custom_date,
           customFrom: mapping.compare_custom_from,
           customTo: mapping.compare_custom_to,
-          latestByColumn: mapping.aggregation === 'LATEST' ? mapping.latest_by : null,
+          latestByColumn: mapping.date_filter_range === 'Latest' ? mapping.date_filter_column : null,
         })
         : buildComparisonFilters(kpiEffectiveFilters(mapping), compareTo);
       if (!compareFilters) return; // no BETWEEN filter to shift — nothing meaningful to compare
@@ -1177,21 +1550,49 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       fetchPromise
         .then((data) => {
           if (comparisonKeyRef.current.get(widgetId) !== cacheKey) return; // superseded
-          const currentVal = Number(entry.rows[0]?.[yAxis]) || 0;
-          const pastVal = Number(data.rows?.[0]?.[yAxis]) || 0;
-          const delta = currentVal - pastVal;
-          setComparisonData((prev) => ({
-            ...prev,
-            [widgetId]: { delta, deltaPercent: pastVal !== 0 ? (delta / pastVal) * 100 : null, deltaUp: delta >= 0 },
-          }));
+          setComparisonRawData((prev) => ({ ...prev, [widgetId]: { rows: data.rows } }));
         })
         .catch(() => {
           if (comparisonKeyRef.current.get(widgetId) === cacheKey) {
-            setComparisonData((prev) => ({ ...prev, [widgetId]: null }));
+            setComparisonRawData((prev) => ({ ...prev, [widgetId]: null }));
           }
         });
     });
   }, [widgets, chartLibraryData, dashboardFilters, backendId]);
+
+  // Recomputes each KPI_CARD/GAUGE widget's delta purely from state — whatever
+  // `chartLibraryData[widgetId]` (current-window rows) and `comparisonRawData[widgetId]`
+  // (past-window rows, fetched above) hold right now — instead of inside the fetch effect's
+  // own `.then`. That means a delta is always computed against the SAME current-window value
+  // the card is displaying, even when chartLibraryData updates (e.g. the "Last hour" window
+  // ticking forward) without the past-window fetch needing to re-run (same compareFilters, so
+  // comparisonKeyRef skips re-fetching it) — see the fetch effect's own doc comment for the
+  // stale-closure race this replaces.
+  useEffect(() => {
+    Object.values(widgets).forEach((w) => {
+      if (w.dataSource?.type !== 'chartLibrary' || !SINGLE_VALUE_CHART_TYPES.has(w.dataSource.chartType)) return;
+      const widgetId = w.dataSource.widgetId;
+      const mapping = w.dataSource.mapping || {};
+      if (!widgetId || !mapping.compare_to || mapping.compare_to === 'None') return;
+      const entry = chartLibraryData[widgetId];
+      const past = comparisonRawData[widgetId];
+      const yAxis = measureKey(mapping.y_axis);
+      if (!entry?.rows || !yAxis || past === undefined) return;
+      if (past === null) {
+        setComparisonData((prev) => (prev[widgetId] === null ? prev : { ...prev, [widgetId]: null }));
+        return;
+      }
+      const currentVal = Number(entry.rows[0]?.[yAxis]) || 0;
+      const pastVal = Number(past.rows?.[0]?.[yAxis]) || 0;
+      const delta = currentVal - pastVal;
+      const next = { delta, deltaPercent: pastVal !== 0 ? (delta / pastVal) * 100 : null, deltaUp: delta >= 0 };
+      setComparisonData((prev) => {
+        const cur = prev[widgetId];
+        if (cur && cur.delta === next.delta && cur.deltaPercent === next.deltaPercent) return prev;
+        return { ...prev, [widgetId]: next };
+      });
+    });
+  }, [widgets, chartLibraryData, comparisonRawData]);
 
   // Phase 18 — batched, filter-aware fetch for dashboards with a real backend id. Omitting
   // `filters` from the call (see getDashboardData's own doc comment) makes the backend
@@ -1234,14 +1635,24 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         applyWidgetResults(widgetResults);
 
         // The backend's "omit filters, auto-apply dashboard.global_filters" fast path (above)
-        // only works for filters it can interpret as-is — a saved relative/thisPeriod time
-        // range (e.g. "Last 7 days") is a spec that must be resolved to concrete dates by us,
-        // not something the backend can evaluate on its own. So when any saved filter needs
-        // that resolution, immediately re-fetch once with the resolved dates and swap the
-        // corrected widget data in — the common case (no relative filters) never pays this
-        // second round trip.
-        const needsResolution = !hasOverride && savedFilters.some(
-          (f) => f.operator === 'BETWEEN' && f.value && typeof f.value === 'object' && !Array.isArray(f.value) && f.value.mode && f.value.mode !== 'custom',
+        // only works for filters it can interpret as-is — two cases it can't:
+        //  1. A saved relative/thisPeriod time range (e.g. "Last 7 days") is a spec that must
+        //     be resolved to concrete dates by us, not something the backend can evaluate on
+        //     its own.
+        //  2. A saved filter that's been cleared back to a blank value (Clear all, or clearing
+        //     one filter from FilterPanel.jsx's collapsed row) — the backend applies EVERY row
+        //     in global_filters literally, blank ones included, which fails the whole query
+        //     (`column < ''` on a numeric/date column errors in Postgres) — see the
+        //     conversation this was reported in. resolveFiltersForQuery already drops these
+        //     for every OTHER apply path; this compares its output length to catch the one
+        //     path (initial/omit-filters load) that bypasses it entirely.
+        // Either case: immediately re-fetch once with the corrected filter set and swap the
+        // corrected widget data in — the common case (neither) never pays this second round trip.
+        const needsResolution = !hasOverride && (
+          savedFilters.some(
+            (f) => f.operator === 'BETWEEN' && f.value && typeof f.value === 'object' && !Array.isArray(f.value) && f.value.mode && f.value.mode !== 'custom',
+          )
+          || resolveFiltersForQuery(savedFilters).length !== savedFilters.length
         );
         if (needsResolution) {
           getDashboardData(backendId, { filters: resolveFiltersForQuery(savedFilters) })
@@ -1390,6 +1801,32 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     });
   };
 
+  // Re-fetches dashboard data scoped to the newly active tab — backend only needs `tab_id`
+  // when one is actually selected (global slicers still apply either way, see backend
+  // contract). Skipped on the very first render (the mount effect above already fetches once
+  // for the initial tab) via the ref below, so switching tabs doesn't double-fetch on load.
+  const tabMountedRef = useRef(false);
+  useEffect(() => {
+    if (!backendId) return;
+    if (!tabMountedRef.current) { tabMountedRef.current = true; return; }
+    let cancelled = false;
+    getDashboardData(backendId, { filters: resolveFiltersForQuery(dashboardFilters), tabId: activeTabId })
+      .then(({ widgets: widgetResults }) => {
+        if (cancelled) return;
+        setChartLibraryData((prev) => {
+          const next = { ...prev };
+          Object.entries(widgetResults).forEach(([widgetId, result]) => {
+            next[widgetId] = result.status === 200
+              ? { rows: result.data?.rows, drillDown: result.data?.drill_down }
+              : { error: result.msg || 'Failed to load' };
+          });
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeTabId, backendId]);
+
   // Creates the backend slicer resource AND places it as a real grid widget in the same
   // step — unlike other widget types (empty placeholder first, data bound after via the
   // side panel/wizard), a slicer has nothing to show until it's bound to a datasource
@@ -1399,11 +1836,14 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // addWidget's own posOverride convention.
   const addSlicerWidget = async ({ datasourceId, columnName, label }, posOverride) => {
     const def = WIDGET_TYPE_REGISTRY.slicer;
-    const slicer = await createSlicer(backendId, { datasourceId, columnName, label, position: { x: 0, y: 0 } });
+    const slicer = await createSlicer(backendId, { datasourceId, columnName, label, position: { x: 0, y: 0 }, tabId: activeTabId });
     setSlicers((prev) => [...prev, slicer]);
     const id = nextId();
-    const { x, y } = posOverride || findFreeSlot(layout, def.defaultSize.w, def.defaultSize.h, GRID_CONFIG.cols);
-    setLayout((prev) => [...prev, { i: id, x, y, w: def.defaultSize.w, h: def.defaultSize.h }]);
+    // Same stale-closure fix as addWidget above — compute inside the functional updater.
+    setLayout((prev) => {
+      const { x, y } = posOverride || findFreeSlot(prev, def.defaultSize.w, def.defaultSize.h, GRID_CONFIG.cols);
+      return [...prev, { i: id, x, y, w: def.defaultSize.w, h: def.defaultSize.h, ...(activeTabId ? { tabId: activeTabId } : {}) }];
+    });
     setWidgets((prev) => ({
       ...prev,
       [id]: { type: 'slicer', title: slicer.label || slicer.column_name, dataSource: { type: 'slicer', slicerId: slicer.id }, style: {} },
@@ -1562,6 +2002,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // breaks WidgetContent's memoization; always delegates to the freshest ref above.
   const stableOnPointClick = useCallback((widgetId, point) => handleWidgetPointClickRef.current(widgetId, point), []);
 
+  // Text Box's own edit-in-place commit (TextBox.jsx's textarea blur) — writes straight into
+  // `widget.style.text` via setWidgets' functional updater, not `updateWidget` (whose plain
+  // object-merge `patch` would replace the whole `style` object rather than merge into it).
+  // Stable (empty deps, closes over `setWidgets` — itself stable) so it never breaks
+  // WidgetContent's memoization, same reasoning as stableOnPointClick above.
+  const stableOnTextChange = useCallback((widgetId, newText) => {
+    setWidgets((prev) => ({ ...prev, [widgetId]: { ...prev[widgetId], style: { ...prev[widgetId]?.style, text: newText } } }));
+  }, []);
+
   // Explicit cross-filter trigger from the right-click point menu — bypasses the drill-first
   // check above entirely, so a widget configured for both features can still be cross-filtered
   // even though left-click on it drills. Same ref-then-stable-callback split as
@@ -1598,7 +2047,63 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     await updateDashboard(backendId, { theme: next });
   };
 
+  // "Add Widget" list: the chart types take label/icon/color/ORDER from CHART_TYPE_META — the same
+  // source the chart editor's Visualization Type grid uses — but are still added under their
+  // registry type key (behavior/drag payload unchanged). Non-chart entries (Slicer, Text Box,
+  // Shape…) have no chart type, so they keep the registry's own label/icon in an "Elements" group.
+  const paletteVisibleTypes = Object.entries(WIDGET_TYPE_REGISTRY).filter(([, def]) => def.builderVisible !== false);
+  const paletteVisibleByType = Object.fromEntries(paletteVisibleTypes);
+  const paletteChartItems = CHART_TYPES
+    .map((chartType) => {
+      const type = CHART_TYPE_TO_MOCK_TYPE[chartType];
+      const meta = CHART_TYPE_META[chartType];
+      return type && paletteVisibleByType[type] ? { type, label: meta.label, Icon: meta.icon, color: meta.color } : null;
+    })
+    .filter(Boolean);
+  const paletteChartTypeKeys = new Set(paletteChartItems.map((i) => i.type));
+  const paletteElementItems = paletteVisibleTypes
+    .filter(([type]) => !paletteChartTypeKeys.has(type))
+    .map(([type, def]) => ({ type, label: def.label, Icon: def.icon, color: def.iconColor || '#475569' }));
+
+  // Shared by both the expanded palette grid and the collapsed icon-only band (below) — same
+  // click/drag behavior, just a smaller/label-less button in the collapsed case.
+  const handleAddWidgetClick = (type) => {
+    if (type === 'slicer') { if (!backendId) return; setSlicerDropPos(null); setSlicerModalOpen(true); return; }
+    // No data-source step to run (dataShape: null, same as Slicer above) — places a default
+    // instance immediately, same fast-path reasoning.
+    if (type === 'textBox') { addWidget('textBox'); return; }
+    if (type === 'shape') { addWidget('shape'); return; }
+    setWizardType(type); setWizardOpen(true);
+  };
+  const renderPaletteButton = ({ type, label, Icon, color }, compact = false) => {
+    const slicerDisabled = type === 'slicer' && !backendId;
+    return (
+      <button
+        key={type}
+        type="button"
+        title={slicerDisabled ? 'Save the dashboard first to add a slicer' : label}
+        aria-label={label}
+        className={`dbe-palette-icon${compact ? ' compact' : ''}`}
+        style={{ color, background: `${color}14`, borderColor: `${color}44`, ...(slicerDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+        disabled={slicerDisabled}
+        onClick={() => handleAddWidgetClick(type)}
+        draggable={editable && !slicerDisabled}
+        onDragStart={(e) => { setDraggedType(type); e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', type); }}
+        onDragEnd={() => setDraggedType(null)}
+      >
+        {Icon && <Icon size={compact ? 15 : 20} />}
+        {!compact && <span className="dbe-palette-icon-label">{label}</span>}
+      </button>
+    );
+  };
+
   const selected = selectedId ? widgets[selectedId] : null;
+  // Style fields for the selected widget + which of them are colors (stored per mode, see
+  // themedStyle.js) — shared by the Selected Widget Style panel's value/onChange below.
+  const selectedStyleFields = !selected ? [] : (selected.type === 'chartLibrary'
+    ? chartLibraryStyleFieldsFor(selected.dataSource?.chartType, selected.dataSource?.mapping)
+    : (WIDGET_TYPE_REGISTRY[selected.type]?.styleFields || []));
+  const selectedColorKeys = new Set(selectedStyleFields.filter((f) => f.type === 'color' || f.type === 'palette').map((f) => f.key));
   // Chart Library ids already placed on this canvas — drives the "Added" badge/dimming in
   // the "Your Charts" panel below, so a chart already on the dashboard can't be added again.
   const usedChartIds = new Set(
@@ -1628,10 +2133,20 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // Every widget renders through the same interactive path at every breakpoint now —
   // ResponsiveGridLayout handles the reflow, so there's no separate static/read-only
   // rendering path to keep in sync with this one.
-  const renderWidget = (l) => {
+  // Entries visible on the active tab — an entry with no tabId (or when no tabs exist at all)
+  // is visible on every tab, matching the "global" slicer/widget convention. `layout` state
+  // itself is never filtered — only what's actually handed to the grid/renderer is.
+  const visibleLayout = tabs.length === 0 ? layout : layout.filter((l) => !l.tabId || l.tabId === activeTabId);
+
+  // `pixelHeightOverride` — only used by the Focus mode modal below, so a widget's chart can
+  // render at the modal's own actual pixel height instead of whatever its small grid tile
+  // works out to (l.h * rowHeight + margin) — passing a fake large `l.h` instead would compute
+  // a pixelHeight that doesn't match the modal's real rendered size, since this div's own CSS
+  // just fills 100% of whatever container it's placed in (see the modal's own render below).
+  const renderWidget = (l, pixelHeightOverride) => {
     const w = widgets[l.i];
     if (!w) return <div key={l.i} />;
-    const pixelHeight = l.h * GRID_CONFIG.rowHeight + (l.h - 1) * GRID_CONFIG.margin[1];
+    const pixelHeight = pixelHeightOverride ?? (l.h * GRID_CONFIG.rowHeight + (l.h - 1) * GRID_CONFIG.margin[1]);
     // Style values (color/titleColor/rowTextColor/etc.) now flow directly into each
     // widget's own props via resolveWidgetProps — this wrapper only needs an explicit
     // height. Without it, this div defaults to height:auto — any child relying on
@@ -1643,13 +2158,20 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // Only this widget's own cache entry, not the whole map — passing `chartLibraryData`
     // wholesale into WidgetContent would defeat its memoization, since that object gets a
     // new reference whenever *any* widget's data resolves, not just this one's.
-    const chartLibraryEntry = w.dataSource?.widgetId ? chartLibraryData[w.dataSource.widgetId] : undefined;
+    // A widget with its own per-placement filters (w.filters, set via the Filter action on
+    // the widget itself — distinct from the dashboard's global filters) reads from
+    // `widgetFilterData[l.i]` instead of the shared `chartLibraryData[widgetId]` cache, since
+    // two placements of the SAME underlying chart could have different own-filters and must
+    // not stomp each other's fetched rows under one shared widgetId key.
+    const chartLibraryEntry = w.dataSource?.widgetId
+      ? (w.filters?.length ? widgetFilterData[l.i] : chartLibraryData[w.dataSource.widgetId])
+      : undefined;
     const comparisonEntry = w.dataSource?.widgetId ? comparisonData[w.dataSource.widgetId] : undefined;
     // Shared context for resolveWidgetProps — used both by WidgetContent (rendering) and the
     // Export CSV button below (computed fresh on click, not cached from render, so it's
     // never stale and doesn't need `resolved` threaded out of the memoized child).
     const widgetCtx = {
-      kpiLiveData, pixelHeight, isDark,
+      kpiLiveData, pixelHeight, isDark: effectiveIsDark,
       titleColor: effectiveDashboardStyle.titleColor || titleColor,
       bgColor: effectiveDashboardStyle.bgColor,
       titleWeight: effectiveDashboardStyle.titleWeight,
@@ -1664,6 +2186,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       axisTextFont: effectiveDashboardStyle.axisTextFont,
       bgGradientFrom: effectiveDashboardStyle.bgGradientFrom,
       bgGradientTo: effectiveDashboardStyle.bgGradientTo,
+      // valueDecimals was never forwarded here, so a theme's "Value decimal places" never reached
+      // any widget — wired now, together with the newer theme fields below.
+      valueDecimals: effectiveDashboardStyle.valueDecimals,
+      valueTextColor: effectiveDashboardStyle.valueTextColor,
+      valueTextSize: effectiveDashboardStyle.valueTextSize,
+      titleBgColor: effectiveDashboardStyle.titleBgColor,
+      headerBgColor: effectiveDashboardStyle.headerBgColor,
+      headerTextColor: effectiveDashboardStyle.headerTextColor,
+      bandColor: effectiveDashboardStyle.bandColor,
+      bandTextColor: effectiveDashboardStyle.bandTextColor,
       dataCache: mockDataCacheRef.current, datasources, chartLibraryData,
     };
     // Visual indicator (Power BI-style): this widget is currently narrowed by the active
@@ -1678,6 +2210,20 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         // fields — not just its title bar, which was too small a target to notice.
         onClick={editable && showChrome ? () => setSelectedId(l.i) : undefined}
       >
+        {resizeBadge?.id === l.i && (() => {
+          // Same colWidth math react-grid-layout itself uses internally (containerWidth minus
+          // the (cols-1) horizontal margins, split across `cols` columns) — matches the actual
+          // rendered pixel width, not a rough w/cols approximation.
+          const colWidth = (containerWidth - GRID_CONFIG.margin[0] * (GRID_CONFIG.cols - 1)) / GRID_CONFIG.cols;
+          const widthPx = Math.round(resizeBadge.w * colWidth + (resizeBadge.w - 1) * GRID_CONFIG.margin[0]);
+          const heightPx = resizeBadge.h * GRID_CONFIG.rowHeight + (resizeBadge.h - 1) * GRID_CONFIG.margin[1];
+          const widthPct = Math.round((resizeBadge.w / GRID_CONFIG.cols) * 100);
+          return (
+            <div className="dbe-resize-badge">
+              {widthPx}×{heightPx}px · {widthPct}% width
+            </div>
+          );
+        })()}
         {/* No duplicate title bar here — the widget's own inner title (styled via the
             "Title color" field) is the only one shown, in both edit and preview, so what
             you see while editing matches what gets saved exactly. Just a small floating
@@ -1694,7 +2240,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           const drillable = !!drillDown?.enabled;
           const canDrillUp = drillable && (drillDown.path?.length || 0) > 0;
           const xAxis = drillable ? (drillDown.dimension || w.dataSource?.mapping?.x_axis) : null;
-          const yAxis = w.dataSource?.mapping?.y_axis;
+          const yAxis = measureKey(w.dataSource?.mapping?.y_axis);
           const topRow = drillable && drillDown.has_next_level && chartLibraryEntry?.rows?.length
             ? chartLibraryEntry.rows.reduce((best, r) => (best == null || Number(r[yAxis]) > Number(best[yAxis]) ? r : best), null)
             : null;
@@ -1731,6 +2277,14 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               )}
               {showChrome && (
                 <>
+                  <button
+                    type="button"
+                    className="dbe-widget-action"
+                    title="Focus (view large)"
+                    onClick={(e) => { e.stopPropagation(); setFocusedWidgetId(l.i); }}
+                  >
+                    <Maximize2 size={13} />
+                  </button>
                   <div className="dbe-export-wrap">
                     <button
                       type="button"
@@ -1787,6 +2341,23 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                       <Pencil size={13} />
                     </button>
                   )}
+                  {editable && w.dataSource?.type === 'chartLibrary' && w.dataSource?.widgetId && (
+                    // This widget's OWN filters, on top of the dashboard's global filters —
+                    // distinct from FiltersToggleButton in the main toolbar, which edits
+                    // dashboardFilters (applies to every widget). See widgetFilterModalId
+                    // state + the FilterEditorModal instance rendered once near the end of
+                    // this component, and the fetch effect above that resolves w.filters into
+                    // widgetFilterData[l.i].
+                    <button
+                      type="button"
+                      className="dbe-widget-action"
+                      title={w.filters?.length ? `Widget filters (${w.filters.length})` : 'Add widget filter'}
+                      onClick={(e) => { e.stopPropagation(); setWidgetFilterModalId(l.i); }}
+                    >
+                      <Filter size={13} />
+                      {w.filters?.length > 0 && <span className="dbe-widget-filter-dot" />}
+                    </button>
+                  )}
                   {editable && (
                     <>
                       <button type="button" className="dbe-widget-action" title="Duplicate" onClick={(e) => { e.stopPropagation(); duplicateWidget(l.i); }}><Copy size={13} /></button>
@@ -1803,7 +2374,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             widget={w}
             pixelHeight={pixelHeight}
             kpiLiveData={kpiLiveData}
-            isDark={isDark}
+            isDark={effectiveIsDark}
             titleColor={widgetCtx.titleColor}
             bgColor={widgetCtx.bgColor}
             titleWeight={widgetCtx.titleWeight}
@@ -1818,6 +2389,14 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             axisTextFont={widgetCtx.axisTextFont}
             bgGradientFrom={widgetCtx.bgGradientFrom}
             bgGradientTo={widgetCtx.bgGradientTo}
+            valueDecimals={widgetCtx.valueDecimals}
+            valueTextColor={widgetCtx.valueTextColor}
+            valueTextSize={widgetCtx.valueTextSize}
+            titleBgColor={widgetCtx.titleBgColor}
+            headerBgColor={widgetCtx.headerBgColor}
+            headerTextColor={widgetCtx.headerTextColor}
+            bandColor={widgetCtx.bandColor}
+            bandTextColor={widgetCtx.bandTextColor}
             mockDataCache={mockDataCacheRef.current}
             datasources={datasources}
             chartLibraryEntry={chartLibraryEntry}
@@ -1827,6 +2406,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             onDrillUp={stableOnDrillUp}
             onPointCrossFilter={stableOnPointCrossFilter}
             editable={editable}
+            onTextChange={stableOnTextChange}
             slicer={w.type === 'slicer' ? slicers.find((s) => s.id === w.dataSource?.slicerId) : undefined}
             onSlicerChange={changeSlicerValues}
             onSlicerRefresh={refreshSlicer}
@@ -1841,6 +2421,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     <div className="dbe-root">
       <style>{`
         .dbe-root { display:flex; flex-direction:column; gap:10px; height:100%; }
+        /* Suppresses react-grid-layout's own inline transform transition (its default ~200ms
+           slide when items reflow into new positions) while a multi-tab PDF export is looping
+           through tabs — without this, compositeDashboardCanvas can call getBoundingClientRect
+           mid-slide right after a tab switch, capturing widgets at an interpolated, overlapping
+           position instead of their settled one (reported as overlapping/garbled text in the
+           exported PDF). !important is required since the library sets transition inline. */
+        .dbe-no-transition .react-grid-item { transition: none !important; }
         /* Bottom border separates the dashboard-level actions row (name, Filters,
            Save/Cancel/Theme/Export) from the canvas below, so it reads as its own distinct
            section rather than blending into the widget grid. */
@@ -1861,12 +2448,29 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         }
         .dbe-body { display:flex; gap:12px; flex:1; min-height:0; }
         .dbe-left-panel-wrap { position:relative; flex-shrink:0; height:100%; }
+        /* Scrollbar always hidden (still fully scrollable — mouse wheel/drag/keyboard all
+           still work, only the visible track+thumb are gone) — the underlying index.css rule
+           (an always-visible, 4px orange thumb, applied globally) actually has HIGHER CSS
+           specificity than a bare class selector like .dbe-left-panel::-webkit-scrollbar
+           (2 element-level matches — html plus the pseudo-element — vs. this rule's 1), so it
+           silently won regardless — this scrollbar (and the others like it below) was always
+           visible in practice despite this rule's intent. Prefixing with an html ancestor
+           below ties that specificity so source order (this rule loads later) decides
+           instead — see the same fix on .dbe-chart-list/.dbe-canvas-wrap/.dbe-theme-popover. */
         .dbe-left-panel {
           width:220px; height:100%; flex-shrink:0; display:flex; flex-direction:column; overflow-y:auto;
           scrollbar-width:none; transition:width .15s;
         }
-        .dbe-left-panel.collapsed { width:0; overflow:hidden; }
-        .dbe-left-panel::-webkit-scrollbar { display:none; width:0; height:0; }
+        /* Collapsed = a clean icon-only band (every addable widget type as a small icon), same
+           treatment as .dbe-chart-list.collapsed on the right — was width:0 (fully hidden),
+           which lost the "add a widget" affordance entirely while collapsed. */
+        .dbe-left-panel.collapsed {
+          width:44px; overflow-x:hidden; align-items:center;
+          border-right:1px solid rgb(226 232 240); padding-right:9px;
+        }
+        [data-theme="dark"] .dbe-left-panel.collapsed { border-right-color:rgba(255,255,255,0.1); }
+        .dbe-left-panel-collapsed-icons { display:flex; flex-direction:column; gap:6px; padding-top:2px; }
+        html .dbe-left-panel::-webkit-scrollbar { display:none; width:0; height:0; }
         .dbe-left-panel-toggle {
           position:absolute; top:0; right:-13px; width:22px; height:22px; z-index:3;
           display:flex; align-items:center; justify-content:center; cursor:pointer;
@@ -1884,18 +2488,30 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           width:220px; height:100%; flex-shrink:0; display:flex; flex-direction:column; gap:4px; overflow-y:auto;
           scrollbar-width:none; transition:width .15s;
         }
-        .dbe-chart-list::-webkit-scrollbar { display:none; width:0; height:0; }
-        .dbe-chart-list.collapsed { width:44px; }
+        html .dbe-chart-list::-webkit-scrollbar { display:none; width:0; height:0; }
+        /* Collapsed = a clean icon-only band, not just the same list narrowed — matches the
+           app's own far-left icon sidebar (a bordered strip of centered icons) rather than
+           the wider list's per-item bordered cards squeezed down, which read as a cramped
+           mis-sized version of the expanded list. overflow-x:hidden is belt-and-braces so a
+           stray wide child can never force a horizontal scrollbar onto the canvas beside it —
+           same total width/height footprint as before, just restyled. */
+        .dbe-chart-list.collapsed {
+          width:44px; align-items:center; gap:6px; overflow-x:hidden;
+          border-left:1px solid rgb(226 232 240); padding-left:9px;
+        }
+        [data-theme="dark"] .dbe-chart-list.collapsed { border-left-color:rgba(255,255,255,0.1); }
         .dbe-chart-list-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:#94a3b8; margin-bottom:2px; padding-left:18px; text-align:right; }
         /* Each row's own styling (.chart-list-item*) now lives in ChartListItem.jsx itself —
            shared with ChartLibrary.jsx's "Charts" tab list, same underlying data. */
         .dbe-palette-row { display:flex; flex-wrap:wrap; gap:8px; }
+        .dbe-palette-heading { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:#94a3b8; margin:10px 2px 6px; }
         .dbe-palette-icon {
           width:64px; height:60px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
           border-radius:10px; border:1px solid rgb(203 213 225); background:#fff;
           cursor:pointer; transition:border-color .15s,filter .15s;
         }
         .dbe-palette-icon:hover { filter:brightness(0.92); }
+        .dbe-palette-icon.compact { width:26px; height:26px; border-radius:6px; gap:0; }
         .dbe-palette-icon-label { font-size:10px; font-weight:500; line-height:1; text-align:center; color:#475569; }
         .dbe-canvas-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; min-height:0; }
         /* The horizontal "Condition Name [options ▾] ... Apply / Clear All" filter bar — a
@@ -1913,16 +2529,40 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
            are the only two zones; this used to also carry a dashed "still editing" border,
            which read as a third nested box rather than a clean two-part layout. */
         .dbe-canvas-wrap { flex:1; min-width:0; padding:14px 16px; overflow:auto; background:#fff; }
-        /* Overrides the global index.css scrollbar rule (always-visible orange thumb) just
-           for this canvas — hidden at rest, thin and neutral-colored only on hover, same
-           pattern KpiMonitoringDashboard.jsx already uses for its own table widgets. */
+        /* Overrides the global index.css scrollbar rule (always-visible orange thumb) —
+           hidden entirely, still fully scrollable by wheel/drag/keyboard. */
         .dbe-canvas-wrap { scrollbar-width: none; }
-        .dbe-canvas-wrap::-webkit-scrollbar { width: 0; height: 0; }
-        .dbe-canvas-wrap:hover { scrollbar-width: thin; }
-        .dbe-canvas-wrap:hover::-webkit-scrollbar { width: 6px; height: 6px; }
-        .dbe-canvas-wrap:hover::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.25); border-radius: 3px; }
-        .dbe-canvas-wrap:hover::-webkit-scrollbar-track { background: transparent; }
+        html .dbe-canvas-wrap::-webkit-scrollbar { width: 0; height: 0; }
         .dbe-widget { height:100%; width:100%; background:#fff; border:1px solid rgb(226 232 240); border-radius:10px; padding:10px; overflow:hidden; position:relative; cursor:pointer; }
+        /* A shape IS the shape, not a card containing one — the default padding/border/card
+           background would otherwise double-box it (a circle rendered inside a square card
+           with its own separate border, wasted corner space). Shape.jsx draws its own
+           fill/border/radius already, styled directly via its own fields, so this widget type
+           gets no chrome of its own to draw over/around that. overflow:visible (not the
+           default hidden) so a rotated Line can extend past its own nominal box edges without
+           getting clipped mid-shape. */
+        .dbe-widget-shape { padding:0; border:none; background:transparent; overflow:visible; }
+        /* KPI Card (StatCard.jsx, the standalone mock widget type — kept for that legacy path)
+           already paints its own full h-full gradient/color background — this ancestor's own
+           10px padding + flat white/dark background used to leave a visible ring of the
+           ANCESTOR's color around the card's actual background instead of letting it reach the
+           tile's edges. Same "widget draws its own full chrome, ancestor gets out of the way"
+           treatment .dbe-widget-shape already gets above. */
+        .dbe-widget-statCard { padding:0; border:none; background:transparent; }
+        /* Every REAL (Chart Library-backed) widget on an actual dashboard has w.type ===
+           'chartLibrary' regardless of its underlying chart_type — LINE/BAR/PIE/KPI_CARD/
+           GAUGE/SCATTER/TABLE/HEAT_MAP/etc — and renderChartWidget.jsx's own per-chart_type
+           cases EACH independently paint that exact same full h-full/rounded-lg/bg-white
+           dark:bg-[#22273C] card (confirmed by reading every case — TABLE included). So this
+           ancestor's own padding/border/background is ALWAYS redundant for a real widget, the
+           same reasoning as .dbe-widget-statCard just above — just scoped to the class real
+           widgets actually carry, rather than the individual mock chart_type names, which
+           .dbe-widget-statCard alone can never match on an actual dashboard (see the
+           conversation this was diagnosed in: the earlier statCard-only rule visually
+           "looked" fixed purely by dark-mode color coincidence, not because it was actually
+           being applied — the real ring only became obvious once a widget's own bgGradient
+           genuinely differed from the ancestor's flat color, e.g. a LINE chart). */
+        .dbe-widget-chartLibrary { padding:0; border:none; background:transparent; }
         /* Widgets that paint their own background (StatCard/GaugeCard/etc, via their own
            bg-white dark:bg-[#22273C] classes) are unaffected by this — but KpiTable
            deliberately doesn't (relies on this ancestor, to avoid double-boxing itself), so
@@ -1959,6 +2599,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         }
         .dbe-widget:hover .dbe-widget-actions, .dbe-widget.selected .dbe-widget-actions { opacity:1; }
         .dbe-widget-action {
+          position:relative;
           width:20px; height:20px; display:flex; align-items:center; justify-content:center;
           color:#64748b; cursor:pointer; background:rgba(255,255,255,0.9); border:none; border-radius:5px;
         }
@@ -1967,6 +2608,39 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-widget-action:disabled:hover { filter:none; }
         .dbe-widget-action.dbe-widget-remove { color:#ef4444; }
         .dbe-widget-actions.dbe-force-visible { opacity:1; }
+        .dbe-widget-filter-dot {
+          position:absolute; top:2px; right:2px; width:6px; height:6px; border-radius:50%;
+          background:#EC7D09; border:1px solid #fff;
+        }
+        /* Live size readout shown while dragging a resize handle (see resizeBadge state) —
+           centered over the widget, high z-index so it stays visible above the widget's own
+           content while resizing. */
+        .dbe-resize-badge {
+          position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); z-index:10;
+          padding:4px 10px; border-radius:6px; background:rgba(11,24,48,0.85); color:#fff;
+          font-size:11px; font-weight:600; white-space:nowrap; pointer-events:none;
+        }
+        /* Focus mode — a dim backdrop + centered large panel, same overlay convention as
+           .dbe-export-backdrop above (fixed, covers the viewport) but for a much bigger,
+           click-through-blocked panel instead of a small dismissible menu. */
+        .dbe-focus-overlay {
+          position:fixed; inset:0; z-index:50; background:rgba(15,23,42,0.55);
+          display:flex; align-items:center; justify-content:center; padding:24px;
+        }
+        .dbe-focus-panel {
+          position:relative; width:min(1100px, 92vw); background:#fff; border-radius:14px;
+          box-shadow:0 20px 60px rgba(0,0,0,0.35); padding:16px;
+        }
+        [data-theme="dark"] .dbe-focus-panel { background:#0b1830; }
+        .dbe-focus-close {
+          position:absolute; top:-14px; right:-14px; width:30px; height:30px; border-radius:50%;
+          display:flex; align-items:center; justify-content:center; color:#fff; background:#0b1830;
+          border:2px solid #fff; cursor:pointer; z-index:1;
+        }
+        .dbe-focus-close:hover { background:#EC7D09; }
+        /* Height matches DBE_FOCUS_PIXEL_HEIGHT exactly — see that constant's own comment for
+           why this can't just be a responsive/auto height. */
+        .dbe-focus-body { height:560px; max-height:80vh; }
         .dbe-export-wrap { position:relative; }
         .dbe-export-backdrop { position:fixed; inset:0; z-index:3; }
         .dbe-export-menu {
@@ -1974,19 +2648,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           background:#fff; border:1px solid rgb(226 232 240); border-radius:8px;
           box-shadow:0 4px 12px rgba(0,0,0,0.12); overflow:hidden; display:flex; flex-direction:column;
         }
-        [data-theme="dark"] .dbe-export-menu { background:#22273C; border-color:rgba(255,255,255,0.1); }
         .dbe-export-menu button {
           padding:7px 10px; text-align:left; border:none; background:none; cursor:pointer;
           font-size:12px; color:#334155;
         }
-        [data-theme="dark"] .dbe-export-menu button { color:#e2e8f0; }
         .dbe-export-menu button:hover { background:#f1f5f9; }
-        [data-theme="dark"] .dbe-export-menu button:hover { background:rgba(255,255,255,0.08); }
         .dbe-export-menu-dashboard { top:32px; }
         /* This popover's field list can run much taller than the viewport (10+ style
            fields) — scrollable, scrollbar always hidden (not even on hover). */
         .dbe-theme-popover { max-height:70vh; overflow-y:auto; scrollbar-width:none; }
-        .dbe-theme-popover::-webkit-scrollbar { width:0; height:0; }
+        html .dbe-theme-popover::-webkit-scrollbar { width:0; height:0; }
         .dbe-side-panel { flex-shrink:0; font-size:12px; }
         .dbe-side-panel-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:#475569; margin-bottom:8px; }
         [data-theme="dark"] .dbe-side-panel-title { color:#cbd5e1; }
@@ -2007,13 +2678,19 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           color:#475569; padding:6px 8px; border-radius:6px; background:rgb(241 245 249);
           list-style:none; display:flex; align-items:center; gap:4px;
         }
-        [data-theme="dark"] .dbe-style-section summary { background:rgba(255,255,255,0.08); color:#cbd5e1; }
         .dbe-style-section summary:hover { background:rgb(226 232 240); }
-        [data-theme="dark"] .dbe-style-section summary:hover { background:rgba(255,255,255,0.1); }
         .dbe-style-section summary::-webkit-details-marker { display:none; }
         .dbe-style-section summary::before { content:'▸'; font-size:9px; transition:transform .1s; }
         .dbe-style-section[open] summary::before { transform:rotate(90deg); }
         .dbe-style-section .dbe-style-section-body { padding:8px 4px 4px; }
+        .dbe-widget-list { display:flex; flex-direction:column; gap:2px; max-height:200px; overflow-y:auto; }
+        .dbe-widget-list-item {
+          display:flex; align-items:center; gap:6px; padding:5px 6px; border:none; border-radius:6px;
+          background:transparent; color:#475569; font-size:12px; text-align:left; cursor:pointer;
+        }
+        .dbe-widget-list-item:hover { background:rgb(241 245 249); }
+        .dbe-widget-list-item.selected { background:rgba(236,125,9,0.12); color:#EC7D09; font-weight:600; }
+        .dbe-widget-list-item span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
         .react-resizable-handle {
     width: 20px !important;
@@ -2042,8 +2719,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           {/* Name input + Filters (gear + value strip) grouped together on the left;
               Save/Cancel/Theme/Export grouped together on the right — `.dbe-toolbar`'s
               space-between splits these two wrapper divs to opposite ends of the row. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div className="relative" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+          <div className="relative shrink-0" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input
               key={nameErrorKey}
               className={`dbe-name-input${nameError ? ' animate-[dbe-shake_0.4s_ease-in-out]' : ''}`}
@@ -2064,15 +2741,27 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             // persistAndApplyFilters now stages locally with no backendId (see above), and
             // the staged rows are carried into the very first createDashboard call the same
             // way pendingDashboardStyle/pendingThemeId already are (via onDashboardStyleState).
-            // Only the "Add and edit filters" gear lives in the toolbar now — the filter-VALUE
-            // strip itself always renders as its own full-width row above the canvas (see
-            // `.dbe-canvas-col` below), same as the read-only/embedded case, instead of being
-            // squeezed inline into the toolbar next to this button.
-            <FiltersToggleButton
-              filters={dashboardFilters}
-              datasourceOptions={filterDatasourceOptions}
-              onSave={persistAndApplyFilters}
-            />
+            <div className="shrink-0">
+              <FiltersToggleButton
+                filters={dashboardFilters}
+                datasourceOptions={filterDatasourceOptions}
+                onSave={persistAndApplyFilters}
+                isOpen={filterEditorOpen}
+                setIsOpen={setFilterEditorOpen}
+              />
+            </div>
+          )}
+          {/* The filter-VALUE strip used to always render as its own full-width row above the
+              canvas, taking a whole extra line even collapsed to its compact chip (see the
+              chip's own doc comment in FilterPanel.jsx) — while this toolbar row sat with a
+              lot of unused space next to it whenever the name was short. Filling that space
+              directly instead: `.dbe-toolbar` already wraps, so the ONE expanded-editing case
+              (wider than what's left in this row) just wraps onto its own line the same way it
+              always did, with no separate strap needed for the collapsed case. */}
+          {backendId && showFiltersInline && dashboardFilters.length > 0 && (
+            <div className="min-w-[200px]" style={{ flex: 1 }}>
+              <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} />
+            </div>
           )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2162,11 +2851,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                           unset field here shows the bound theme's own resolved value via
                           resolvedDefaults, exactly like a per-widget style field falls back
                           to the widget's own real current color. */}
+                      <StyleModeSwitch value={styleMode} onChange={setStyleMode} />
                       <WidgetStyleFields
                         fields={DASHBOARD_STYLE_FIELDS}
-                        value={dashboardStyle}
-                        resolvedDefaults={boundThemeStyle}
-                        onChange={(key, val) => persistDashboardStyle({ ...dashboardStyle, [key]: val })}
+                        value={resolveStyleForMode(dashboardStyle, styleModeIsDark)}
+                        resolvedDefaults={resolveStyleForMode(boundThemeStyle, styleModeIsDark)}
+                        onChange={(key, val) => persistDashboardStyle(
+                          DASHBOARD_COLOR_KEYS.has(key)
+                            ? setModeColor(dashboardStyle, key, val, styleModeIsDark, DASHBOARD_COLOR_KEYS)
+                            : { ...dashboardStyle, [key]: val },
+                        )}
                       />
                       {/* No `palette` field exists in DASHBOARD_STYLE_FIELDS (it's an array,
                           not a value the generic WidgetStyleFields renderer supports) — same
@@ -2177,8 +2871,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                         Chart Palette
                       </div>
                       <PaletteEditor
-                        value={dashboardStyle.palette || boundThemeStyle.palette || CHART_PALETTE}
-                        onChange={(next) => persistDashboardStyle({ ...dashboardStyle, palette: next })}
+                        value={resolveStyleForMode(dashboardStyle, styleModeIsDark)?.palette || resolveStyleForMode(boundThemeStyle, styleModeIsDark)?.palette || CHART_PALETTE}
+                        onChange={(next) => persistDashboardStyle(setModeColor(dashboardStyle, 'palette', next, styleModeIsDark, DASHBOARD_COLOR_KEYS))}
                       />
                     </div>
                   </>
@@ -2199,9 +2893,9 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 <>
                   <div className="dbe-export-backdrop" onClick={() => setDashboardExportMenuOpen(false)} />
                   <div className="dbe-export-menu dbe-export-menu-dashboard">
-                    <button type="button" onClick={() => { exportDashboardCSV(name, collectExportEntries()); setDashboardExportMenuOpen(false); }}>Export CSV</button>
-                    <button type="button" onClick={async () => { setDashboardExportMenuOpen(false); await exportDashboardPNG(containerRef.current, Object.values(widgetNodeRefs.current), name); }}>Export PNG</button>
-                    <button type="button" onClick={async () => { setDashboardExportMenuOpen(false); await exportDashboardPDF(containerRef.current, Object.values(widgetNodeRefs.current), name); }}>Export PDF</button>
+                    <button type="button" onClick={() => { exportDashboardCSV(name, collectExportEntries()); setDashboardExportMenuOpen(false); }}>Export CSV{tabs.length > 0 ? ' (all tabs)' : ''}</button>
+                    <button type="button" title={tabs.length > 0 ? 'Only captures the currently active tab' : undefined} onClick={async () => { setDashboardExportMenuOpen(false); await exportDashboardPNG(containerRef.current, Object.values(widgetNodeRefs.current), name); }}>Export PNG{tabs.length > 0 ? ' (current tab)' : ''}</button>
+                    <button type="button" onClick={async () => { setDashboardExportMenuOpen(false); await exportPDFAllTabs(); }}>Export PDF{tabs.length > 0 ? ' (all tabs)' : ''}</button>
                   </div>
                 </>
               )}
@@ -2222,39 +2916,41 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               {leftPanelCollapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
             </button>
             <div className={`dbe-left-panel${leftPanelCollapsed ? ' collapsed' : ''}`}>
+            {leftPanelCollapsed ? (
+              // Collapsed = a clean icon-only band, same idea as the right "Your Widgets"
+              // panel's own collapsed band — every addable type as a small icon, no labels/
+              // sections/StyleModeSwitch (there's no room, and nothing here needs a mode to
+              // edit until a widget is actually placed and selected).
+              <div className="dbe-left-panel-collapsed-icons">
+                {[...paletteChartItems, ...paletteElementItems].map((item) => renderPaletteButton(item, true))}
+              </div>
+            ) : (
+            <>
+            {/* Pinned Light/Dark switch — one place, always visible, so it's clear which mode's
+                colors the Selected Widget Style below is editing (the Dashboard Style popover
+                shares the same state). */}
+            {/* pr-3 clears the collapse toggle (.dbe-left-panel-toggle), which floats
+                partially over this panel's top-right corner (see its own `right:-13px`) — without
+                it the toggle sits on top of the switch's rounded right edge. */}
+            <div className="sticky top-0 z-[2] shrink-0 bg-white pt-1 pr-3">
+              <StyleModeSwitch
+                value={styleMode}
+                onChange={setStyleMode}
+                className="!mb-1.5"
+                hint={<>Editing <b>{styleMode}</b> mode colors</>}
+              />
+            </div>
             <details className="dbe-style-section" open={openLeftSection === 'addWidget'}>
               <summary onClick={(e) => { e.preventDefault(); toggleLeftSection('addWidget'); }}>Add Widget</summary>
-              <div className="dbe-style-section-body dbe-palette-row">
-              {Object.entries(WIDGET_TYPE_REGISTRY).filter(([, def]) => def.builderVisible !== false).map(([type, def]) => {
-                const Icon = def.icon;
-                const color = def.iconColor || '#475569';
-                const slicerDisabled = type === 'slicer' && !backendId;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    title={slicerDisabled ? 'Save the dashboard first to add a slicer' : def.label}
-                    aria-label={def.label}
-                    className="dbe-palette-icon"
-                    style={{ color, background: `${color}14`, borderColor: `${color}44`, ...(slicerDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
-                    disabled={slicerDisabled}
-                    onClick={() => {
-                      if (type === 'slicer') { if (!backendId) return; setSlicerDropPos(null); setSlicerModalOpen(true); return; }
-                      setWizardType(type); setWizardOpen(true);
-                    }}
-                    draggable={editable && !slicerDisabled}
-                    onDragStart={(e) => {
-                      setDraggedType(type);
-                      e.dataTransfer.effectAllowed = 'copy';
-                      e.dataTransfer.setData('text/plain', type);
-                    }}
-                    onDragEnd={() => setDraggedType(null)}
-                  >
-                    {Icon && <Icon size={20} />}
-                    <span className="dbe-palette-icon-label">{def.label}</span>
-                  </button>
-                );
-              })}
+              <div className="dbe-style-section-body">
+              {[{ heading: null, items: paletteChartItems }, { heading: 'Elements', items: paletteElementItems }].filter((g) => g.items.length > 0).map((group) => (
+              <React.Fragment key={group.heading || 'charts'}>
+              {group.heading && <div className="dbe-palette-heading">{group.heading}</div>}
+              <div className="dbe-palette-row">
+              {group.items.map((item) => renderPaletteButton(item))}
+              </div>
+              </React.Fragment>
+              ))}
               </div>
             </details>
 
@@ -2291,6 +2987,12 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                   ) : (
                     <div className="dbe-style-empty">No widget picked — this shouldn't normally happen (placed via "Your Widgets" or the create wizard, both set one immediately).</div>
                   )
+                ) : selected.type === 'textBox' || selected.type === 'shape' ? (
+                  // No data source at all (dataShape: null) — nothing to show here. Text
+                  // Box's content is edited via its own "Text" field in the Style section
+                  // below (or double-click on the canvas); Shape has no content at all,
+                  // just style fields.
+                  null
                 ) : selected.dataSource?.type === 'kpiLive' ? (
                   <label>
                     Data source
@@ -2340,16 +3042,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                       </div>
                     )}
                     <WidgetStyleFields
-                      fields={
-                        selected.type === 'chartLibrary'
-                          ? chartLibraryStyleFieldsFor(selected.dataSource?.chartType, selected.dataSource?.mapping)
-                          : (WIDGET_TYPE_REGISTRY[selected.type]?.styleFields || [])
-                      }
-                      value={selected.style}
-                      onChange={(key, val) => updateWidget(selectedId, { style: { ...selected.style, [key]: val } })}
+                      fields={selectedStyleFields}
+                      value={resolveStyleForMode(selected.style, styleModeIsDark)}
+                      onChange={(key, val) => updateWidget(selectedId, {
+                        style: selectedColorKeys.has(key)
+                          ? setModeColor(selected.style, key, val, styleModeIsDark, selectedColorKeys)
+                          : { ...selected.style, [key]: val },
+                      })}
                       resolvedDefaults={{
-                        bgColor: effectiveDashboardStyle.bgColor || resolvedBgColor,
-                        titleColor: effectiveDashboardStyle.titleColor || resolvedSubColor,
+                        bgColor: styleModeDashboardStyle.bgColor || resolvedBgColor,
+                        titleColor: styleModeDashboardStyle.titleColor || resolvedSubColor,
                         valueTextColor: resolvedTextColor,
                         rowTextColor: resolvedTextColor,
                         // Same `sub` token every axis already renders with by default (the
@@ -2361,8 +3063,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                         // falls back to when only one of shadeFrom/shadeTo is set, using the
                         // widget's own current accent color — so the swatch shows a real
                         // color instead of a black placeholder before the user picks one.
-                        shadeFrom: darkenHex(resolveWidgetStyle(selected.type, selected.style).color || '#378ADD', 0.55),
-                        shadeTo: darkenHex(resolveWidgetStyle(selected.type, selected.style).color || '#378ADD', 0.8),
+                        shadeFrom: darkenHex(resolveWidgetStyle(selected.type, resolveStyleForMode(selected.style, styleModeIsDark)).color || '#378ADD', 0.55),
+                        shadeTo: darkenHex(resolveWidgetStyle(selected.type, resolveStyleForMode(selected.style, styleModeIsDark)).color || '#378ADD', 0.8),
                         // Numeric size fields — same dashboard-cascade-first fallback as the
                         // color fields above, so an unset slider previews the size it's
                         // actually currently rendering at (dashboard/theme's own pick, if
@@ -2403,19 +3105,23 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 })()}
               </div>
             )}
+            </>
+            )}
             </div>
           </div>
         )}
 
         <div className="dbe-canvas-col">
-          {/* Always its own full-width strap directly above the widget grid — same "Condition
-              Name [options ▾] ... Apply / Clear All" horizontal-bar look the Insights Engine's
-              own embedded dashboards already use (EmbeddedDashboard.jsx), now shared by the
-              editable case too instead of being squeezed inline into the toolbar next to the
-              gear button (see the conversation this was reported in). */}
-          {backendId && showFiltersInline && (
+          {/* The filter strip lives inline in the toolbar row above (see its own doc comment
+              there) whenever that toolbar actually renders (editable && showChrome). But
+              EmbeddedDashboard.jsx renders this component with editable=false and no toolbar
+              of its own — that case still needs its own strap here, or it loses its filter
+              strip entirely. dashboardFilters.length check — FilterPanel itself renders
+              nothing with no filters configured, but this wrapper's own padding+border stays
+              even with nothing inside it otherwise. */}
+          {backendId && showFiltersInline && dashboardFilters.length > 0 && !(editable && showChrome) && (
             <div className="dbe-filter-strap">
-              <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} />
+              <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} />
             </div>
           )}
           {/* Cross-filter clear chip — shown in both editable and read-only/embedded views,
@@ -2453,12 +3159,28 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               {name}
             </div>
           )}
+          {(tabs.length > 0 || editable) && (
+            <DashboardTabBar
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelect={setActiveTabId}
+              onAdd={addTab}
+              onRename={renameTab}
+              onDelete={deleteTab}
+              onCopy={copyTab}
+              editable={editable}
+            />
+          )}
           <ResponsiveGridLayout
+            className={isExportingAcrossTabs ? 'dbe-no-transition' : undefined}
             // Only the `lg` breakpoint is ever supplied — react-grid-layout's own
             // findOrGenerateResponsiveLayout derives md/sm proportionally from it each time
             // the breakpoint changes, so there's no separate multi-breakpoint shape to
             // store/migrate; `layout` (canonical, 144-col) stays the single source of truth.
-            layouts={{ lg: layout }}
+            // Only entries visible on the active tab are ever handed to the grid — `layout`
+            // state itself always keeps every tab's entries, so switching tabs never loses
+            // another tab's widgets (see visibleLayout above).
+            layouts={{ lg: visibleLayout }}
             breakpoints={BREAKPOINTS}
             cols={COLS_BY_BREAKPOINT}
             width={containerWidth}
@@ -2466,6 +3188,12 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             margin={GRID_CONFIG.margin}
             dragConfig={{ enabled: editable }}
             resizeConfig={{ enabled: editable, handles: ['s', 'e', 'w', 'se'] }}
+            // Live size badge (see resizeBadge state) — `newItem` is already in the SAME
+            // 144-col canonical grid units `layout` state stores (only breakpoint 'lg' is ever
+            // rendered here — see the `visibleLayout`/onLayoutChange comment below on why no
+            // other breakpoint is real), so no rescaling is needed before showing it.
+            onResize={(gridLayout, oldItem, newItem) => setResizeBadge({ id: newItem.i, w: newItem.w, h: newItem.h })}
+            onResizeStop={() => setResizeBadge(null)}
             dropConfig={{
               enabled: editable,
               // Sized to whatever palette icon or "Your Charts" item is currently being
@@ -2493,12 +3221,17 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             onLayoutChange={editable ? (newLayout) => {
               if (breakpointRef.current !== 'lg') return;
               const scale = GRID_CONFIG.cols / COLS_BY_BREAKPOINT[breakpointRef.current];
-              const rescaled = newLayout.map((l) => ({ ...l, x: Math.round(l.x * scale), w: Math.max(1, Math.round(l.w * scale)) }));
+              // `newLayout` only ever covers the active tab's own entries (that's all the grid
+              // was given, see visibleLayout above) — every other tab's entries need to be
+              // carried through untouched, or switching tabs would silently drop them from
+              // `layout` state on the very next drag/resize.
+              const rescaledById = new Map(newLayout.map((l) => [l.i, { x: Math.round(l.x * scale), w: Math.max(1, Math.round(l.w * scale)), y: l.y, h: l.h }]));
+              const rescaled = layout.map((l) => (rescaledById.has(l.i) ? { ...l, ...rescaledById.get(l.i) } : l));
               setLayout(rescaled);
               onLayoutChange?.(rescaled);
             } : undefined}
           >
-            {layout.map((l) => renderWidget(l))}
+            {visibleLayout.map((l) => renderWidget(l))}
           </ResponsiveGridLayout>
           </div>
         </div>
@@ -2594,6 +3327,56 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         onCancel={() => setPendingConfirm(null)}
         onConfirm={() => { pendingConfirm?.run(); setPendingConfirm(null); }}
       />
+
+      {/* One shared instance for every widget's own Filter action (see widgetFilterModalId
+          state + the dbe-widget-action Filter button above) — same "single modal, id tracks
+          which target it's open for" pattern exportMenuId already uses, rather than one
+          modal instance per widget. Reuses FilterEditorModal wholesale (same add/edit/remove
+          UI, same operators, same datasource picker) — no separate widget-level filter UI. */}
+      <FilterEditorModal
+        isOpen={!!widgetFilterModalId}
+        setIsOpen={(open) => { if (!open) setWidgetFilterModalId(null); }}
+        initialFilters={widgets[widgetFilterModalId]?.filters || []}
+        datasourceOptions={filterDatasourceOptions}
+        defaultDatasourceId={widgets[widgetFilterModalId]?.dataSource?.datasourceId || ''}
+        onSave={(rows) => {
+          updateWidget(widgetFilterModalId, { filters: rows });
+          setWidgetFilterModalId(null);
+        }}
+      />
+
+      {/* Focus mode — reuses renderWidget(l) wholesale (same action strip, same WidgetContent
+          rendering every grid tile already uses) rather than a second, separately-maintained
+          "big widget" rendering path. The returned div has no inline position/size of its own
+          (react-grid-layout injects that via cloning ITS direct children in the grid — see
+          renderWidget's own doc comment) — it just fills 100% of whatever it's placed in via
+          its own CSS, so dropping it into this differently-sized container works unmodified.
+          pixelHeightOverride is passed explicitly so its chart renders at THIS container's
+          real height, not a height computed from a fake grid row-count. */}
+      {focusedWidgetId && widgets[focusedWidgetId] && (
+        <div
+          className="dbe-focus-overlay"
+          onClick={() => setFocusedWidgetId(null)}
+        >
+          <div className="dbe-focus-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              title="Close"
+              aria-label="Close"
+              onClick={() => setFocusedWidgetId(null)}
+              className="dbe-focus-close"
+            >
+              <X size={16} />
+            </button>
+            <div className="dbe-focus-body">
+              {renderWidget(
+                layout.find((l) => l.i === focusedWidgetId) || { i: focusedWidgetId, x: 0, y: 0, w: 0, h: 0 },
+                DBE_FOCUS_PIXEL_HEIGHT,
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

@@ -1,8 +1,13 @@
 import React, { useEffect, useImperativeHandle, useState } from 'react';
-import { Database, Play, Trash2, Plus, RefreshCw, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Database, Play, Trash2, Plus, RefreshCw, Eye, EyeOff, AlertTriangle, Pencil } from 'lucide-react';
 import FormModal from '../../FormModal';
-import { previewDatasource, registerDatasource, listDatasources, getDatasourceDetail, deleteDatasource, updateDatasource, refreshDatasourceSchema, updateDatasourceColumn, sampleDatasource, listWidgets } from '../../../store/actions/dashboardBuilder-actions';
+import { previewDatasource, registerDatasource, listDatasources, getDatasourceDetail, deleteDatasource, updateDatasource, refreshDatasourceSchema, updateDatasourceColumn, sampleDatasource, listWidgets, listDatasourceMetrics, createDatasourceMetric, updateDatasourceMetric, deleteDatasourceMetric } from '../../../store/actions/dashboardBuilder-actions';
 import { notifyDatasourcesChanged } from '../../../store/actions/datasourceEvents';
+import { ValidateExpressionButton } from '../charts/AdvancedSqlFields';
+
+// Same defensive id-field guess as columnId just below, for the same reason (the API doc's
+// example doesn't show it) — see listDatasourceMetrics' own doc comment.
+const metricId = (m) => m.id ?? m.metric_id;
 
 // The API doc's example column JSON doesn't show an explicit id field (only column_name,
 // display_name, data_type, etc.) even though PATCH .../columns/{column_id} clearly needs
@@ -78,6 +83,18 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
   const [sampleVisible, setSampleVisible] = useState(false);
   const [sampling, setSampling] = useState(false);
   const [sampleError, setSampleError] = useState(null);
+  // Phase A — saved metrics, own state separate from `previewResult.columns` (real physical
+  // columns) rather than merged into that array, since a metric isn't a physical column (no
+  // data_type/ordinal_position from the backend) — see the conversation this was scoped in:
+  // a separate table, not extra rows bolted onto the columns table.
+  const [metrics, setMetrics] = useState([]);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState(null);
+  const [editingMetricId, setEditingMetricId] = useState(null); // null = not editing; 'new' = add form
+  const [metricDraft, setMetricDraft] = useState(null); // { name, expression, kind, number_format }
+  const [metricSaving, setMetricSaving] = useState(false);
+  const [metricSaveError, setMetricSaveError] = useState(null);
+  const [metricDeletingId, setMetricDeletingId] = useState(null);
 
   const refreshList = async () => {
     setListLoading(true);
@@ -116,9 +133,27 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
     setColumnError(null);
     setSample(null);
     setSampleError(null);
+    setMetrics([]);
+    setMetricsError(null);
+    setEditingMetricId(null);
+    setMetricDraft(null);
+    setMetricSaveError(null);
   };
 
   useImperativeHandle(ref, () => ({ resetForm }));
+
+  const loadMetrics = async (datasourceId) => {
+    setMetricsLoading(true);
+    setMetricsError(null);
+    try {
+      setMetrics(await listDatasourceMetrics(datasourceId));
+    } catch (err) {
+      setMetrics([]);
+      setMetricsError(err.message);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
 
   const editDatasource = async (summary) => {
     setEditingId(summary.id);
@@ -133,7 +168,11 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
     setSampleError(null);
     setEditingFields(false);
     setEditSnapshot(null);
+    setEditingMetricId(null);
+    setMetricDraft(null);
+    setMetricSaveError(null);
     setDetailLoading(true);
+    loadMetrics(summary.id);
     try {
       // listDatasources() only returns {id, name, source_type} — the full column metadata
       // (and, if the backend includes it, the original sql_query/schema_name/table_name)
@@ -305,6 +344,63 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
       setColumnError(err.message);
     } finally {
       setColumnSavingId(null);
+    }
+  };
+
+  const startAddMetric = () => {
+    setEditingMetricId('new');
+    setMetricDraft({ name: '', expression: '', kind: 'metric', number_format: '' });
+    setMetricSaveError(null);
+  };
+  const startEditMetric = (m) => {
+    setEditingMetricId(metricId(m));
+    setMetricDraft({ name: m.name, expression: m.expression, kind: m.kind || 'metric', number_format: m.number_format || '' });
+    setMetricSaveError(null);
+  };
+  const cancelMetricEdit = () => {
+    setEditingMetricId(null);
+    setMetricDraft(null);
+    setMetricSaveError(null);
+  };
+  const saveMetricDraft = async () => {
+    if (!editingId || !metricDraft?.name?.trim() || !metricDraft?.expression?.trim()) return;
+    setMetricSaving(true);
+    setMetricSaveError(null);
+    try {
+      const payload = {
+        name: metricDraft.name.trim(),
+        expression: metricDraft.expression.trim(),
+        kind: metricDraft.kind,
+        number_format: metricDraft.number_format || undefined,
+      };
+      if (editingMetricId === 'new') {
+        const created = await createDatasourceMetric(editingId, payload);
+        setMetrics((prev) => [...prev, created]);
+      } else {
+        const updated = await updateDatasourceMetric(editingId, editingMetricId, payload);
+        setMetrics((prev) => prev.map((m) => (metricId(m) === editingMetricId ? updated : m)));
+      }
+      cancelMetricEdit();
+    } catch (err) {
+      // 422 on an invalid/unsafe expression (per the API doc) lands here with the backend's
+      // own clear message — shown right in the add/edit row, same "error next to the control
+      // that caused it" pattern as columnError/saveError elsewhere in this file.
+      setMetricSaveError(err.message);
+    } finally {
+      setMetricSaving(false);
+    }
+  };
+  const removeMetric = async (m) => {
+    const id = metricId(m);
+    if (!editingId || !id) return;
+    setMetricDeletingId(id);
+    try {
+      await deleteDatasourceMetric(editingId, id);
+      setMetrics((prev) => prev.filter((x) => metricId(x) !== id));
+    } catch (err) {
+      setMetricsError(err.message);
+    } finally {
+      setMetricDeletingId(null);
     }
   };
 
@@ -692,6 +788,79 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
                 </table>
               </div>
               </div>
+              {/* Phase A — saved metrics/calculated columns. Only for a saved datasource
+                  (editingId), same precondition as column editing above — a fresh /preview
+                  has no real datasource id to attach a metric to yet. Own card, not extra rows
+                  in the Columns table above: a metric isn't a physical column (no data_type/
+                  ordinal_position from the backend), and this needs add/delete affordances the
+                  columns table has never had (that one's edit-only). */}
+              {editingId && (
+                <div className="bg-white rounded-xl shadow border border-slate-100 p-4 flex flex-col min-w-0 gap-2">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      Metrics ({metrics.length}) — saved calculated columns/ratios
+                    </div>
+                    {editingMetricId === null && (
+                      <button
+                        type="button"
+                        onClick={startAddMetric}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-[#EC7D09] border border-[#EC7D09]/30 bg-white hover:bg-orange-50"
+                      >
+                        <Plus size={12} /> Add metric
+                      </button>
+                    )}
+                  </div>
+                  {metricsError && (
+                    <div className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{metricsError}</div>
+                  )}
+                  {metricsLoading ? (
+                    <div className="text-xs text-slate-400 px-1 py-2">Loading metrics…</div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {metrics.length === 0 && editingMetricId !== 'new' && (
+                        <div className="text-xs text-slate-400 px-1 py-1">
+                          None yet — a saved metric (e.g. a ratio like "drop rate %") can be picked in the widget builder just like a real column.
+                        </div>
+                      )}
+                      {metrics.map((m) => {
+                        const id = metricId(m);
+                        const isEditingThis = editingMetricId === id;
+                        if (isEditingThis) {
+                          return <MetricEditRow key={id ?? 'editing'} draft={metricDraft} setDraft={setMetricDraft} datasourceId={editingId} saving={metricSaving} error={metricSaveError} onSave={saveMetricDraft} onCancel={cancelMetricEdit} />;
+                        }
+                        return (
+                          <div key={id ?? m.name} className="flex items-center gap-2 border border-slate-100 rounded-lg px-3 py-2 text-xs">
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-slate-700">{m.name}</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[0.625rem] font-semibold ${m.kind === 'column' ? 'bg-sky-100 text-sky-600' : 'bg-orange-100 text-[#EC7D09]'}`}>
+                                  {m.kind === 'column' ? 'Column' : 'Metric'}
+                                </span>
+                              </div>
+                              <span className="text-slate-400 font-mono truncate">{m.expression}</span>
+                            </div>
+                            <button type="button" title="Edit metric" onClick={() => startEditMetric(m)} className="text-slate-400 hover:text-[#EC7D09]">
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete metric"
+                              disabled={metricDeletingId === id}
+                              onClick={() => removeMetric(m)}
+                              className="text-slate-400 hover:text-red-500 disabled:opacity-40"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {editingMetricId === 'new' && (
+                        <MetricEditRow draft={metricDraft} setDraft={setMetricDraft} datasourceId={editingId} saving={metricSaving} error={metricSaveError} onSave={saveMetricDraft} onCancel={cancelMetricEdit} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               {previewResult.sampleRows.length > 0 && (
                 <div className="bg-white rounded-xl shadow border border-slate-100 p-4 flex flex-col min-w-0 gap-2">
                   <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -816,5 +985,66 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
     </>
   );
 });
+
+// Inline add/edit form for one metric row — shared by both the "Add metric" and the per-row
+// "Edit" flow (only ever one instance mounted at a time, gated by editingMetricId in the
+// parent), same "one shared inline-edit row" shape as this file's own updateColumn UI, just
+// with the add/delete affordances that one never needed.
+function MetricEditRow({ draft, setDraft, datasourceId, saving, error, onSave, onCancel }) {
+  if (!draft) return null;
+  const set = (patch) => setDraft((prev) => ({ ...prev, ...patch }));
+  return (
+    <div className="flex flex-col gap-2 border border-[#EC7D09]/30 rounded-lg px-3 py-2.5 bg-orange-50/30">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={draft.name}
+          onChange={(e) => set({ name: e.target.value })}
+          placeholder="Name (e.g. drop_rate)"
+          className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
+        />
+        <select
+          value={draft.kind}
+          onChange={(e) => set({ kind: e.target.value })}
+          className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
+        >
+          <option value="metric">Metric (aggregate, e.g. SUM/AVG ratio)</option>
+          <option value="column">Column (calculated dimension, e.g. CASE bucket)</option>
+        </select>
+      </div>
+      <textarea
+        value={draft.expression}
+        onChange={(e) => set({ expression: e.target.value })}
+        placeholder={draft.kind === 'metric' ? 'e.g. SUM(drops)::float / NULLIF(SUM(attempts), 0)' : "e.g. CASE WHEN value < 90 THEN 'low' ELSE 'ok' END"}
+        rows={2}
+        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono"
+      />
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={draft.number_format}
+          onChange={(e) => set({ number_format: e.target.value })}
+          placeholder="Number format (optional, e.g. percent)"
+          className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
+        />
+        {datasourceId && <ValidateExpressionButton datasourceId={datasourceId} expression={draft.expression} />}
+      </div>
+      {error && <div className="text-xs text-red-500">{error}</div>}
+      <div className="flex items-center gap-2 justify-end">
+        <button type="button" onClick={onCancel} className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100">
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving || !draft.name.trim() || !draft.expression.trim()}
+          className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white bg-[#EC7D09] disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default DatasourceManager;

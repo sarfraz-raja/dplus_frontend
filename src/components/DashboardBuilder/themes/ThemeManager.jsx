@@ -6,6 +6,12 @@ import { CHART_PALETTE } from '../../../theme/tokens';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
 import PaletteEditor from './PaletteEditor';
 import DASHBOARD_STYLE_FIELDS from './dashboardStyleFields';
+import StyleModeSwitch from '../widgetConfig/StyleModeSwitch';
+import { resolveStyleForMode, setModeColor } from '../utils/themedStyle';
+import { useTheme } from '../../../context/ThemeContext';
+
+// Color fields a theme stores per mode (light/dark).
+const THEME_COLOR_KEYS = new Set([...DASHBOARD_STYLE_FIELDS.filter((f) => f.type === 'color').map((f) => f.key), 'palette']);
 
 /**
  * Manages reusable Themes (Phase 19b) — a named style object any number of dashboards can
@@ -30,7 +36,15 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
   const [deleteError, setDeleteError] = useState(null);
 
   const setField = (key, val) => setStyle((prev) => ({ ...prev, [key]: val }));
-  const palette = style.palette || [];
+  // Colors are stored per mode (utils/themedStyle.js), everything else is shared — same rule the
+  // chart editor and Dashboard Style popover follow. Palette stays shared (edited separately).
+  const { theme: appTheme } = useTheme();
+  const [styleMode, setStyleMode] = useState(appTheme === 'dark' ? 'dark' : 'light');
+  const setStyleField = (key, val) => setStyle((prev) => (
+    THEME_COLOR_KEYS.has(key) ? setModeColor(prev, key, val, styleMode === 'dark', THEME_COLOR_KEYS) : { ...prev, [key]: val }
+  ));
+  // The series palette for the mode being edited (a legacy single palette counts as both).
+  const palette = resolveStyleForMode(style, styleMode === 'dark')?.palette || [];
 
   const refreshList = async () => {
     setListLoading(true);
@@ -170,7 +184,13 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
               exist here too. */}
           <section className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="text-[0.6875rem] font-semibold text-slate-400 uppercase tracking-wider mb-3">Style</div>
-            <WidgetStyleFields fields={DASHBOARD_STYLE_FIELDS} value={style} onChange={setField} columns={3} />
+            <StyleModeSwitch value={styleMode} onChange={setStyleMode} />
+            <WidgetStyleFields
+              fields={DASHBOARD_STYLE_FIELDS}
+              value={resolveStyleForMode(style, styleMode === 'dark')}
+              onChange={setStyleField}
+              columns={3}
+            />
           </section>
 
           {/* Series Visualization — categorical chart palette dashboards bound to this
@@ -180,7 +200,8 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
               <div className="text-[0.6875rem] font-semibold text-slate-400 uppercase tracking-wider">Series Visualization</div>
               <span className="text-[0.6875rem] text-slate-400">Default series colors</span>
             </div>
-            <PaletteEditor value={palette} onChange={(next) => setField('palette', next)} />
+            <StyleModeSwitch value={styleMode} onChange={setStyleMode} className="!mb-2" hint={<>Series colors for <b>{styleMode}</b> mode</>} />
+            <PaletteEditor value={palette} onChange={(next) => setStyleField('palette', next)} />
             <div className="mt-3 flex items-end gap-1.5 h-14 pt-2 border-t border-slate-100">
               {previewPalette.slice(0, 6).map((c, i) => (
                 <div
@@ -239,7 +260,8 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
         {listError && <div className="text-xs text-red-500 px-1">{listError}</div>}
         <div className="flex flex-col gap-2">
           {themes.map((t) => {
-            const swatches = (t.style?.palette?.length ? t.style.palette : CHART_PALETTE).slice(0, 4);
+            const themePalette = resolveStyleForMode(t.style, appTheme === 'dark')?.palette;
+            const swatches = (themePalette?.length ? themePalette : CHART_PALETTE).slice(0, 4);
             const active = editingId === t.id;
             return (
               <button
@@ -253,7 +275,7 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
                 <div className="flex items-center gap-2">
                   <div
                     className="w-3.5 h-3.5 rounded-full shrink-0 border border-black/10"
-                    style={{ background: t.style?.accentColor || t.style?.bgColor || '#94a3b8' }}
+                    style={{ background: resolveStyleForMode(t.style, appTheme === 'dark')?.accentColor || resolveStyleForMode(t.style, appTheme === 'dark')?.bgColor || '#94a3b8' }}
                   />
                   <div className={`text-xs font-semibold truncate ${active ? 'text-[#EC7D09]' : 'text-slate-700'}`}>{t.name}</div>
                 </div>

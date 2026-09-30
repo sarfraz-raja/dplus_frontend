@@ -56,12 +56,14 @@ const GroupManagementActions = {
     },
     getTicketUsersList: (cb, onError) => async (dispatch, _) => {
         try {
-            const res = await Api.get({ url: Urls.tickets_users })
+            const res = await Api.get({ url: Urls.admin_userList })
             if (res?.status !== 200) { onError && onError(); return }
-            const dataAll = (res.data?.data ?? []).map((u) => ({
-                value: u.id,
-                label: u.label || u.username || String(u.id),
-            }))
+            const dataAll = (res.data?.data ?? [])
+                .map((u) => ({
+                    value: u.id,
+                    label: [u.firstname, u.lastname].filter(Boolean).join(' ') || u.username || String(u.id),
+                    role: u.rolename || '',
+                }))
             cb && cb(dataAll)
         } catch (error) {
             console.log(error, "getTicketUsersList error")

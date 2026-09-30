@@ -135,14 +135,28 @@ export default function ChartListItem({
           border:1px solid rgb(226 232 240); background:#fff; cursor:pointer; text-align:left;
           font-size:12px; color:#334155; transition:border-color .15s,background .15s; width:100%;
         }
-        .chart-list-item.collapsed { align-items:center; justify-content:center; padding:8px; }
+        /* Collapsed rows drop the card look (border/background) entirely — fixed-size icon
+           buttons sitting in the band's own bordered strip (see .dbe-chart-list.collapsed in
+           DashboardCanvasEditor.jsx), same visual language as the app's icon-only sidebars,
+           rather than a shrunken copy of the expanded card. */
+        .chart-list-item.collapsed {
+          width:26px; height:26px; flex-shrink:0; align-items:center; justify-content:center;
+          padding:0; border-color:transparent; background:transparent;
+        }
+        .chart-list-item.collapsed:hover { background:rgba(236,125,9,0.1); }
+        .chart-list-item.collapsed.selected { background:rgba(236,125,9,0.15); box-shadow:none; }
         .chart-list-item span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .chart-list-item:hover { border-color:#EC7D09; background:rgba(236,125,9,0.06); }
         .chart-list-item-body { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
         .chart-list-item-name { font-weight:600; margin-bottom:2px; }
-        .chart-list-item-meta-row { display:flex; gap:5px; font-size:10px; line-height:1.5; }
+        .chart-list-item-meta-row { display:flex; gap:5px; font-size:10px; line-height:1.5; min-width:0; }
         .chart-list-item-meta-label { color:#94a3b8; font-weight:500; flex-shrink:0; }
-        .chart-list-item-meta-value { color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        /* min-width:0 — a flex item's default automatic minimum size is its content's
+           min-content width, which for a white-space:nowrap span (below) is its full
+           unwrapped text width. Without this a long datasource name/ID never actually shrinks
+           below that, so text-overflow:ellipsis never gets a chance to trigger — the row (and
+           with it every ancestor up to the side panel) just gets forced wider instead. */
+        .chart-list-item-meta-value { flex:1; min-width:0; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .chart-list-item-badge {
           flex-shrink:0; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.02em;
           color:#16a34a; background:#dcfce7; border-radius:4px; padding:2px 5px;

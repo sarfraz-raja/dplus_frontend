@@ -272,6 +272,8 @@ const SIDEBAR_CHILD_ICON_MAP = {
   'Arc Setting Manager': Sliders,
   'Zoom Settings': ZoomIn,
   'Group Management': Users,
+  'SLA Profiles': Timer,
+  'Escalation Policies': ShieldAlert,
   'Resource Utilization': Gauge,
   'Auto TT Dispatch': Play,
   'Plan Work Order': ClipboardCheck,

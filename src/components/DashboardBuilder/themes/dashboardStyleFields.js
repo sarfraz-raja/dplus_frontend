@@ -28,6 +28,18 @@ const DASHBOARD_STYLE_FIELDS = [
   // Universal — every widget renders its title as plain HTML outside the chart canvas (see
   // TitleValueOverlay.jsx), unlike value position which only a few widget types even have.
   { key: 'titlePosition', label: 'Widget title position', type: 'position', default: 'top-left', options: POSITION_OPTIONS },
+  // Behind each widget's title row — same key as the per-widget "Title background" field.
+  { key: 'titleBgColor', label: 'Widget title background', type: 'color', default: null },
+  // The big number/label a widget shows (KPI card value, gauge %, slice labels) — same keys as
+  // each widget type's own VALUE_TEXT_STYLE_FIELDS (widgetTypeRegistry.js).
+  { key: 'valueTextColor', label: 'Value text color', type: 'color', default: null, contrastBg: 'auto' },
+  { key: 'valueTextSize', label: 'Value text size (px)', type: 'number', default: null, min: 8, max: 48 },
+  // Table widgets — same keys as the TABLE chart's own header/band fields. Picking a Band color
+  // turns alternating-row banding on for every table on the dashboard (same as per-table).
+  { key: 'headerBgColor', label: 'Table header background', type: 'color', default: null },
+  { key: 'headerTextColor', label: 'Table header text color', type: 'color', default: null, contrastBg: 'headerBgColor' },
+  { key: 'bandColor', label: 'Table band color', type: 'color', default: null, hint: 'Alternating rows only — other rows show the widget background.' },
+  { key: 'bandTextColor', label: 'Table band text color', type: 'color', default: null, contrastBg: 'bandColor' },
   // The dashboard's own title heading, rendered above the widget grid — distinct from each
   // widget's own title styled above.
   { key: 'dashboardTitleColor', label: 'Dashboard title color', type: 'color', default: null },

@@ -30,6 +30,8 @@ const XAlertConfigure = lazy(() => import('../pages/AlertMonitoringSystem/XAlert
 const XAlertScheduler = lazy(() => import('../pages/AlertMonitoringSystem/XAlertScheduler'));
 const GroupManagement = lazy(() => import('../pages/AlertMonitoringSystem/GroupManagement'));
 const XReportSchedulerList = lazy(() => import('../pages/AlertMonitoringSystem/XReportSchedulerList'));
+const AssuranceRuleList = lazy(() => import('../pages/Assurance/AssuranceRuleList'));
+const IncidentList = lazy(() => import('../pages/Assurance/IncidentList'));
 const ISONForm = lazy(() => import('../pages/iSON/iSonForm'));
 const UserManagement = lazy(() => import('../pages/Admin/UserManagement/UserManagement'));
 const RoleManagement = lazy(() => import('../pages/Admin/RoleManagement/RoleManagement'));
@@ -58,6 +60,8 @@ const AuditPattern = lazy(() => import('../pages/CX_IXSupport/AuditPattern'));
 const InsightsDashboardManager = lazy(() => import('../pages/Admin/InsightsDashboardManager'));
 const ArcSettingManager = lazy(() => import('../pages/Admin/ArcSettingManager/ArcSettingManager'));
 const ZoomSettingsManager = lazy(() => import('../pages/Admin/ZoomSettingsManager/ZoomSettingsManager'));
+const SlaProfileManager = lazy(() => import('../pages/Admin/SlaProfileManager/SlaProfileManager'));
+const EscalationPolicyManager = lazy(() => import('../pages/Admin/EscalationPolicyManager/EscalationPolicyManager'));
 const DynamicInsightsDashboard = lazy(() => import('../pages/InsightsEngine/DynamicInsightsDashboard'));
 const TelecomMapsPage = lazy(() => import('../pages/TelecomMapsPage'));
 const TelecomMultipleMapsPage = lazy(() => import('../pages/TelecomMultipleMapsPage'));
@@ -345,6 +349,31 @@ export const Sidebar_content = {
             }],
         },
         {
+            // Intelligent Telecom Assurance — new module, entirely separate from xAlerts above.
+            // Built against assurance_blueprint.py / ticket_management.py's new endpoints; the
+            // old Alert Scheduler system is untouched. Menu visibility is backend-driven
+            // (state.auth.sidebarMenu) — this block alone makes the route resolvable/testable.
+            // Only the list is a nav item — "new"/"edit"/"view" are opened from within it (the
+            // list page's own buttons), not surfaced as separate sidebar entries, so those
+            // routes are registered directly in Navigation.jsx instead of here.
+            name: "Assurance",
+            link: "/assurance",
+            subMenu: [{
+                name: "Rules",
+                link: "/assurance/rules",
+                subMenu: [],
+                component: <AssuranceRuleList />,
+            }, {
+                // Shows in the sidebar once the backend menu (state.auth.sidebarMenu) includes
+                // /assurance/incidents; until then the route itself is registered directly in
+                // Navigation.jsx and reached from the Assurance Rules page's "Incidents" button.
+                name: "Incidents",
+                link: "/assurance/incidents",
+                subMenu: [],
+                component: <IncidentList />,
+            }],
+        },
+        {
             name: "CX/IX Support",
             link: "/cx-ix-support",
             subMenu: [{
@@ -427,6 +456,16 @@ export const Sidebar_content = {
                 link: "/admin/groups",
                 subMenu: [],
                 component: <GroupManagement />,
+            }, {
+                name: "SLA Profiles",
+                link: "/admin/sla-profiles",
+                subMenu: [],
+                component: <SlaProfileManager />,
+            }, {
+                name: "Escalation Policies",
+                link: "/admin/escalation-policies",
+                subMenu: [],
+                component: <EscalationPolicyManager />,
             }],
         },
     ]

@@ -13,18 +13,31 @@ import WaterfallChart from '../../Widgets/WaterfallChart';
 import TreemapChart from '../../Widgets/TreemapChart';
 import HeatStripChart from '../../Widgets/HeatStripChart';
 import VirtualizedTable from './VirtualizedTable';
-import { isTimeAxis, DEFAULT_TIME_AXIS_FORMAT, resolveTickInterval } from './axisTypeUtils';
+import { isTimeAxis, isTimeValue, formatDateLabel, DEFAULT_TIME_AXIS_FORMAT, resolveTickInterval } from './axisTypeUtils';
 import { formatCompactNumber } from '../utils/formatNumber';
+import { resolveStyleForMode, guardStyleColors } from '../utils/themedStyle';
 
 // Undernote for a single-value chart_type's delta (KPI_CARD/GAUGE — see
 // SINGLE_VALUE_COMPARISON_GROUP in ChartLibrary.jsx) — what it's actually being compared
 // against, since "▲ 12%" alone doesn't say what the baseline is. Custom's own shape depends on
-// aggregation: LATEST has a single cutoff instant (compare_custom_date — no window to speak
-// of), every other aggregation has an explicit from/to range (compare_custom_from/_to).
+// the range: 'Latest' has a single cutoff instant (compare_custom_date — no window to speak
+// of), every other range has an explicit from/to range (compare_custom_from/_to).
+// Phase B — a measure field (y_axis, or x_axis for SCATTER's own X (measure) field, both
+// `role: 'measure'` in MappingFields.jsx) can be an ad-hoc SQL expression instead of a plain
+// column name: `{ type: 'sql', expression, label }`. The backend substitutes the expression
+// into the query and returns each row keyed by that measure's own LABEL, not by the object
+// itself or by `expression` — confirmed against a live response (a custom "Data Volume (MB)"
+// SQL measure came back as `row["Data Volume"]`, matching its typed label exactly). A plain
+// string measure (the normal, pre-Phase-B case) is returned unchanged — this only ever
+// resolves the ad-hoc-SQL shape, never a real column name.
+export function measureKey(value) {
+  return value && typeof value === 'object' && value.type === 'sql' ? value.label : value;
+}
+
 function describeCompareTo(mapping) {
   if (!mapping.compare_to || mapping.compare_to === 'None') return '';
   if (mapping.compare_to !== 'Custom') return `vs ${mapping.compare_to}`;
-  if (mapping.aggregation === 'LATEST') return `vs ${mapping.compare_custom_date || 'custom date'}`;
+  if (mapping.date_filter_range === 'Latest') return `vs ${mapping.compare_custom_date || 'custom date'}`;
   return mapping.compare_custom_from && mapping.compare_custom_to
     ? `vs ${mapping.compare_custom_from} – ${mapping.compare_custom_to}`
     : 'vs custom range';
@@ -48,26 +61,37 @@ function describeCompareTo(mapping) {
  * these props it doesn't support (e.g. StatCard has no axis, PieChart has no axis, etc.) —
  * safe to pass regardless.
  */
-export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style = {}, onPointClick = null, onPointContextMenu = null, comparison = undefined, drillDown = undefined }) {
+export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style: styleProp = {}, isDark = false, onPointClick = null, onPointContextMenu = null, comparison = undefined, drillDown = undefined, onReorderColumns = null, onColumnResize = null, onColumnLabelChange = null }) {
+  // Per-mode colors flattened for the active theme, then any explicit text/line color that
+  // can't be read on its background dropped (falls back to the chart's own theme default) —
+  // see themedStyle.js. Applies to every caller: dashboard canvas AND the Charts-tab preview.
+  const style = guardStyleColors(resolveStyleForMode(styleProp, isDark), isDark);
   // The backend swaps the row's actual grouping column to `drill_down.dimension` the moment
   // a drill-down hierarchy is configured on this chart — not just once you've clicked to
   // drill deeper (confirmed: a freshly-configured, never-yet-clicked drill hierarchy already
   // returns rows keyed by the drill dimension, e.g. "region", not `mapping.x_axis`'s
   // "starttime" — the two `columns` responses differ). `mapping.x_axis` alone is stale the
   // instant drill_down.enabled is true, so every label built from it renders "undefined".
-  const xAxis = (drillDown?.enabled && drillDown.dimension) || mapping.x_axis;
-  const yAxis = mapping.y_axis;
+  const xAxis = (drillDown?.enabled && drillDown.dimension) || measureKey(mapping.x_axis);
+  const yAxis = measureKey(mapping.y_axis);
   // "As of <timestamp>" — appended directly onto the axis title below (categoryAxisLabel),
   // right beside the column name it's already showing, rather than a separate floating badge
   // (tried first, then moved here per the conversation this was decided in — one label saying
   // "this is column X, freshest reading Y" reads better than two disconnected pieces of UI).
-  // Only meaningful for LATEST (every other aggregation covers a whole range, not a single
-  // "as of" instant) — the single most recent latest_by value across whatever rows actually
-  // came back, so a grouped chart (LATEST + a dimension, one "latest" row per category) still
-  // shows one honest instant rather than picking an arbitrary row's.
-  const latestAsOf = mapping.aggregation === 'LATEST' && mapping.latest_by && rows.length
+  // Only meaningful for "latest" (every other aggregation/range covers a whole range, not a
+  // single "as of" instant) — the single most recent ordering-column value across whatever
+  // rows actually came back, so a grouped chart (LATEST + a dimension, one "latest" row per
+  // category) still shows one honest instant rather than picking an arbitrary row's. Two
+  // distinct shapes share this: LINE/BAR/AREA/STACKED_BAR's `aggregation === 'LATEST'` (its
+  // own `latest_by` column) and KPI_CARD/GAUGE's `date_filter_range === 'Latest'` (which
+  // reuses `date_filter_column` as the ordering column instead — see
+  // SINGLE_VALUE_DATE_FILTER_GROUP's own comment for why).
+  const latestByColumn = mapping.aggregation === 'LATEST'
+    ? mapping.latest_by
+    : (mapping.date_filter_range === 'Latest' ? mapping.date_filter_column : null);
+  const latestAsOf = latestByColumn && rows.length
     ? rows.reduce((max, r) => {
-      const v = r[mapping.latest_by];
+      const v = r[latestByColumn];
       return v != null && (max == null || String(v) > String(max)) ? v : max;
     }, null)
     : null;
@@ -119,7 +143,15 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
     colorFrom, colorTo, valuePosition,
     valueTextColor, valueTextSize, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
     valueDecimals: valueDecimalsRaw, unit, donut, showLegend, numberFormat, showPercent, showDataPoints,
+    cellFormatRules, bandColor, bandTextColor, headerBgColor, headerTextColor, showTitle, titleBgColor,
   } = style;
+  // `showTitle` now applies to every chart_type (was TABLE-only at first — see
+  // widgetTypeRegistry.js's SHOW_TITLE_FIELD), so this is resolved once, here, rather than
+  // repeating the `showTitle !== 'hide' ? name : ''` check at every one of the switch cases'
+  // own `title={displayName}`/`label={displayName}` props below. Every Widgets/*.jsx component already
+  // treats a falsy title as "render nothing" (see e.g. LineAreaChart.jsx's own `{title && (...
+  // )}` guard), so handing them '' here is enough — no per-component change needed.
+  const displayName = showTitle === 'hide' ? '' : name;
   // Y-axis truncation reads from `mapping` (Data tab, Y Axis group — see
   // TRUNCATE_Y_AXIS_FIELD in ChartLibrary.jsx), not `style` — it's a data-scoping concern
   // (which values are even visible/comparable), not a cosmetic one, so it belongs with
@@ -146,6 +178,29 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
   const bgGradient = bgGradientRaw || ((bgGradientFrom || bgGradientTo) ? [bgGradientFrom, bgGradientTo] : null);
   const round = (v) => (typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(valueDecimals)) : v);
   const seriesData = () => rows.map((r) => ({ label: String(r[xAxis]), value: round(Number(r[yAxis]) || 0) }));
+  // For chart_types with a *discrete* dimension axis (a pie slice, a funnel stage, a treemap
+  // rectangle, a waterfall step, a heat-map row — no continuous timeline the way BAR/AREA/LINE
+  // have, so their own isTimeAxis/toAxisTimeValue machinery doesn't apply here) whose label
+  // happens to be a date/timestamp column: re-render each already-stringified label through
+  // formatDateLabel, same helper HorizontalBarChart.jsx already uses for its own non-time-axis
+  // case. Left untouched wherever the label isn't actually date-shaped (isTimeValue guards it),
+  // so a plain text category never gets mangled.
+  const formatSeriesLabels = (data, dateFormat) => (
+    dateFormat ? data.map((d) => (isTimeValue(d.label) ? { ...d, label: formatDateLabel(d.label, dateFormat) } : d)) : data
+  );
+  // Cross-filtering (handlePointClick/handlePointContextMenu) sends the clicked point's own
+  // displayed label straight back as the filter's raw column value — fine for a plain text
+  // category, but once that label has actually been date-*formatted* (above) it's a display
+  // string, not the real column value, and would no longer match anything server-side (e.g.
+  // clicking "18 May" when the real column value is "2026-05-18T00:00:00"). Same problem, same
+  // fix HorizontalBarChart.jsx's own `crossFilterDisabled` already applies: suppress
+  // cross-filtering for these chart_types, but ONLY once a Date format has actually been
+  // picked (`mapping.x_axis_date_format` set) — an untouched field leaves formatSeriesLabels a
+  // no-op (no `|| DEFAULT_TIME_AXIS_FORMAT` fallback here, unlike BAR/LINE/AREA's continuous
+  // axis, which formats via a separate ECharts tick formatter that never touches the raw data
+  // label used for clicks — so a date-dimensioned widget saved before this feature existed, or
+  // one where the format was simply never touched, keeps working exactly as before).
+  const xAxisCrossFilterDisabled = !!mapping.x_axis_date_format && isTimeAxis(rows.map((r) => r[xAxis]));
   const styleProps = {
     titleColor, titleWeight, titleSize, titleFont, titlePosition, bgColor, bgGradient, palette, color,
     valueTextColor, valueTextSize, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
@@ -181,9 +236,9 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       const barDateFormat = mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT;
       if (mapping.series) {
         const { categories, series } = buildMultiSeries();
-        return <BarChart title={name} categories={categories} series={series} isTimeAxis={barTimeAxis} dateFormat={barDateFormat} tickInterval={tickInterval} height={height} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+        return <BarChart title={displayName} categories={categories} series={series} isTimeAxis={barTimeAxis} dateFormat={barDateFormat} tickInterval={tickInterval} height={height} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
       }
-      return <BarChart title={name} data={seriesData()} isTimeAxis={barTimeAxis} dateFormat={barDateFormat} tickInterval={tickInterval} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+      return <BarChart title={displayName} data={seriesData()} isTimeAxis={barTimeAxis} dateFormat={barDateFormat} tickInterval={tickInterval} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
     }
     case 'AREA': {
       // Same mapping.series/time-axis branch as BAR above.
@@ -191,24 +246,24 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       const areaDateFormat = mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT;
       if (mapping.series) {
         const { categories, series } = buildMultiSeries();
-        return <AreaChart title={name} categories={categories} series={series} isTimeAxis={areaTimeAxis} dateFormat={areaDateFormat} tickInterval={tickInterval} height={height} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+        return <AreaChart title={displayName} categories={categories} series={series} isTimeAxis={areaTimeAxis} dateFormat={areaDateFormat} tickInterval={tickInterval} height={height} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
       }
-      return <AreaChart title={name} data={seriesData()} isTimeAxis={areaTimeAxis} dateFormat={areaDateFormat} tickInterval={tickInterval} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+      return <AreaChart title={displayName} data={seriesData()} isTimeAxis={areaTimeAxis} dateFormat={areaDateFormat} tickInterval={tickInterval} height={height} valuePosition={valuePosition} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
     }
     case 'PIE':
-      return <PieChart title={name} data={seriesData()} height={height} donut={donut} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
+      return <PieChart title={displayName} data={formatSeriesLabels(seriesData(), mapping.x_axis_date_format)} height={height} donut={donut} showLegend={showLegend} onPointClick={xAxisCrossFilterDisabled ? null : handlePointClick} onPointContextMenu={xAxisCrossFilterDisabled ? null : handlePointContextMenu} {...styleProps} />;
     case 'LINE': {
       // Same mapping.series/time-axis branch as BAR above.
       const lineTimeAxis = isTimeAxis(rows.map((r) => r[xAxis]));
       const lineDateFormat = mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT;
       if (mapping.series) {
         const { categories, series } = buildMultiSeries();
-        return <LineAreaChart title={name} categories={categories} series={series} isTimeAxis={lineTimeAxis} dateFormat={lineDateFormat} tickInterval={tickInterval} height={height} showLegend={showLegend} showDataPoints={showDataPoints} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+        return <LineAreaChart title={displayName} categories={categories} series={series} isTimeAxis={lineTimeAxis} dateFormat={lineDateFormat} tickInterval={tickInterval} height={height} showLegend={showLegend} showDataPoints={showDataPoints} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
       }
       // Raw (un-stringified) x-values, so a time-shaped column can be handed to LineAreaChart
       // as real Date.parse-able values instead of already-flattened display labels.
       const lineData = rows.map((r) => ({ label: String(r[xAxis]), value: round(Number(r[yAxis]) || 0) }));
-      return <LineAreaChart title={name} data={lineData} isTimeAxis={lineTimeAxis} dateFormat={lineDateFormat} tickInterval={tickInterval} height={height} valuePosition={valuePosition} showDataPoints={showDataPoints} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+      return <LineAreaChart title={displayName} data={lineData} isTimeAxis={lineTimeAxis} dateFormat={lineDateFormat} tickInterval={tickInterval} height={height} valuePosition={valuePosition} showDataPoints={showDataPoints} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
     }
     case 'KPI_CARD': {
       const rawValue = rows[0]?.[yAxis];
@@ -239,7 +294,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       const deltaTooltip = deltaText ? describeCompareTo(mapping) : '';
       return (
         <StatCard
-          label={name}
+          label={displayName}
           value={displayValue}
           unit={unit}
           delta={deltaText}
@@ -281,7 +336,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       const gaugeDeltaTooltip = gaugeDeltaText ? describeCompareTo(mapping) : '';
       return (
         <GaugeCard
-          title={name}
+          title={displayName}
           value={round(Number(rows[0]?.[yAxis]) || 0)}
           height={height}
           valueFormatter={gaugeFormatter}
@@ -296,7 +351,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
     case 'SCATTER':
       return (
         <ScatterChart
-          title={name}
+          title={displayName}
           // `xLabel`/`yLabel` are the tooltip's own column identifiers — always shown (falls
           // back to the raw column name) since a tooltip with no label at all ("+: 42") is
           // just confusing, unlike the axis title below, which is a deliberate opt-in.
@@ -314,7 +369,15 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             // Optional — mapping.label (see CHART_TYPE_FIELDS's SCATTER entry in
             // ChartLibrary.jsx) identifies which row a dot came from on hover; ScatterChart
             // already reads `name` per point into its tooltip, this just populates it.
-            name: mapping.label ? String(r[mapping.label]) : undefined,
+            // SCATTER never wires up cross-filtering (see the doc comment on handlePointClick
+            // above — its mapping is two raw measures, no dimension to filter by), so unlike
+            // the discrete-label chart_types below, formatting this value has no click-identity
+            // side effect to guard against.
+            name: mapping.label
+              ? (mapping.label_date_format && isTimeValue(r[mapping.label])
+                ? formatDateLabel(r[mapping.label], mapping.label_date_format)
+                : String(r[mapping.label]))
+              : undefined,
           }))}
           height={height}
           {...styleProps}
@@ -330,18 +393,21 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       const hbarTimeAxis = isTimeAxis(rows.map((r) => r[xAxis]));
       if (mapping.series) {
         const { categories, series } = buildMultiSeries();
-        return <HorizontalBarChart title={name} categories={categories} series={series} isTimeAxis={hbarTimeAxis} dateFormat={mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT} height={height} limit={20} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+        return <HorizontalBarChart title={displayName} categories={categories} series={series} isTimeAxis={hbarTimeAxis} dateFormat={mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT} height={height} limit={20} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
       }
-      return <HorizontalBarChart title={name} data={seriesData()} isTimeAxis={hbarTimeAxis} dateFormat={mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT} height={height} limit={20} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+      return <HorizontalBarChart title={displayName} data={seriesData()} isTimeAxis={hbarTimeAxis} dateFormat={mapping.x_axis_date_format || DEFAULT_TIME_AXIS_FORMAT} height={height} limit={20} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
     }
     case 'FUNNEL':
-      return <FunnelChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
+      return <FunnelChart title={displayName} data={formatSeriesLabels(seriesData(), mapping.x_axis_date_format)} height={height} onPointClick={xAxisCrossFilterDisabled ? null : handlePointClick} onPointContextMenu={xAxisCrossFilterDisabled ? null : handlePointContextMenu} {...styleProps} />;
     case 'WATERFALL':
-      return <WaterfallChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+      return <WaterfallChart title={displayName} data={formatSeriesLabels(seriesData(), mapping.x_axis_date_format)} height={height} onPointClick={xAxisCrossFilterDisabled ? null : handlePointClick} onPointContextMenu={xAxisCrossFilterDisabled ? null : handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
     case 'TREEMAP':
-      return <TreemapChart title={name} data={seriesData()} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} {...styleProps} />;
+      return <TreemapChart title={displayName} data={formatSeriesLabels(seriesData(), mapping.x_axis_date_format)} height={height} onPointClick={xAxisCrossFilterDisabled ? null : handlePointClick} onPointContextMenu={xAxisCrossFilterDisabled ? null : handlePointContextMenu} {...styleProps} />;
     case 'STACKED_BAR': {
       const seriesAxis = mapping.series;
+      // Matching below (`String(r[xAxis]) === cat`) stays keyed on the raw category, unaffected
+      // by display formatting — `displayCategories` (built after, same array order) is the only
+      // thing that actually changes what's shown/clicked.
       const categories = [...new Set(rows.map((r) => String(r[xAxis])))];
       const seriesNames = [...new Set(rows.map((r) => String(r[seriesAxis])))];
       const series = seriesNames.map((sName) => ({
@@ -351,27 +417,82 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
           return match ? round(Number(match[yAxis]) || 0) : 0;
         }),
       }));
-      return <StackedBarChart title={name} categories={categories} series={series} height={height} showLegend={showLegend} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
+      // Same discrete-axis formatting/click-identity tradeoff as PIE/FUNNEL/TREEMAP/WATERFALL/
+      // HEAT_MAP above — StackedBarChart's own click handler reports back `p.name`, which reads
+      // straight off this `categories` array (see StackedBarChart.jsx), so once it's
+      // date-formatted, cross-filtering can no longer honestly identify the raw row.
+      const displayCategories = mapping.x_axis_date_format
+        ? categories.map((cat) => (isTimeValue(cat) ? formatDateLabel(cat, mapping.x_axis_date_format) : cat))
+        : categories;
+      return <StackedBarChart title={displayName} categories={displayCategories} series={series} height={height} showLegend={showLegend} onPointClick={xAxisCrossFilterDisabled ? null : handlePointClick} onPointContextMenu={xAxisCrossFilterDisabled ? null : handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
     }
     case 'TABLE': {
       const cols = mapping.columns || [];
       return (
         <div
-          className="border border-slate-100 rounded-lg h-full"
+          className="border border-slate-100 dark:border-white/10 rounded-lg h-full flex flex-col overflow-hidden bg-white dark:bg-[#22273C]"
           style={{ background: bgGradient ? `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` : bgColor || undefined }}
         >
+          {/* A real reserved row, not an absolutely-positioned overlay — same reasoning as
+              LineAreaChart.jsx's own title bar (a floating overlay can end up sitting over
+              real header/cell content, unlike a chart canvas with empty space to dodge into).
+              Title/*Color/*Weight/*Size/*Font were already part of every chart_type's style
+              fields (TITLE_TEXT_STYLE_FIELDS in ChartLibrary.jsx) but did nothing for TABLE
+              until now — VirtualizedTable never rendered a title at all. */}
+          {name && showTitle !== 'hide' && (
+            <div className="shrink-0 px-2.5 pt-2 pb-1" style={{ background: titleBgColor || undefined }}>
+              <span
+                className="font-semibold text-xs text-slate-700 dark:text-white/90 block truncate"
+                style={{
+                  color: titleColor || undefined,
+                  fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
+                  fontSize: titleSize ? `${titleSize}px` : undefined,
+                  // `text-xs`'s own `line-height:1rem` (16px) stays in effect even once
+                  // `fontSize` above grows past it, squeezing taller text into a shorter line
+                  // box than the glyphs need — clipping their ascenders against this row's
+                  // `overflow-hidden` ancestor. `normal` keeps the class's line-height as the
+                  // default (unset here) but scales proportionally once fontSize overrides it.
+                  lineHeight: titleSize ? 'normal' : undefined,
+                  fontFamily: titleFont || undefined,
+                  textAlign: titlePosition?.endsWith('center') ? 'center' : titlePosition?.endsWith('right') ? 'right' : 'left',
+                }}
+              >
+                {name}
+              </span>
+            </div>
+          )}
+          <div className="flex-1 min-h-0">
           <VirtualizedTable
             rows={rows}
             cols={cols}
             round={round}
             valueTextColor={valueTextColor}
+            cellFormatRules={cellFormatRules}
+            // Picking a Band color IS turning banding on — no separate toggle (see
+            // widgetTypeRegistry.js's TABLE styleFields comment). `bandColor` only reaches
+            // here once the user has actually set it (WidgetStyleFields never auto-writes a
+            // field's schema default into the saved value — see ColorRow/FieldRow), so its
+            // mere presence is exactly "explicitly overridden," same signal the × clear
+            // button next to it already relies on.
+            rowBanding={!!bandColor}
+            bandColor={bandColor}
+            bandTextColor={bandTextColor}
+            headerBgColor={headerBgColor}
+            headerTextColor={headerTextColor}
+            onReorderColumns={onReorderColumns}
             formatValue={(numberFormat ?? 'compact') === 'compact' ? (v) => formatCompactNumber(v, valueDecimals) : null}
+            dateFormat={mapping.table_date_format || DEFAULT_TIME_AXIS_FORMAT}
+            columnWidths={style.column_widths}
+            onColumnResize={onColumnResize}
+            columnLabels={mapping.column_labels}
+            onColumnLabelChange={onColumnLabelChange}
           />
+          </div>
         </div>
       );
     }
     case 'HEAT_MAP':
-      return <HeatStripChart title={name} unit={unit} data={seriesData()} colorFrom={colorFrom} colorTo={colorTo} height={height} onPointClick={handlePointClick} onPointContextMenu={handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
+      return <HeatStripChart title={displayName} unit={unit} data={formatSeriesLabels(seriesData(), mapping.x_axis_date_format)} colorFrom={colorFrom} colorTo={colorTo} height={height} onPointClick={xAxisCrossFilterDisabled ? null : handlePointClick} onPointContextMenu={xAxisCrossFilterDisabled ? null : handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} {...styleProps} />;
     default:
       return <div className="text-xs text-slate-500">{rows.length} row(s) returned.</div>;
   }

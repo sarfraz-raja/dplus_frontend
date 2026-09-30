@@ -193,7 +193,7 @@ const XAlertScheduler = () => {
 
     return (
         <>
-            <div className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4"
+            <div className="flex flex-col h-full overflow-hidden p-5 gap-4"
                 style={{ background: '#ffffff' }}>
 
                 {/* Top header */}

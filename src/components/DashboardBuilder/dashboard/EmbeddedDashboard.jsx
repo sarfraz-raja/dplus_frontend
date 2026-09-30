@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import DashboardCanvasEditor from './DashboardCanvasEditor';
 import { getDashboardDetail } from '../../../store/actions/dashboardBuilder-actions';
+import { buildLocalLayoutAndWidgets } from './buildLocalLayoutAndWidgets';
 
 // Phase 18 B6 — lets another page link into a published dashboard pre-filtered, mirroring
 // the existing TelecomMap.jsx -> Filtered-cell-dashboard pattern (?cell=X&filterId=Y) but
@@ -39,46 +40,6 @@ function isPublished(dashboard) {
   return dashboard?.is_published === true;
 }
 
-// getDashboardDetail's `widgets` is the raw backend attached-widget array (each entry:
-// {id, chart_type, mapping, name, position?} — the join-table shape), NOT the same object
-// DashboardCanvasEditor's own local `widgets` state uses (keyed by a local layout id, shaped
-// as {type:'chartLibrary', title, dataSource:{type,widgetId,chartType,mapping}, style}).
-//
-// Position source, in priority order (kept in sync with DashboardBuilder.jsx's own copy of
-// this function — see its longer comment for the full story):
-//   1. `dashboard.layout` — its `i` values are always deterministically `w_<widgetId>` (built
-//      the same way below), so despite being nominally "opaque JSON," it's actually a
-//      reliable, stable map back to each real widget's latest position. Confirmed via a live
-//      PATCH /dashboards/{id} response — this field updates successfully on every save.
-//   2. Each attached widget's own `.position` (set once, at first attach via
-//      POST /dashboards/{id}/widgets) — used as a fallback only. Confirmed via a live 409
-//      CONFLICT that this endpoint is create-only: it can't update an already-attached
-//      widget's position, so this field goes stale the moment a widget is moved and re-saved.
-// Falls back to a simple auto-stack grid if neither source has a position for a widget.
-function buildLocalLayoutAndWidgets(backendWidgets, dashboardLayout) {
-  const layoutByLocalId = Object.fromEntries((dashboardLayout || []).map((l) => [l.i, l]));
-  const widgets = {};
-  const layout = [];
-  (backendWidgets || []).forEach((w, idx) => {
-    const localId = `w_${w.id}`;
-    widgets[localId] = {
-      type: 'chartLibrary',
-      title: w.name || 'Widget',
-      dataSource: { type: 'chartLibrary', widgetId: w.id, chartType: w.chart_type, mapping: w.mapping },
-      style: {},
-    };
-    const fromDashboardLayout = layoutByLocalId[localId];
-    const pos = fromDashboardLayout || w.position || {};
-    layout.push({
-      i: localId,
-      x: pos.x ?? (idx % 3) * 12,
-      y: pos.y ?? Math.floor(idx / 3) * 8,
-      w: pos.w ?? 12,
-      h: pos.h ?? 8,
-    });
-  });
-  return { widgets, layout };
-}
 
 /**
  * Read-only viewer for a single backend-persisted Dashboard Builder dashboard, given only
@@ -138,7 +99,7 @@ export default function EmbeddedDashboard({ dashboardId, height }) {
     );
   }
 
-  const { widgets: localWidgets, layout } = buildLocalLayoutAndWidgets(state.widgets, state.dashboard.layout);
+  const { widgets: localWidgets, layout, tabs } = buildLocalLayoutAndWidgets(state.widgets, state.dashboard.layout);
 
   return (
     <div style={{ height: height || '100%' }}>
@@ -150,6 +111,7 @@ export default function EmbeddedDashboard({ dashboardId, height }) {
         initialName={state.dashboard.name}
         initialLayout={layout}
         initialWidgets={localWidgets}
+        initialTabs={tabs}
         editable={false}
       />
     </div>

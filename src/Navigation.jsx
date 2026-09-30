@@ -7,6 +7,8 @@ import { Route, Routes } from 'react-router-dom';
 import Layout from './pages/Layout';
 import Profile from './pages/Profile';
 import XReportSchedulerNew from './pages/AlertMonitoringSystem/XReportSchedulerFormPage';
+import AssuranceRuleForm from './pages/Assurance/AssuranceRuleForm';
+import IncidentList from './pages/Assurance/IncidentList';
 import DynamicInsightsDashboard from './pages/InsightsEngine/DynamicInsightsDashboard';
 
 // ─── Maps built once at module load from sidebar_values ──────────────────────
@@ -194,6 +196,52 @@ const Navigation = ({ sidebarOpen, sidebarPos, setSidebarPos }) => {
                     <Layout
                         sidebarOpen={sidebarOpen}
                         child={<XReportSchedulerNew />}
+                        sidebarPos={sidebarPos}
+                        setSidebarPos={setSidebarPos}
+                    />
+                }
+            />
+            <Route
+                path="/assurance/rules/new"
+                element={
+                    <Layout
+                        sidebarOpen={sidebarOpen}
+                        child={<AssuranceRuleForm />}
+                        sidebarPos={sidebarPos}
+                        setSidebarPos={setSidebarPos}
+                    />
+                }
+            />
+            <Route
+                path="/assurance/rules/edit/:id"
+                element={
+                    <Layout
+                        sidebarOpen={sidebarOpen}
+                        child={<AssuranceRuleForm />}
+                        sidebarPos={sidebarPos}
+                        setSidebarPos={setSidebarPos}
+                    />
+                }
+            />
+            {/* Also listed in sidebar_values (Assurance → Incidents); registered here too so it
+                resolves before the backend menu includes it — reached from the Assurance Rules page. */}
+            <Route
+                path="/assurance/incidents"
+                element={
+                    <Layout
+                        sidebarOpen={sidebarOpen}
+                        child={<IncidentList />}
+                        sidebarPos={sidebarPos}
+                        setSidebarPos={setSidebarPos}
+                    />
+                }
+            />
+            <Route
+                path="/assurance/rules/view/:id"
+                element={
+                    <Layout
+                        sidebarOpen={sidebarOpen}
+                        child={<AssuranceRuleForm />}
                         sidebarPos={sidebarPos}
                         setSidebarPos={setSidebarPos}
                     />

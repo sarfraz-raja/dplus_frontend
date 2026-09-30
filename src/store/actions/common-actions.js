@@ -1,6 +1,17 @@
+import toast from "react-hot-toast"
 import Api from "../../utils/api"
 import { Urls } from "../../utils/url"
 import { SET_AUTHENTICATED, SET_PAGE_NAME, SET_SIDEBAR_MENU, SET_TOKEN, SET_USER } from "../reducers/auth-reducer"
+
+/** Avoid logging full axios response bodies (may contain tokens / PII) — mirrors utils/api.js's logApiError. */
+const handleApiError = (err, phase) => {
+    if (import.meta.env.DEV) {
+        const status = err?.response?.status;
+        const url = err?.config?.url;
+        console.warn(`[common-actions${phase ? `:${phase}` : ""}]`, status ?? "no-status", url ?? "", err?.message ?? err);
+    }
+    toast.error(err?.response?.data?.message || err?.message || "Something went wrong. Please try again.")
+}
 
 const CommonActions = {
     postApiCaller: (urls, data, cb) => async (dispatch, _) => {
@@ -9,8 +20,8 @@ const CommonActions = {
             if (res?.status !== 201 && res?.status !== 200) return
 
             cb()
-        } catch {
-            /* UI callbacks handle failure; avoid logging full error objects in production */
+        } catch (err) {
+            handleApiError(err, "post")
         }
     },
     setLastName: (reset,name) => async (dispatch, _) => {
@@ -44,8 +55,8 @@ const CommonActions = {
             if (res?.status !== 201 && res?.status !== 200) return
 
             cb()
-        } catch {
-            /* see postApiCaller */
+        } catch (err) {
+            handleApiError(err, "get")
         }
     },
     deleteApiCaller: (urls, cb) => async (dispatch, _) => {
@@ -56,8 +67,8 @@ const CommonActions = {
            // if (res?.status !== 201 && res?.status !== 200) return
 
             cb()
-        } catch {
-            /* see postApiCaller */
+        } catch (err) {
+            handleApiError(err, "delete")
         }
     },
     commondownload: (urls, filename, method = "GET", data = {}, cb) => async (dispatch, _) => {

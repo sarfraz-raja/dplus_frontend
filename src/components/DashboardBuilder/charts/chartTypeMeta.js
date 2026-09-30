@@ -53,4 +53,11 @@ export const MOCK_TYPE_TO_CHART_TYPE = {
   kpiTable: 'TABLE',
 };
 
+// Reverse of the map above — lets the dashboard editor's "Add Widget" list take its label/icon/
+// color/order from CHART_TYPE_META (same source the chart editor's Visualization Type grid
+// uses) while still adding the widget under its registry type key.
+export const CHART_TYPE_TO_MOCK_TYPE = Object.fromEntries(
+  Object.entries(MOCK_TYPE_TO_CHART_TYPE).map(([mockType, chartType]) => [chartType, mockType]),
+);
+
 export default CHART_TYPE_META;

@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { toDateTimeLocalInput, fromDateTimeLocalInput } from '../utils/resolveTimeRange';
 import PaletteEditor from '../themes/PaletteEditor';
+import ColumnMultiSelect from '../ColumnMultiSelect';
+import FieldHintMark from '../FieldHintMark';
+import { ValidateExpressionButton } from './AdvancedSqlFields';
 
 // One accent per drill-down depth (cycles if a hierarchy ever goes deeper than 5 levels) —
 // purely a visual "which ring is this" cue in the orderedColumns editor below, distinct from
@@ -20,7 +23,9 @@ const LEVEL_RING_COLORS = ['#0EA5E9', '#8B5CF6', '#F59E0B', '#14B8A6', '#EC4899'
 // mapping keys — mapping and style are two different persisted objects (see ChartLibrary.jsx's
 // own mapping/mapping.style split), and blurring that here would make `value` no longer equal
 // to what actually gets saved as the widget's own mapping.
-export default function MappingFields({ fields = [], value = {}, onChange, columns = [], columnsLoading = false, styleValue = {}, onStyleChange }) {
+export default function MappingFields({ fields = [], value = {}, onChange, columns = [], columnsLoading = false, styleValue = {}, onStyleChange, paletteHeader = null, datasourceId = null }) {
+  // `paletteHeader` — optional node rendered above the palette editor (ChartLibrary.jsx passes
+  // its Light/Dark switch, since the palette is stored per mode).
   // Collapse state per group (keyed by field.key) — groups start expanded (matches every
   // group having something worth configuring the moment a chart_type is picked), a user can
   // fold away one they've already finished (e.g. X Axis) to focus on the one they're still
@@ -53,7 +58,11 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
         // is met, rather than always showing and just disabling it, so the form doesn't grow
         // fields most chart configs will never touch. ChartLibrary.jsx's own canSave applies
         // this exact same check, so a hidden field never blocks Save either.
-        if (field.showIf && !field.showIf(value)) return null;
+        // Second arg (`columns`) lets a showIf that needs to know whether the CURRENTLY
+        // SELECTED value is a saved metric (Phase A — see ChartLibrary.jsx's IS_SQL_MEASURE)
+        // make that call — every existing showIf here only reads its first arg, so this is a
+        // no-op for all of them.
+        if (field.showIf && !field.showIf(value, columns)) return null;
         const current = value?.[field.key];
         if (field.type === 'group') {
           // Everything related to one concern sits together — e.g. a column picker and its
@@ -101,6 +110,94 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
             : field.role === 'dimension' ? columns.filter((c) => c.is_dimension)
             : field.role === 'date' ? columns.filter((c) => /date|time|timestamp/i.test(c.data_type || ''))
             : columns;
+          // Phase B — a measure field ('role' === 'measure') can be an ad-hoc SQL expression
+          // instead of a real column: `current` is then `{type:'sql', expression, label}`
+          // rather than a plain column-name string, sent through unchanged (no separate
+          // mapping shape — see the backend's own "no new mapping shape needed" note). Only
+          // measures get this toggle — a dimension/date column picker stays exactly as before,
+          // since x_axis/series-shaped ad-hoc SQL isn't part of Phase B.
+          const isSql = field.role === 'measure' && current && typeof current === 'object' && current.type === 'sql';
+          if (field.role === 'measure') {
+            // The column list is never optional/hidden — it's the same required `<select>`
+            // for both modes, just reused for a different purpose in each: in Simple mode
+            // it's the bound value itself; in Custom SQL mode picking an option INSERTS that
+            // column into the expression instead (an on-top-of-the-column addition, matching
+            // Superset's own Custom SQL tab, which still shows the underlying column/metric
+            // context rather than swapping it away for a disconnected free-text box — see the
+            // conversation this was reported in: an earlier version hid the real column select
+            // behind a second, separately-built dropdown, losing exactly this).
+            const columnSelect = (
+              <select
+                value={typeof current === 'string' ? current : ''}
+                onChange={(e) => {
+                  if (!e.target.value) { if (!isSql) onChange(field.key, ''); return; }
+                  if (isSql) {
+                    const sep = current.expression && !/\s$/.test(current.expression) ? ' ' : '';
+                    onChange(field.key, { ...current, expression: `${current.expression || ''}${sep}${e.target.value}` });
+                  } else {
+                    onChange(field.key, e.target.value);
+                  }
+                }}
+                disabled={!options.length}
+                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
+              >
+                <option value="">
+                  {columnsLoading ? 'Loading…' : !options.length ? 'No matching columns' : isSql ? '+ Insert a column into the expression…' : 'Select column'}
+                </option>
+                {options.map((c) => (
+                  <option key={c.column_name} value={c.column_name}>{c.display_name || c.column_name}</option>
+                ))}
+              </select>
+            );
+            return (
+              <div key={field.key} className={`flex flex-col gap-1 ${groupChild ? 'w-full' : 'w-48'}`}>
+                <label className="text-xs font-medium text-slate-600 flex items-center justify-between">
+                  {/* A single span, not the bare FieldLabel fragment — a fragment's "Measure"
+                      text node and its "*" span would otherwise become two SEPARATE flex
+                      items in this justify-between row (each of a Fragment's children is its
+                      own flex item), spreading the "*" away from "Measure" toward the middle
+                      of the row instead of sitting right against it like every other field's
+                      label does. */}
+                  <span><FieldLabel field={field} /></span>
+                  <button
+                    type="button"
+                    className="text-[0.65rem] font-semibold text-[#EC7D09] hover:opacity-80"
+                    onClick={() => onChange(field.key, isSql
+                      // Seeds from whatever column was already picked (e.g. "attempts" ->
+                      // "SUM(attempts)") instead of a blank box — matches Superset's own
+                      // Custom SQL tab, which always opens on top of the already-selected
+                      // metric/column rather than starting from scratch. Falling back to a
+                      // bare SUM(...) with the column left for the user to fill in when
+                      // nothing was selected yet, rather than an empty aggregate call.
+                      ? ''
+                      : { type: 'sql', expression: typeof current === 'string' && current ? `SUM(${current})` : '', label: '' })}
+                  >
+                    {isSql ? 'Use column' : 'Use custom SQL'}
+                  </button>
+                </label>
+                {columnSelect}
+                {isSql && (
+                  <div className="flex flex-col gap-1.5 mt-1">
+                    <textarea
+                      value={current.expression || ''}
+                      onChange={(e) => onChange(field.key, { ...current, expression: e.target.value })}
+                      placeholder="e.g. SUM(col_a)/NULLIF(SUM(col_b),0)"
+                      rows={2}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono"
+                    />
+                    <input
+                      type="text"
+                      value={current.label || ''}
+                      onChange={(e) => onChange(field.key, { ...current, label: e.target.value })}
+                      placeholder="Label for this measure"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
+                    />
+                    {datasourceId && <ValidateExpressionButton datasourceId={datasourceId} expression={current.expression} />}
+                  </div>
+                )}
+              </div>
+            );
+          }
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
               <FieldLabel field={field} />
@@ -125,6 +222,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           return (
             <div key={field.key} className="flex flex-col gap-1.5 w-full">
               <div className="text-xs font-medium text-slate-600">{field.label}</div>
+              {paletteHeader}
               <PaletteEditor value={styleValue?.[field.key] || []} onChange={(next) => onStyleChange?.(field.key, next)} />
             </div>
           );
@@ -163,8 +261,8 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           const options = rawOptions.map((opt) => (typeof opt === 'object' ? opt : { value: opt, label: opt }));
           const selected = options.some((opt) => opt.value === current) ? current : field.default;
           return (
-            <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-32'}`}>
-              <FieldLabel field={field} />
+            <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild || field.fullWidth ? 'w-full' : 'w-32'}`}>
+              <FieldLabel field={field} /><FieldHintMark hint={field.hint} />
               <select
                 value={selected}
                 onChange={(e) => onChange(field.key, e.target.value)}
@@ -172,10 +270,6 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
               >
                 {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
-              {/* A short caption under the field (e.g. "Default: Africa/Blantyre") instead of
-                  baking that into the label itself — a long label wraps awkwardly onto two
-                  lines inside a grid cell and misaligns against the field beside it. */}
-              {field.hint && <span className="block mt-1 text-[10px] font-normal text-slate-400">{field.hint}</span>}
             </label>
           );
         }
@@ -238,7 +332,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           };
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
-              <FieldLabel field={field} />
+              <FieldLabel field={field} /><FieldHintMark hint={field.hint} />
               <div className="mt-1 flex gap-1.5">
                 <input
                   type="number"
@@ -264,7 +358,6 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                   {field.unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
-              {field.hint && <span className="block mt-1 text-[10px] font-normal text-slate-400">{field.hint}</span>}
             </label>
           );
         }
@@ -299,8 +392,23 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           // backend is expected to read this the same way it already reads x_axis/y_axis
           // (see getWidgetData's own doc comment: "mapping.drill_down for the column
           // hierarchy"). Order matters and is only ever changed here, never re-sorted.
-          const levels = current || [];
-          const excluded = new Set([value?.x_axis, ...levels].filter(Boolean));
+          //
+          // Level 1 is deliberately NOT stored in this array — it's always whatever column is
+          // currently picked for X Axis/Category, derived live and rendered as a pinned,
+          // read-only row. Storing it as its own editable entry would create two sources of
+          // truth for the same thing (X Axis's own field vs. this list's first item) that can
+          // silently drift apart the moment someone changes the X Axis column later without
+          // remembering to also update the hierarchy here. `mapping.drill_down` holds only
+          // levels 2+, i.e. what a user has explicitly added beneath that top level.
+          const topLevelCol = value?.x_axis;
+          // Filters out `topLevelCol` from the stored array, not just from what's offered in
+          // the "add a level" dropdown below — covers charts saved before this derived-top-
+          // level change (when level 1 WAS stored as the array's own first entry) and the case
+          // where X Axis gets changed to a column that already exists further down the
+          // hierarchy. Without this, that column would render twice: once as the pinned top
+          // level, once again inside the list.
+          const levels = (current || []).filter((c) => c !== topLevelCol);
+          const excluded = new Set([topLevelCol, ...levels].filter(Boolean));
           // Dimension-only, same reasoning as the 'column' field's `role` filter above —
           // drilling into a measure column isn't meaningful.
           const availableCols = columns.filter((c) => c.is_dimension && !excluded.has(c.column_name));
@@ -313,13 +421,14 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           };
           const removeAt = (i) => onChange(field.key, levels.filter((_, idx) => idx !== i));
           const addLevel = (colName) => { if (colName) onChange(field.key, [...levels, colName]); };
+          const topCol = columns.find((c) => c.column_name === topLevelCol);
           return (
             <div key={field.key} className="flex flex-col gap-1.5 w-full">
               {field.label && <div className="text-xs font-medium text-slate-600"><FieldLabel field={field} /></div>}
-              {levels.length === 0 && (
-                <div className="text-xs text-slate-400">No drill-down levels — this chart won't be drillable.</div>
+              {!topLevelCol && (
+                <div className="text-xs text-slate-400">Pick an X Axis / Category column first — it becomes the top drill-down level.</div>
               )}
-              {levels.length > 0 && (
+              {topLevelCol && (
                 // Progressively indented + connected by a vertical rail, one ring color per
                 // depth — makes the "level 2 only exists inside whichever level 1 you clicked"
                 // nesting relationship visible at config time, the same concentric-circle
@@ -328,26 +437,45 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                 // hierarchy's own definition — never touches an already-drilled dashboard
                 // widget's current position in it.
                 <div className="flex flex-col">
+                  {/* Derived top level — same rail/ring visual as every other level, but no
+                      reorder/remove controls since it isn't part of `levels` to act on; it
+                      follows the X Axis field instead. */}
+                  <div className="flex items-stretch">
+                    <div className="flex flex-col items-center shrink-0" style={{ width: 22 }}>
+                      <div
+                        className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[9px] font-bold shrink-0"
+                        style={{ borderColor: LEVEL_RING_COLORS[0], color: LEVEL_RING_COLORS[0], background: `${LEVEL_RING_COLORS[0]}1a` }}
+                      >
+                        1
+                      </div>
+                      {levels.length > 0 && <div className="w-px flex-1 bg-slate-200" style={{ minHeight: 6 }} />}
+                    </div>
+                    <div className="flex-1 flex items-center gap-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 mb-1.5 ml-1">
+                      <span className="flex-1 text-slate-700 font-medium">{topCol?.display_name || topLevelCol}</span>
+                      <span className="text-[10px] text-slate-400">top level · from X Axis</span>
+                    </div>
+                  </div>
                   {levels.map((colName, i) => {
                     const col = columns.find((c) => c.column_name === colName);
-                    const ring = LEVEL_RING_COLORS[i % LEVEL_RING_COLORS.length];
+                    const ring = LEVEL_RING_COLORS[(i + 1) % LEVEL_RING_COLORS.length];
+                    const prevLabel = i === 0 ? (topCol?.display_name || topLevelCol) : (columns.find((c) => c.column_name === levels[i - 1])?.display_name || levels[i - 1]);
                     return (
                       <div key={colName} className="flex items-stretch">
                         {/* Rail + ring column — one segment per level, indented to the right
                             so each level visibly nests inside the one above it. */}
-                        <div className="flex flex-col items-center shrink-0" style={{ width: 22 + i * 16, marginLeft: i > 0 ? -6 : 0 }}>
-                          {i > 0 && <div className="w-px flex-1 bg-slate-200" style={{ minHeight: 6 }} />}
+                        <div className="flex flex-col items-center shrink-0" style={{ width: 22 + (i + 1) * 16, marginLeft: -6 }}>
+                          <div className="w-px flex-1 bg-slate-200" style={{ minHeight: 6 }} />
                           <div
                             className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[9px] font-bold shrink-0"
                             style={{ borderColor: ring, color: ring, background: `${ring}1a` }}
                           >
-                            {i + 1}
+                            {i + 2}
                           </div>
                           {i < levels.length - 1 && <div className="w-px flex-1 bg-slate-200" style={{ minHeight: 6 }} />}
                         </div>
                         <div className="flex-1 flex items-center gap-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 mb-1.5 ml-1">
                           <span className="flex-1 text-slate-700 font-medium">{col?.display_name || colName}</span>
-                          <span className="text-[10px] text-slate-400">{i === 0 ? 'top level' : `within ${levels[i - 1]}`}</span>
+                          <span className="text-[10px] text-slate-400">within {prevLabel}</span>
                           <button type="button" disabled={i === 0} onClick={() => move(i, -1)} className="disabled:opacity-30 text-slate-500 hover:text-slate-700">↑</button>
                           <button type="button" disabled={i === levels.length - 1} onClick={() => move(i, 1)} className="disabled:opacity-30 text-slate-500 hover:text-slate-700">↓</button>
                           <button type="button" onClick={() => removeAt(i)} className="text-red-500 hover:opacity-80">×</button>
@@ -360,10 +488,10 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
               <select
                 value=""
                 onChange={(e) => addLevel(e.target.value)}
-                disabled={!availableCols.length}
+                disabled={!topLevelCol || !availableCols.length}
                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-500"
               >
-                <option value="">{availableCols.length ? '+ Add drill-down level…' : 'No more columns to add'}</option>
+                <option value="">{!topLevelCol ? 'Pick an X Axis column first' : availableCols.length ? '+ Add drill-down level…' : 'No more columns to add'}</option>
                 {availableCols.map((c) => (
                   <option key={c.column_name} value={c.column_name}>{c.display_name || c.column_name}</option>
                 ))}
@@ -372,37 +500,31 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           );
         }
         if (field.type === 'multiColumn') {
-          const selected = current || [];
-          const toggle = (colName) => {
-            onChange(field.key, selected.includes(colName) ? selected.filter((c) => c !== colName) : [...selected, colName]);
+          // Column labels live on `mapping.column_labels` (not this field's own key) — the
+          // same "display override, never touches the real name/query" slot X/Y Axis title
+          // fields already use for their one axis each, just per-column here. Read/written
+          // straight through this component's own `value`/`onChange`, same as any other
+          // mapping field — no separate prop plumbing needed since `value` is already the
+          // whole mapping object.
+          const columnLabels = value?.column_labels;
+          const setColumnLabel = (colName, text) => {
+            const next = { ...(columnLabels || {}) };
+            if (text) next[colName] = text; else delete next[colName];
+            onChange('column_labels', next);
           };
-          const allSelected = columns.length > 0 && selected.length === columns.length;
           return (
-            <div key={field.key} className="flex flex-col gap-1.5 w-full">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-medium text-slate-600"><FieldLabel field={field} /></div>
-                {columns.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onChange(field.key, allSelected ? [] : columns.map((c) => c.column_name))}
-                    className="text-xs font-medium text-[#EC7D09] hover:opacity-80"
-                  >
-                    {allSelected ? 'Clear all' : 'Select all'}
-                  </button>
-                )}
-              </div>
-              {!columns.length && (
-                <div className="text-xs text-slate-400">{columnsLoading ? 'Loading…' : 'Select a datasource first.'}</div>
-              )}
-              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                {columns.map((c) => (
-                  <label key={c.column_name} className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <input type="checkbox" checked={selected.includes(c.column_name)} onChange={() => toggle(c.column_name)} />
-                    {c.display_name || c.column_name}
-                  </label>
-                ))}
-              </div>
-            </div>
+            <ColumnMultiSelect
+              key={field.key}
+              label={field.label}
+              required={isRequiredField(field)}
+              columns={columns}
+              columnsLoading={columnsLoading}
+              selected={current || []}
+              onChange={(next) => onChange(field.key, next)}
+              showOrderTray={false}
+              columnLabels={columnLabels}
+              onColumnLabelChange={setColumnLabel}
+            />
           );
         }
         return null;

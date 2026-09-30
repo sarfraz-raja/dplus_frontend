@@ -137,10 +137,33 @@ html[data-theme="dark"] body {
   color: #0f172a !important;
 }
 
+/* App-wide scrollbar behavior: invisible at rest, revealed only while hovering the scrollable
+ * element itself (or anything inside it — CSS `:hover` applies to an ancestor for as long as
+ * the pointer is anywhere within its box, descendants included, so this needs no per-element
+ * JS/hover-state — it's automatic for every scrollable region app-wide, not just DashboardBuilder's
+ * own panels). `*:hover::-webkit-scrollbar` only has a visible effect on an element that's
+ * actually scrollable (overflow:auto/scroll) — it's a no-op on every other hovered ancestor,
+ * so this is safe to apply globally. Previously always-on (a persistent 4px orange bar) —
+ * DashboardBuilder had several one-off local overrides trying to hide/hover-reveal their own
+ * scrollbars (still in place, now redundant but harmless) that never actually worked, because
+ * a bare class selector like `.foo::-webkit-scrollbar` is lower CSS specificity than this
+ * rule's `html[data-theme]` ancestor and always lost to it — this fixes that at the source
+ * instead of patching each container one at a time. */
+/* !important on the width/height (both here and in every rule below) — a component-level
+ * <style> tag rendered by React at runtime can land later in the DOM than this stylesheet,
+ * and CSS ties on identical specificity are broken by DOM order, not by which file the rule
+ * lives in — so a same-specificity local override (see the doc comment above) could still win
+ * this tie depending on exact mount timing. !important removes that ambiguity outright rather
+ * than relying on being confident about DOM insertion order. */
 html[data-theme="light"] ::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html[data-theme="light"] *:hover::-webkit-scrollbar {
   background-color: #f1f1f1;
-  width: 4px;
-  height: 4px;
+  width: 4px !important;
+  height: 4px !important;
 }
 
 html[data-theme="light"] ::-webkit-scrollbar-track {
@@ -161,9 +184,14 @@ html[data-theme="light"] ::-webkit-scrollbar-track:hover {
 }
 
 html[data-theme="dark"] ::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html[data-theme="dark"] *:hover::-webkit-scrollbar {
   background-color: #1b0027;
-  width: 4px;
-  height: 4px;
+  width: 4px !important;
+  height: 4px !important;
 }
 
 html[data-theme="dark"] ::-webkit-scrollbar-track {
@@ -182,6 +210,12 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
 html[data-theme="dark"] ::-webkit-scrollbar-track:hover {
   background-color: #04003a3f;
 }
+
+/* Firefox equivalent of the show/hide split above (no track/thumb color control there, just
+ * the width tri-state) — `scrollbar-width` isn't inherited, so this has to target every
+ * element directly, not just `html`, to reach nested scrollable divs. */
+* { scrollbar-width: none !important; }
+*:hover { scrollbar-width: thin !important; }
 
 ::-webkit-progress-bar {
   background-color: #1b0027;
@@ -253,12 +287,42 @@ html[data-theme="dark"] ::-webkit-scrollbar-track:hover {
  * Inline styles (e.g. map panel date inputs with style={{ backgroundColor:"#091428" }})
  * keep higher specificity and are unaffected.
  */
-html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.keep-dark-input),
 html[data-theme="dark"] select,
 html[data-theme="dark"] textarea:not(.yogi-textarea) {
   background-color: #ffffff !important;
   color: #0f172a !important;
   color-scheme: light;
+}
+
+/* Checkboxes/radios keep the browser's native light look (outlined box) instead of the
+ * solid gray fill the "only dark" color-scheme above gives them — same white-like-light-mode
+ * treatment as every other form control, just via color-scheme alone since they have no
+ * background to force. */
+html[data-theme="dark"] input[type="checkbox"],
+html[data-theme="dark"] input[type="radio"] {
+  color-scheme: light;
+}
+
+/* Opt-in exemption for inputs that sit on an already-dark surface (e.g. the search box inside
+ * ChartStylePicker's popover) — add `keep-dark-input` to keep them transparent/dark. */
+/* The inputs above are forced to a white background + dark text regardless of theme, but their
+ * ::placeholder is a separate pseudo-element that rule doesn't reach — with no explicit
+ * placeholder color set anywhere, the browser falls back to a light/white default derived from
+ * `color-scheme: only dark` on <html> (line ~126), which then sits invisible on that same forced
+ * white background (e.g. ColumnMultiSelect.jsx's "Custom label…" input). Force it to the same
+ * gray placeholder color light mode gets natively. */
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.keep-dark-input)::placeholder,
+html[data-theme="dark"] select::placeholder,
+html[data-theme="dark"] textarea:not(.yogi-textarea)::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="dark"] input.keep-dark-input {
+  background-color: transparent !important;
+  color: #e2e8f0 !important;
+  color-scheme: dark;
 }
 
 /* Yogi AI chat textarea — exempt from global dark mode white override */

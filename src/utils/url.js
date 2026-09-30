@@ -54,6 +54,11 @@ export const Urls={
     powerBI_tokenCreator:"/powerBI/tokenCreator",
     alertConfiguration_configureAlert:"/alertConfiguration/configureAlert",
     alertConfiguration_schedulerAlert:"/alertConfiguration/schedulerAlert",
+    /** Intelligent Telecom Assurance module — assurance_blueprint.py, registered with no URL prefix */
+    assurance_rules:"/assurance-rules",
+    assurance_slaProfiles:"/sla-profiles",
+    assurance_escalationPolicies:"/escalation-policies",
+    assurance_incidents:"/incidents",
     /** group_blueprint.py — registered without prefix */
     groups:"/groups",
     groupMembers: (groupId) => `/groups/${groupId}/members`,
