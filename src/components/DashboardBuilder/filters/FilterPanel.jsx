@@ -6,11 +6,13 @@ import SingleSelectFilterInput from './SingleSelectFilterInput';
 import { resolveTimeRangeValue } from '../utils/resolveTimeRange';
 
 // `filters` (dashboard.global_filters, optionally merged with deep-link overrides from the
-// parent — see EmbeddedDashboard.jsx's B6 param parsing) only carries {column,operator,value}
-// — no name/type. This panel infers a display label/control purely from each row's shape, the
-// same convention FilterEditorModal.jsx uses, so both stay in sync without a second metadata store.
+// parent — see EmbeddedDashboard.jsx's B6 param parsing) now carries an optional `name` (the
+// custom "Filter Name" typed in FilterEditorModal.jsx, once it actually differs from the raw
+// column — see that file's own toSavedFilter) alongside {column,operator,value,datasource_id}.
+// Prefers that custom name for display; falls back to the column name for a filter saved
+// before this change, or one whose name was never customized.
 function labelFor(f) {
-  return f.column;
+  return f.name || f.column;
 }
 
 // Guards against `f` being undefined — every other isX(f) helper below calls this first, so
@@ -58,34 +60,60 @@ function isPlainValue(f) {
   return !isDateRange(f) && !isComparison(f) && !isMultiSelect(f);
 }
 
-// Global filters only ever carry {column, operator, value} — no datasourceId (that's
-// intentionally local-only, edit-modal metadata, never persisted — see FilterEditorModal's
-// own note on why), so there's still no direct way to know which datasource a filter's column
-// belongs to — this still searches the dashboard's registered datasources for one whose
-// columns include it. But the values themselves now come from the real
-// GET .../columns/<column>/distinct-values endpoint (bounded, server-side, actually queries
-// the column) instead of the old "sample 10 rows and de-dupe" guess, which regularly came back
-// "No values found" for a column that clearly had values just not within whichever 10 rows
-// happened to be sampled — see the conversation this was reported and fixed in.
-async function resolveColumnValues(column, datasourceOptions) {
+// A filter saved since datasource_id started being persisted (see FilterEditorModal.jsx's
+// toSavedFilter) already knows exactly which datasource its column belongs to — go straight
+// there, no guessing needed. Only a legacy filter (saved before that change, so
+// `datasourceId` is empty) falls back to the old best-effort search: try every registered
+// datasource for one whose OWN column metadata includes this column name, and call the real
+// GET .../columns/<column>/distinct-values endpoint on it. That search is inherently
+// unreliable — a registered datasource's column metadata can be incomplete/stale even when
+// the column obviously has real data (every widget using it renders fine), and more than one
+// datasource can share a column name — see the conversation this was diagnosed in, which is
+// exactly why persisting datasource_id was worth doing. Keeps searching past a datasource
+// whose call succeeds but comes back empty, rather than stopping at the first name match
+// regardless of whether it actually had data; only gives up once every candidate is tried.
+async function resolveColumnValues(column, datasourceId, datasourceOptions) {
+  if (datasourceId) {
+    try {
+      const values = await getColumnDistinctValues(datasourceId, column);
+      if (values.length > 0) return values;
+    } catch (_) {
+      // Saved datasource_id no longer resolves (e.g. the datasource was deleted) — fall
+      // through to the legacy search rather than giving up outright.
+    }
+  }
+  let lastResult = [];
   for (const ds of datasourceOptions) {
+    if (ds.id === datasourceId) continue; // already tried above
     try {
       const { columns } = await getDatasourceDetail(ds.id);
       if (!(columns || []).some((c) => c.column_name === column)) continue;
-      return await getColumnDistinctValues(ds.id, column);
+      const values = await getColumnDistinctValues(ds.id, column);
+      if (values.length > 0) return values;
+      lastResult = values;
     } catch (_) {
       // This datasource didn't have the column, or the lookup failed (e.g. a calculated
       // column/metric, which the endpoint 422s on) — try the next one.
     }
   }
-  return [];
+  return lastResult;
 }
 
-// Same best-effort datasource search as resolveColumnValues, but returns the column's
-// discovered data_type instead of sample values — drives whether BETWEEN/comparison
-// operators render date or number inputs.
-async function resolveColumnType(column, datasourceOptions) {
+// Same datasource_id-first, guess-as-fallback approach as resolveColumnValues above, just
+// returning the column's discovered data_type instead of its distinct values — drives whether
+// BETWEEN/comparison operators render date or number inputs.
+async function resolveColumnType(column, datasourceId, datasourceOptions) {
+  if (datasourceId) {
+    try {
+      const { columns } = await getDatasourceDetail(datasourceId);
+      const match = (columns || []).find((c) => c.column_name === column);
+      if (match) return match.data_type || '';
+    } catch (_) {
+      // Saved datasource_id no longer resolves — fall through to the legacy search.
+    }
+  }
   for (const ds of datasourceOptions) {
+    if (ds.id === datasourceId) continue;
     try {
       const { columns } = await getDatasourceDetail(ds.id);
       const match = (columns || []).find((c) => c.column_name === column);
@@ -107,7 +135,7 @@ async function resolveColumnType(column, datasourceOptions) {
  * (onApply). `datasourceOptions` is only needed for resolving IN/NOT IN dropdown values
  * (see resolveColumnValues above) — harmless to omit for dashboards with no such filters.
  */
-export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters }) {
+export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters, columnValueHints = {} }) {
   const [localValues, setLocalValues] = useState(filters);
   const [applying, setApplying] = useState(false);
   // Collapsed by default — a row of always-shown input boxes (empty or filled) took a full
@@ -135,29 +163,72 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
   // aren't a "pick one value" shape (see the read-only "Edit in Filters" treatment for the
   // former just below).
   useEffect(() => {
-    const columnsNeeded = localValues.filter((f) => isMultiSelect(f) || isPlainValue(f)).map((f) => f.column);
-    const toFetch = columnsNeeded.filter((c) => !fetchedColumnsRef.current.has(c));
+    const rowsNeeded = localValues.filter((f) => isMultiSelect(f) || isPlainValue(f));
+    // Cache key includes datasource_id, not just the column name — a filter's OWN
+    // datasource_id can change after this column was already "resolved" once (e.g. re-saving
+    // it through "Add and edit filters" to pick a datasource, per the conversation this was
+    // diagnosed in: saving picked up the new datasource_id, but this component's own
+    // fetch-once-per-column-name cache still remembered the column as already (unsuccessfully)
+    // tried from BEFORE the save, so the new, now-correct fetch never actually ran). Keying on
+    // both means a datasource_id change is correctly treated as "needs fetching again."
+    const cacheKeyFor = (f) => `${f.column}::${f.datasource_id || ''}`;
+    const toFetch = rowsNeeded.filter((f) => !fetchedColumnsRef.current.has(cacheKeyFor(f)));
     if (toFetch.length === 0) return;
-    toFetch.forEach((column) => {
-      fetchedColumnsRef.current.add(column);
+    toFetch.forEach((f) => {
+      const { column, datasource_id: datasourceId } = f;
+      fetchedColumnsRef.current.add(cacheKeyFor(f));
       setLoadingColumns((prev) => ({ ...prev, [column]: true }));
-      resolveColumnValues(column, datasourceOptions)
-        .then((values) => setOptionsByColumn((prev) => ({ ...prev, [column]: values })))
-        .catch(() => setOptionsByColumn((prev) => ({ ...prev, [column]: [] })))
+      resolveColumnValues(column, datasourceId, datasourceOptions)
+        .then((values) => {
+          // Falls back to values derived from this dashboard's own already-loaded widget rows
+          // (see DashboardCanvasEditor.jsx's filterColumnValueHints) when the datasource-search
+          // comes back empty — e.g. a registered datasource's OWN column metadata can be
+          // incomplete/stale even though the column clearly has real data (every widget using
+          // it renders fine) — see the conversation this was diagnosed in.
+          const hint = columnValueHints[column] || [];
+          const resolved = values.length > 0 ? values : hint;
+          setOptionsByColumn((prev) => ({ ...prev, [column]: resolved }));
+        })
+        .catch(() => setOptionsByColumn((prev) => ({ ...prev, [column]: columnValueHints[column] || [] })))
         .finally(() => setLoadingColumns((prev) => ({ ...prev, [column]: false })));
     });
   }, [localValues, datasourceOptions]);
+
+  // Backfills a column whose resolution already finished empty (no API match AND no hint
+  // available yet) once real hint data actually arrives — e.g. this dashboard's widgets were
+  // still loading their own rows at the exact moment the value fetch above resolved, so
+  // columnValueHints[column] was still `undefined`/empty then even though it becomes real data
+  // moments later. Only ever fills in an EMPTY result, never overwrites one that already has
+  // real values (from the API or an earlier hint), so this can't clobber a good answer.
+  useEffect(() => {
+    setOptionsByColumn((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      Object.keys(prev).forEach((column) => {
+        if (prev[column]?.length > 0) return;
+        const hint = columnValueHints[column];
+        if (hint?.length > 0) {
+          next[column] = hint;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [columnValueHints]);
 
   // Same lazy, once-per-column pattern as the values fetch above — resolves whether a
   // BETWEEN/comparison filter's column is date-typed or numeric, so the right input type
   // renders instead of a plain text field.
   useEffect(() => {
-    const columnsNeeded = localValues.filter((f) => isDateRange(f) || isComparison(f)).map((f) => f.column);
-    const toFetch = columnsNeeded.filter((c) => !fetchedTypesRef.current.has(c));
+    const rowsNeeded = localValues.filter((f) => isDateRange(f) || isComparison(f));
+    // Same datasource_id-aware cache key as the value fetch above, same reason.
+    const cacheKeyFor = (f) => `${f.column}::${f.datasource_id || ''}`;
+    const toFetch = rowsNeeded.filter((f) => !fetchedTypesRef.current.has(cacheKeyFor(f)));
     if (toFetch.length === 0) return;
-    toFetch.forEach((column) => {
-      fetchedTypesRef.current.add(column);
-      resolveColumnType(column, datasourceOptions)
+    toFetch.forEach((f) => {
+      const { column, datasource_id: datasourceId } = f;
+      fetchedTypesRef.current.add(cacheKeyFor(f));
+      resolveColumnType(column, datasourceId, datasourceOptions)
         .then((dataType) => setTypeByColumn((prev) => ({ ...prev, [column]: dataType })))
         .catch(() => setTypeByColumn((prev) => ({ ...prev, [column]: '' })));
     });

@@ -1,16 +1,9 @@
 import { useEffect, useState } from 'react';
 import Api from '../../utils/api';
 import { Urls } from '../../utils/url';
+import { defaultProRulesDate, normalizeProRuleRow, statusColor } from './cellProRulesStatus';
 
 const FILTERS = ['All', 'Issues only', 'Warnings', 'OK only', 'Accessibility', 'Capacity', 'Mobility', 'Integrity', 'Quality'];
-
-const statusColor = (s = '') => {
-  const v = s.toLowerCase();
-  if (v.includes('issue'))   return '#dc2626';
-  if (v.includes('warning')) return '#d97706';
-  if (v === 'ok')            return '#16a34a';
-  return '#374151';
-};
 
 const categoryColor = (c = '') => {
   switch (c.toLowerCase()) {
@@ -28,7 +21,7 @@ const CellProRulesModalContent = ({ cellId, cellName }) => {
   const [filteredData, setFilteredData] = useState([]);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState(null);
-  const [date, setDate]                 = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate]                 = useState(defaultProRulesDate);
   const [filter, setFilter]             = useState('All');
 
   // tech is derived from response data, not selected
@@ -46,7 +39,7 @@ const CellProRulesModalContent = ({ cellId, cellName }) => {
         inst: 0,
       });
       if (response?.status === 200 && response.data?.data) {
-        setCellData(response.data.data);
+        setCellData(response.data.data.map(normalizeProRuleRow));
       } else {
         setCellData([]); setError('No data returned from API');
       }
@@ -63,16 +56,16 @@ const CellProRulesModalContent = ({ cellId, cellName }) => {
     if (filter === 'All')  { setFilteredData(cellData); return; }
     const n = filter.toLowerCase();
     setFilteredData(cellData.filter((row) => {
-      if (n === 'issues only') return row.status?.toLowerCase().includes('issue');
-      if (n === 'warnings')    return row.status?.toLowerCase().includes('warning');
-      if (n === 'ok only')     return row.status?.toLowerCase() === 'ok';
+      if (n === 'issues only') return row._statusKey === 'issue';
+      if (n === 'warnings')    return row._statusKey === 'warning';
+      if (n === 'ok only')     return row._statusKey === 'ok';
       return row.category?.toLowerCase() === n;
     }));
   };
 
-  const ok       = cellData.filter((r) => r.status?.toLowerCase() === 'ok').length;
-  const issues   = cellData.filter((r) => r.status?.toLowerCase().includes('issue')).length;
-  const warnings = cellData.filter((r) => r.status?.toLowerCase().includes('warning')).length;
+  const ok       = cellData.filter((r) => r._statusKey === 'ok').length;
+  const issues   = cellData.filter((r) => r._statusKey === 'issue').length;
+  const warnings = cellData.filter((r) => r._statusKey === 'warning').length;
   const total    = cellData.length;
   const health   = total ? Math.round((ok / total) * 100) : 0;
 
@@ -170,9 +163,9 @@ const CellProRulesModalContent = ({ cellId, cellName }) => {
                   <td className="px-3 py-2 border-b border-slate-100 font-medium">{item.tech || item.technology || '-'}</td>
                   <td className="px-3 py-2 border-b border-slate-100">{item.rule_name || '-'}</td>
                   <td className="px-3 py-2 border-b border-slate-100 font-semibold" style={{ color: categoryColor(item.category) }}>{item.category || '-'}</td>
-                  <td className="px-3 py-2 border-b border-slate-100">{item.details || '-'}</td>
-                  <td className="px-3 py-2 border-b border-slate-100 font-semibold" style={{ color: statusColor(item.status) }}>{item.status || '-'}</td>
-                  <td className="px-3 py-2 border-b border-slate-100 text-slate-600">{item.issues || item.remarks || '-'}</td>
+                  <td className="px-3 py-2 border-b border-slate-100">{item._details || '-'}</td>
+                  <td className="px-3 py-2 border-b border-slate-100 font-semibold" style={{ color: statusColor(item._status) }}>{item._status || '-'}</td>
+                  <td className="px-3 py-2 border-b border-slate-100 text-slate-600" style={item._issuesColor ? { color: item._issuesColor } : undefined}>{item._issues || '-'}</td>
                 </tr>
               ))
             )}

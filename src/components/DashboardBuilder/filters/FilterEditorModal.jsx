@@ -72,22 +72,43 @@ function defaultValueForOperator(operator) {
   return '';
 }
 
-// `dashboard.global_filters` only stores {column, operator, value} — name/datasourceId here
-// are frontend-only display/lookup metadata, kept in local component state and folded away
-// (not persisted) when rows are saved back — see Phase 18 plan's B1 note on why.
+// `dashboard.global_filters` is stored as opaque JSON — every filter object round-trips
+// exactly as sent, no field allowlist/stripping (confirmed with the backend team) — so
+// `datasource_id` is now persisted alongside column/operator/value, closing the "which
+// datasource does this saved filter's column actually belong to" gap that FilterPanel.jsx's
+// value dropdown and column-type detection previously had to guess at (searching every
+// registered datasource's own column metadata, unreliably — see the conversation this was
+// diagnosed in). A filter saved before this change simply has no datasource_id yet; readers
+// fall back to the old guessing behavior for those, same as before.
+// `dashboard.global_filters` is opaque JSON — every filter object round-trips exactly as
+// sent, no field allowlist/stripping (confirmed with the backend team, same as datasource_id
+// just above) — so the custom "Filter Name" is now persisted too, closing the gap where
+// typing e.g. "regionnnn" as a friendlier label reverted to the raw column name ("roleid")
+// the next time this modal reopened, since there was nowhere saved to read it back from. A
+// filter saved before this change has no `name` yet; falls back to the column name, same as
+// before.
 function toEditableRow(filter) {
   return {
     id: nextLocalId(),
-    label: filter.column || '',
+    label: filter.name || filter.column || '',
     column: filter.column || '',
     operator: filter.operator || '=',
     value: filter.value ?? defaultValueForOperator(filter.operator),
-    datasourceId: filter.datasourceId || '',
+    datasourceId: filter.datasource_id || '',
   };
 }
 
 function toSavedFilter(row) {
-  return { column: row.column, operator: row.operator, value: row.value };
+  return {
+    column: row.column,
+    operator: row.operator,
+    value: row.value,
+    datasource_id: row.datasourceId || undefined,
+    // Only saved when it actually differs from the column name — an untouched "Filter Name"
+    // field (still showing the column name as its placeholder-like default) doesn't need its
+    // own redundant copy stored.
+    name: row.label && row.label !== row.column ? row.label : undefined,
+  };
 }
 
 /**

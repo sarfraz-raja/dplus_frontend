@@ -34,6 +34,15 @@ function isPublished(dashboard) {
 // Strips a trailing " (Copy)" (the old fixed suffix) or " (N)" (the new progressive one) so
 // cloning an already-cloned dashboard suggests "A (2)" next, not "A (Copy) (Copy)" or "A (1)
 // (1)" piling up — cloning "A (3)" again suggests "A (4)", not "A (3) (1)".
+// Collapsed dashboards rail: up to 3 initials, one per word ("Telecom KPI Dashboard Main" -> "TKD");
+// a single-word name falls back to its first two letters ("Overview" -> "OV").
+function dashboardInitials(name) {
+  const words = String(name || '').trim().split(/[\s_\-/]+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return words.slice(0, 3).map((w) => w[0]).join('').toUpperCase();
+}
+
 function baseDashboardName(name) {
   return (name || '').replace(/\s*\(Copy\)$/i, '').replace(/\s*\(\d+\)$/, '').trim();
 }
@@ -1228,7 +1237,16 @@ const DashboardBuilder = () => {
                   sidebarCollapsed ? 'justify-center py-2.5' : 'text-left px-4 py-2.5'
                 } ${previewId === d.id ? 'bg-white/80 border-l-2 border-l-[#EC7D09]' : 'hover:bg-white/50'}`}
               >
-                <LayoutGrid size={14} className={previewId === d.id ? 'text-[#EC7D09]' : 'text-slate-400'} />
+                {sidebarCollapsed ? (
+                  <span
+                    aria-label={d.name}
+                    className={`text-[0.625rem] font-semibold leading-none tracking-wide ${previewId === d.id ? 'text-[#EC7D09]' : 'text-slate-500'}`}
+                  >
+                    {dashboardInitials(d.name)}
+                  </span>
+                ) : (
+                  <LayoutGrid size={14} className={previewId === d.id ? 'text-[#EC7D09]' : 'text-slate-400'} />
+                )}
                 {!sidebarCollapsed && (
                   <span className={`flex-1 flex items-center gap-1.5 min-w-0 text-sm truncate ${previewId === d.id ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>
                     <span className="truncate">{d.name}</span>

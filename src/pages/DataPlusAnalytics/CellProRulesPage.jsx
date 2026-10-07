@@ -7,6 +7,7 @@ import nokiaPrePostActions from '../../store/actions/nokiaPrePost-actions';
 import AutoSuggestion from '../../components/FormElements/AutoSuggestion';
 import DataTable from '../../components/DataTable';
 import Button from '../../components/Button';
+import { defaultProRulesDate, normalizeProRuleRow, statusColor } from '../../components/MapsUsingDeckgl/cellProRulesStatus';
 
 const FILTERS = ['All', 'Issues only', 'Warnings', 'OK only', 'Accessibility', 'Capacity', 'Mobility', 'Integrity', 'Quality'];
 
@@ -14,18 +15,10 @@ const COLUMNS = [
     { label: 'Tech',             key: '_tech'     },
     { label: 'Rule Name',        key: 'rule_name' },
     { label: 'Category',         key: '_category' },
-    { label: 'Details',          key: 'details'   },
+    { label: 'Details',          key: '_details'  },
     { label: 'Status',           key: '_status'   },
     { label: 'Issues / Remarks', key: '_issues'   },
 ];
-
-const statusColor = (s = '') => {
-    const v = s.toLowerCase();
-    if (v.includes('issue'))   return '#dc2626';
-    if (v.includes('warning')) return '#d97706';
-    if (v === 'ok')            return '#16a34a';
-    return '#374151';
-};
 
 const categoryColor = (c = '') => {
     switch (c.toLowerCase()) {
@@ -41,8 +34,8 @@ const categoryColor = (c = '') => {
 const renderCell = (row, col) => {
     if (col.key === '_tech')     return <span className="font-medium text-slate-700">{row.tech || row.technology || '-'}</span>;
     if (col.key === '_category') return <span className="font-semibold" style={{ color: categoryColor(row.category) }}>{row.category || '-'}</span>;
-    if (col.key === '_status')   return <span className="font-semibold" style={{ color: statusColor(row.status) }}>{row.status || '-'}</span>;
-    if (col.key === '_issues')   return <span className="text-slate-600">{row.issues || row.remarks || '-'}</span>;
+    if (col.key === '_status')   return <span className="font-semibold" style={{ color: statusColor(row._status) }}>{row._status || '-'}</span>;
+    if (col.key === '_issues')   return <span className="text-slate-600" style={row._issuesColor ? { color: row._issuesColor } : undefined}>{row._issues || '-'}</span>;
     const val = row[col.key];
     return <span className="text-slate-700">{val ?? '-'}</span>;
 };
@@ -61,7 +54,7 @@ const CellProRulesPage = () => {
     });
 
     const [cellName,     setCellName]     = useState(urlCellName);
-    const [date,         setDate]         = useState(new Date().toISOString().slice(0, 10));
+    const [date,         setDate]         = useState(defaultProRulesDate);
     const [cellData,     setCellData]     = useState([]);
     const [filteredData, setFilteredData] = useState([]);
     const [loading,      setLoading]      = useState(false);
@@ -83,7 +76,7 @@ const CellProRulesPage = () => {
                 inst: 0,
             });
             if (response?.status === 200 && response.data?.data) {
-                setCellData(response.data.data);
+                setCellData(response.data.data.map(normalizeProRuleRow));
             } else {
                 setCellData([]); setError('No data returned from API.');
             }
@@ -100,9 +93,9 @@ const CellProRulesPage = () => {
         if (filter === 'All')  { setFilteredData(cellData); return; }
         const n = filter.toLowerCase();
         setFilteredData(cellData.filter((row) => {
-            if (n === 'issues only') return row.status?.toLowerCase().includes('issue');
-            if (n === 'warnings')    return row.status?.toLowerCase().includes('warning');
-            if (n === 'ok only')     return row.status?.toLowerCase() === 'ok';
+            if (n === 'issues only') return row._statusKey === 'issue';
+            if (n === 'warnings')    return row._statusKey === 'warning';
+            if (n === 'ok only')     return row._statusKey === 'ok';
             return row.category?.toLowerCase() === n;
         }));
     };
@@ -113,9 +106,9 @@ const CellProRulesPage = () => {
         fetchCellProRules(name, date);
     };
 
-    const ok       = cellData.filter((r) => r.status?.toLowerCase() === 'ok').length;
-    const issues   = cellData.filter((r) => r.status?.toLowerCase().includes('issue')).length;
-    const warnings = cellData.filter((r) => r.status?.toLowerCase().includes('warning')).length;
+    const ok       = cellData.filter((r) => r._statusKey === 'ok').length;
+    const issues   = cellData.filter((r) => r._statusKey === 'issue').length;
+    const warnings = cellData.filter((r) => r._statusKey === 'warning').length;
     const total    = cellData.length;
     const health   = total ? Math.round((ok / total) * 100) : 0;
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ResponsiveGridLayout } from 'react-grid-layout';
 import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, Pencil, Palette, Filter, Maximize2 } from 'lucide-react';
 import 'react-grid-layout/css/styles.css';
@@ -816,6 +816,34 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // Phase 18 — dashboard-level global_filters, only meaningful when backendId is set.
   const [dashboardFilters, setDashboardFilters] = useState(initialGlobalFilters);
   const [filterDatasourceOptions, setFilterDatasourceOptions] = useState([]);
+  // Fallback value source for FilterPanel's value dropdowns — derived directly from rows
+  // already loaded for this dashboard's own widgets, rather than a fresh query. Exists because
+  // resolveColumnValues (FilterPanel.jsx) has to GUESS which registered datasource a saved
+  // filter's column belongs to (global_filters never persisted a datasourceId — see its own
+  // doc comment) by searching every registered datasource's OWN discovered column metadata;
+  // that metadata can be incomplete/stale for a query-based datasource whose schema was never
+  // (re)discovered, even when the underlying SQL clearly selects the column and every widget
+  // using it renders real values fine (confirmed live: a saved "region" filter's dropdown
+  // stayed empty and never even fired a lookup, despite region appearing correctly in every
+  // chart on the dashboard) — see the conversation this was diagnosed in. Scanning already-
+  // fetched widget rows sidesteps that gap entirely: if a column has real values ANYWHERE on
+  // this dashboard, they're already sitting in chartLibraryData with zero extra network cost.
+  const filterColumnValueHints = useMemo(() => {
+    const neededColumns = dashboardFilters.map((f) => f.column).filter(Boolean);
+    if (neededColumns.length === 0) return {};
+    const hints = {};
+    Object.values(chartLibraryData).forEach((entry) => {
+      (entry.rows || []).forEach((row) => {
+        neededColumns.forEach((col) => {
+          const v = row[col];
+          if (v === null || v === undefined) return;
+          if (!hints[col]) hints[col] = new Set();
+          if (hints[col].size < 200) hints[col].add(String(v));
+        });
+      });
+    });
+    return Object.fromEntries(Object.entries(hints).map(([k, v]) => [k, [...v]]));
+  }, [chartLibraryData, dashboardFilters]);
   // Slicers — a standalone backend resource (own id/CRUD), unlike dashboardFilters above,
   // so they're loaded via their own GET .../slicers call rather than riding along on the
   // dashboard object. Only meaningful once backendId is set (a not-yet-saved dashboard has
@@ -2760,7 +2788,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               always did, with no separate strap needed for the collapsed case. */}
           {backendId && showFiltersInline && dashboardFilters.length > 0 && (
             <div className="min-w-[200px]" style={{ flex: 1 }}>
-              <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} />
+              {/* key={backendId} forces a brand-new FilterPanel instance (fresh
+                  fetchedColumnsRef/optionsByColumn) whenever the VIEWED dashboard changes —
+                  without it, React just reuses the same instance across dashboard switches
+                  (no full remount), so a value dropdown's "fetch once per column, ever" cache
+                  from one dashboard silently carried over and blocked ever re-fetching on a
+                  DIFFERENT dashboard, even one with genuinely different data — see the
+                  conversation this was diagnosed in (a live network capture proved the fetch
+                  and its response were both correct in isolation, yet the dropdown stayed
+                  empty once revisited after viewing any other dashboard first). */}
+              <FilterPanel key={backendId} filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} columnValueHints={filterColumnValueHints} />
             </div>
           )}
           </div>
@@ -3121,7 +3158,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               even with nothing inside it otherwise. */}
           {backendId && showFiltersInline && dashboardFilters.length > 0 && !(editable && showChrome) && (
             <div className="dbe-filter-strap">
-              <FilterPanel filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} />
+              <FilterPanel key={backendId} filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} columnValueHints={filterColumnValueHints} />
             </div>
           )}
           {/* Cross-filter clear chip — shown in both editable and read-only/embedded views,

@@ -72,7 +72,9 @@ export default function SingleSelectFilterInput({ options = [], value = '', onCh
           <div className="overflow-y-auto py-1">
             {loading && <div className="px-3 py-1.5 text-xs text-slate-400">Loading…</div>}
             {!loading && filteredOptions.length === 0 && (
-              <div className="px-3 py-1.5 text-xs text-slate-400">No values found</div>
+              <div className="px-3 py-1.5 text-xs text-slate-400">
+                No values found{options.length === 0 ? '' : ` (${options.length} available, none match "${search}")`}
+              </div>
             )}
             {!loading && filteredOptions.map((opt) => (
               <button
