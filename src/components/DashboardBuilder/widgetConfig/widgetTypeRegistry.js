@@ -130,6 +130,20 @@ const BG_GRADIENT_FIELDS = [
   { key: 'bgGradientTo', label: 'Background gradient to', type: 'color', default: null },
 ];
 
+// Widget card border, drawn on the dashboard tile itself (DashboardCanvasEditor.jsx) and the
+// Charts-tab preview — see resolveCardBorder in themedStyle.js. `showCardBorder` is the on/off
+// gate shown in the Border section's header; its `default: null` means "unset — follow the
+// dashboard/theme", so a widget can still say Off while the dashboard says On (and vice versa).
+// `card*` prefix, not `border*`: Shape already owns borderColor/borderWidth for its own outline.
+// Same keys in DASHBOARD_STYLE_FIELDS so a dashboard/theme can turn it on for every widget.
+export const CARD_BORDER_FIELDS = [
+  { key: 'showCardBorder', label: 'Show border', type: 'select', default: null, options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
+  { key: 'cardBorderWidth', label: 'Border width (px)', type: 'number', default: null, min: 1, max: 8 },
+  { key: 'cardBorderStyle', label: 'Border style', type: 'select', default: 'solid', asDropdown: true, options: [{ value: 'solid', label: 'Solid' }, { value: 'dashed', label: 'Dashed' }, { value: 'dotted', label: 'Dotted' }] },
+  { key: 'cardBorderColor', label: 'Border color', type: 'color', default: null },
+  { key: 'cardBorderRadius', label: 'Corner radius (px)', type: 'number', default: null, min: 0, max: 24 },
+];
+
 // Title/label color+weight+size+font — every chartLibrary chart_type has a title (the chart's
 // own `name`, rendered as `label`/`title` by whichever Widgets/*.jsx component it maps to).
 // `chartLibraryStyleFieldsFor` below previously only ever exposed a bare `titleColor` field
@@ -463,7 +477,7 @@ const WIDGET_TYPE_REGISTRY = {
     label: 'Real Widget', icon: Server, iconColor: '#0EA5E9', component: ChartLibraryWidgetView, defaultSize: { w: 48, h: 40 }, dataShape: null, builderVisible: false,
     styleFields: [
       ...TITLE_TEXT_STYLE_FIELDS,
-      BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, ...AXIS_TEXT_STYLE_FIELDS,
+      BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...CARD_BORDER_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, ...AXIS_TEXT_STYLE_FIELDS,
     ],
   },
 };
@@ -683,7 +697,7 @@ export function chartLibraryStyleFieldsFor(chartType, mapping) {
   const hasSeries = ['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR'].includes(chartType) && !!mapping?.series;
   return [
     ...TITLE_TEXT_STYLE_FIELDS,
-    BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS,
+    BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...CARD_BORDER_FIELDS,
     ...(hasValueLabel ? VALUE_TEXT_STYLE_FIELDS : [VALUE_DECIMALS_FIELD]),
     ...(hasAxis ? AXIS_TEXT_STYLE_FIELDS : []),
     ...(hasSeries ? seriesExtraStyleFields(chartType) : (CHART_TYPE_EXTRA_STYLE_FIELDS[chartType] || [])),

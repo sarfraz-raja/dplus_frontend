@@ -1,5 +1,6 @@
 import { FONT_FAMILY_OPTIONS } from '../../../theme/tokens';
 import { POSITION_OPTIONS } from '../../Widgets/titlePositions';
+import { CARD_BORDER_FIELDS } from '../widgetConfig/widgetTypeRegistry';
 
 // Phase 19 — dashboard-level style defaults, rendered via the same generic WidgetStyleFields
 // renderer every widget's own per-instance style already uses (no new mechanism). Shared
@@ -18,6 +19,9 @@ const DASHBOARD_STYLE_FIELDS = [
   // (widgetTypeRegistry.js's BG_GRADIENT_FIELDS), so the cascade needs no separate naming.
   { key: 'bgGradientFrom', label: 'Widget background gradient from', type: 'color', default: null },
   { key: 'bgGradientTo', label: 'Widget background gradient to', type: 'color', default: null },
+  // Widget card border — same keys as each widget's own Border section (CARD_BORDER_FIELDS),
+  // so switching it on here borders every widget on the dashboard that hasn't set its own.
+  ...CARD_BORDER_FIELDS,
   { key: 'accentColor', label: 'Accent color', type: 'color', default: null },
   // Styles the widget titles' cascade (every widget's own title text) — not the dashboard's
   // own title, see the dashboardTitle* fields below for that.

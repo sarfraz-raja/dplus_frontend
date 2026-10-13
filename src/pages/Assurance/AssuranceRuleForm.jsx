@@ -111,6 +111,7 @@ const AssuranceRuleForm = () => {
     // from the path rather than a prop.
     const mode = location.pathname.includes('/edit/') ? 'edit' : location.pathname.includes('/view/') ? 'view' : 'create';
 
+    
     const [currentStep, setCurrentStep] = useState(1);
     const [groupList, setGroupList] = useState([]);
     const [submitting, setSubmitting] = useState(false);

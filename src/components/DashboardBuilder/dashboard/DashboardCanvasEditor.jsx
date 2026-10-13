@@ -14,8 +14,11 @@ import SeriesColorFields from '../widgetConfig/SeriesColorFields';
 import { useTheme } from '../../../context/ThemeContext';
 import { chartTokens, CHART_PALETTE, darkenHex } from '../../../theme/tokens';
 import { DEFAULT_STATUS_COLORS, STATUS_LABELS } from '../legacy/widgets/KpiTable';
-import { resolveStyleForMode, mergeStyleLayers, setModeColor, surfaceBg } from '../utils/themedStyle';
+import { resolveStyleForMode, mergeStyleLayers, setModeColor, surfaceBg, resolveCardBorder, cardBorderDefaults, CARD_BORDER_KEYS, CARD_BORDERED_CLASS } from '../utils/themedStyle';
 import StyleModeSwitch from '../widgetConfig/StyleModeSwitch';
+import ThemePicker from './ThemePicker';
+import SelectedWidgetDetails from './SelectedWidgetDetails';
+import StyleModeTint from '../widgetConfig/StyleModeTint';
 import { exportWidgetCSV, exportWidgetPNG, exportDashboardCSV, exportDashboardPNG, exportDashboardPDF, exportDashboardPDFMultiPage, compositeDashboardCanvas, exportRowsCSV } from '../utils/exportUtils';
 import { loadDatasources } from '../datasource/dashboardDatasources';
 import { aggregateDatasourceRows } from '../legacy/mock/dbDataSource';
@@ -42,6 +45,43 @@ import { sortWidgetsByRecency, withDatasourceOnly } from '../charts/sortWidgets'
 import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
 
 // Dashboard-level color fields — stored per mode (light/dark), see utils/themedStyle.js.
+// Widget types that never get the card border: a Shape draws its own outline (its own
+// borderColor/borderWidth fields) and a Text Box is a bare label, not a card.
+const NO_CARD_BORDER_TYPES = new Set(['shape', 'textBox']);
+
+// "Apply to all widgets" (Dashboard Style → Border): drops a placement's own border settings,
+// both flat and per-mode, so it follows the dashboard/theme border again.
+function stripCardBorder(style) {
+  if (!style) return style;
+  const next = { ...style };
+  for (const k of CARD_BORDER_KEYS) delete next[k];
+  if (next.colors) {
+    next.colors = Object.fromEntries(Object.entries(next.colors).map(([m, c]) => {
+      const rest = { ...c };
+      for (const k of CARD_BORDER_KEYS) delete rest[k];
+      return [m, rest];
+    }));
+  }
+  return next;
+}
+
+// Collapsible section header for the Theme popover — a shaded band (bold title, dark left bar)
+// with a chevron; `summary` stays visible while collapsed (linked theme name / override count).
+function PopoverSectionHeader({ title, summary, open, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex w-full items-center gap-2 rounded-md border-l-[3px] border-slate-600 bg-slate-100 px-2.5 py-1.5 text-left hover:bg-slate-200"
+    >
+      <span className="text-[12px] font-bold uppercase tracking-wider text-slate-700">{title}</span>
+      {summary && <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">· {summary}</span>}
+      <ChevronDown size={14} aria-hidden="true" className={`ml-auto shrink-0 text-slate-500 transition-transform${open ? '' : ' -rotate-90'}`} />
+    </button>
+  );
+}
+
 const DASHBOARD_COLOR_KEYS = new Set([...DASHBOARD_STYLE_FIELDS.filter((f) => f.type === 'color').map((f) => f.key), 'palette']);
 
 // Widget types whose legend/slice colors come from the shared theme palette (cycling by
@@ -644,7 +684,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // onFiltersState below), e.g. DashboardBuilder.jsx's read-only preview header. Left true for
   // EmbeddedDashboard and the editable editor, which have no such outer header of their own.
   backendId = null, initialGlobalFilters = [], deepLinkFilters = null, onFiltersState, showFiltersInline = true,
-  initialDashboardStyle = {}, onDashboardStyleState,
+  initialDashboardStyle = {}, initialThemeId = null, onDashboardStyleState,
 }, ref) {
   // Pending destructive action awaiting user confirmation via <ConfirmModal/> below —
   // { title, message, run } | null. Replaces window.confirm/redux ALERTS with the app's
@@ -856,12 +896,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // seeds new widgets' own `style` on creation but never touches an already-styled widget.
   const [dashboardStyle, setDashboardStyle] = useState(initialDashboardStyle);
   const [dashboardStylePanelOpen, setDashboardStylePanelOpen] = useState(false);
+  // Theme popover's two sections — open by default; kept while this editor is open, so
+  // reopening the popover doesn't reset them.
+  const [themeSectionOpen, setThemeSectionOpen] = useState(true);
+  const [overridesSectionOpen, setOverridesSectionOpen] = useState(true);
   // Snapshot of what this editor opened with — captured once per mount (this component
   // remounts on a `key` change, e.g. switching which dashboard is being edited, so this
   // naturally recaptures on that). Compared against current state in `isDirty` below, exposed
   // to DashboardBuilder.jsx so "New dashboard"/navigating away can warn before discarding
   // unsaved work instead of silently dropping it.
-  const initialSnapshotRef = useRef(JSON.stringify({ name: initialName, layout: initialLayout, widgets: initialWidgets, dashboardStyle: initialDashboardStyle, tabs: initialTabs }));
+  const initialSnapshotRef = useRef(JSON.stringify({ name: initialName, layout: initialLayout, widgets: initialWidgets, dashboardStyle: initialDashboardStyle, themeId: initialThemeId, tabs: initialTabs }));
   // "Add and edit filters" trigger lives in the toolbar (FiltersToggleButton, shared with
   // DashboardBuilder.jsx's preview header) rather than as a gear icon on FilterPanel's own
   // strip (which only appears once a filter already exists) — reachable before the first
@@ -873,7 +917,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // WidgetStyleFields already does for per-widget fields) — local `dashboardStyle` always wins
   // over it once set, same override rule as everywhere else in this cascade.
   const [themeOptions, setThemeOptions] = useState([]);
-  const [boundThemeId, setBoundThemeId] = useState(null);
+  const [boundThemeId, setBoundThemeId] = useState(initialThemeId);
   const [boundThemeStyle, setBoundThemeStyle] = useState({});
   // Theme first, local dashboard overrides on top — the actual live cascade value, recomputed
   // every render (cheap, both inputs are plain objects) so any widget that hasn't set its own
@@ -950,7 +994,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   useImperativeHandle(ref, () => ({
     // True once name/layout/widgets/dashboardStyle have changed from what this editor opened
     // with — see initialSnapshotRef above.
-    isDirty: () => JSON.stringify({ name, layout, widgets, dashboardStyle, tabs }) !== initialSnapshotRef.current,
+    isDirty: () => JSON.stringify({ name, layout, widgets, dashboardStyle, themeId: boundThemeId, tabs }) !== initialSnapshotRef.current,
     exportCSV: () => exportDashboardCSV(name, collectExportEntries()),
     exportPNG: () => exportDashboardPNG(containerRef.current, Object.values(widgetNodeRefs.current), name),
     exportPDF: () => exportPDFAllTabs(),
@@ -1013,6 +1057,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const resolvedBgColor = surfaceBg(styleModeIsDark);
   // Dashboard/theme style as it resolves for the mode being edited — the panels' inherited defaults.
   const styleModeDashboardStyle = resolveStyleForMode(rawDashboardStyle, styleModeIsDark);
+  // How many fields this dashboard sets itself (over its linked Theme) — a color set for light
+  // and dark counts once. Shown in the Theme popover next to "Clear overrides".
+  const dashboardOverrideCount = (() => {
+    const { colors, ...flat } = dashboardStyle || {};
+    const isSet = (v) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0);
+    const keys = new Set(Object.keys(flat).filter((k) => isSet(flat[k])));
+    for (const m of ['light', 'dark']) Object.entries(colors?.[m] || {}).forEach(([k, v]) => { if (isSet(v)) keys.add(k); });
+    return keys.size;
+  })();
 
   // `posOverride` is set when a widget is dropped from the palette at a specific grid
   // cell (see handleDrop below) — the click-to-add path still uses findFreeSlot's
@@ -1067,7 +1120,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const picked = chartId ? chartLibraryList.find((w) => w.id === chartId) : null;
       setWidgets((prev) => ({
         ...prev,
-        [id]: { type, title: picked?.name || def.label, dataSource: { type: 'chartLibrary', widgetId: chartId || '' }, style: { ...dashboardStyleSeed } },
+        [id]: { type, title: picked?.name || def.label, dataSource: { type: 'chartLibrary', widgetId: chartId || '', chartName: picked?.name }, style: { ...dashboardStyleSeed } },
       }));
       setSelectedId(id);
       if (chartId) {
@@ -1092,7 +1145,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               title: picked?.name || detail.name,
               dataSource: {
                 type: 'chartLibrary', widgetId: chartId, chartType: detail.chart_type, mapping: detail.mapping,
-                datasourceId: detail.datasource_id, datasourceName,
+                datasourceId: detail.datasource_id, datasourceName, chartName: detail.name,
               },
               style: mergeStyleLayers(dashboardStyleSeed, detail.mapping?.style),
             });
@@ -1729,13 +1782,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     return () => { cancelled = true; };
   }, [boundThemeId]);
 
-  // Binds/unbinds a shared Theme — persisted immediately (unlike local dashboardStyle edits,
-  // which only persist via the popover's own field changes) since picking a theme from the
-  // dropdown is a deliberate, singular action, not a value being typed field-by-field.
-  const bindTheme = async (themeId) => {
+  // Binds/unbinds a shared Theme. Staged only, like every other editor change — saved by
+  // "Save dashboard" (DashboardBuilder.jsx's handleSave, via onDashboardStyleState), undone by
+  // Cancel.
+  const bindTheme = (themeId) => {
     setBoundThemeId(themeId || null);
-    if (!backendId) return;
-    await updateDashboard(backendId, { theme_id: themeId || null });
   };
 
   // Mirrors filters/datasourceOptions out to a parent that wants to render its own
@@ -2065,14 +2116,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   };
   const stableOnDrillUp = useCallback((backendWidgetId, level) => handleDrillUpRef.current(backendWidgetId, level), []);
 
-  // Phase 19a — persists the dashboard-level style defaults (bgColor/accentColor/titleColor/
-  // titleWeight/titleSize) into `theme`. Local-only (no backendId) dashboards can still edit
-  // this in-session — it just won't survive a refresh, same limitation Filters/Publish already
-  // have for unsaved dashboards.
-  const persistDashboardStyle = async (next) => {
+  // Phase 19a — the dashboard's own style overrides (`theme`). Staged only, same as bindTheme
+  // above and every widget edit: "Save dashboard" writes them (DashboardBuilder.jsx's handleSave,
+  // via onDashboardStyleState), Cancel discards them.
+  const persistDashboardStyle = (next) => {
     setDashboardStyle(next);
-    if (!backendId) return;
-    await updateDashboard(backendId, { theme: next });
   };
 
   // "Add Widget" list: the chart types take label/icon/color/ORDER from CHART_TYPE_META — the same
@@ -2230,10 +2278,21 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // cross-filter's own click, applied one level above the chart components (not inside
     // BarChart.jsx etc.) so those 4 components stay otherwise unchanged.
     const isCrossFilterTarget = !!activeCrossFilter?.targetIds.includes(l.i);
+    // Card border, drawn here on the tile rather than inside each chart component — the chart
+    // (mapping.style) -> placement (w.style) layers first, then the theme/dashboard fallback.
+    const cardBorder = NO_CARD_BORDER_TYPES.has(w.type) ? null : resolveCardBorder(
+      resolveStyleForMode(
+        w.dataSource?.type === 'chartLibrary' ? mergeStyleLayers(w.dataSource.mapping?.style, w.style) : w.style,
+        effectiveIsDark,
+      ),
+      effectiveDashboardStyle,
+      effectiveIsDark,
+    );
     return (
       <div
         key={l.i}
-        className={`dbe-widget dbe-widget-${w.type}${selectedId === l.i ? ' selected' : ''}${isCrossFilterTarget ? ' dbe-cross-filtered' : ''}`}
+        className={`dbe-widget dbe-widget-${w.type}${selectedId === l.i ? ' selected' : ''}${isCrossFilterTarget ? ' dbe-cross-filtered' : ''}${cardBorder ? ` ${CARD_BORDERED_CLASS}` : ''}`}
+        style={cardBorder || undefined}
         // Clicking anywhere on a widget selects it and swaps the side panel to its
         // fields — not just its title bar, which was too small a target to notice.
         onClick={editable && showChrome ? () => setSelectedId(l.i) : undefined}
@@ -2676,11 +2735,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           background:#fff; border:1px solid rgb(226 232 240); border-radius:8px;
           box-shadow:0 4px 12px rgba(0,0,0,0.12); overflow:hidden; display:flex; flex-direction:column;
         }
-        .dbe-export-menu button {
+        /* Plain menu-item buttons (Export menus). Not the Theme popover — it holds real controls
+           (style switches, segmented pairs, Buttons) that this reset used to flatten. */
+        .dbe-export-menu:not(.dbe-theme-popover) button {
           padding:7px 10px; text-align:left; border:none; background:none; cursor:pointer;
           font-size:12px; color:#334155;
         }
-        .dbe-export-menu button:hover { background:#f1f5f9; }
+        .dbe-export-menu:not(.dbe-theme-popover) button:hover { background:#f1f5f9; }
         .dbe-export-menu-dashboard { top:32px; }
         /* This popover's field list can run much taller than the viewport (10+ style
            fields) — scrollable, scrollbar always hidden (not even on hover). */
@@ -2711,6 +2772,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-style-section summary::before { content:'▸'; font-size:9px; transition:transform .1s; }
         .dbe-style-section[open] summary::before { transform:rotate(90deg); }
         .dbe-style-section .dbe-style-section-body { padding:8px 4px 4px; }
+        /* Selected Widget Style: in Dark mode the header takes the dark widget surface too and the
+           tinted body (StyleModeTint attached) joins straight under it — one card, not a box plus
+           a panel. Light mode keeps the normal grey header over a near-white body. */
+        .dbe-style-section-tinted.is-dark > summary { background:#1b1f31; color:#e2e8f0; }
+        .dbe-style-section-tinted.is-dark > summary:hover { background:#151827; }
+        .dbe-style-section-tinted[open] > summary { border-radius:6px 6px 0 0; }
+        .dbe-style-section-tinted > .dbe-style-section-body { padding:0; }
         .dbe-widget-list { display:flex; flex-direction:column; gap:2px; max-height:200px; overflow-y:auto; }
         .dbe-widget-list-item {
           display:flex; align-items:center; gap:6px; padding:5px 6px; border:none; border-radius:6px;
@@ -2828,11 +2896,9 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 Cancel
               </button>
             {editable && (
-              // Phase 19c — available while creating a new dashboard too, not just after the
-              // first save: persistDashboardStyle/bindTheme already degrade gracefully with no
-              // backendId (local-only, staged), and the staged values now get sent along with
-              // the very first createDashboard call (see onDashboardStyleState below +
-              // DashboardBuilder.jsx's handleSave).
+              // Phase 19c — available while creating a new dashboard too: persistDashboardStyle/
+              // bindTheme only stage the change, and DashboardBuilder.jsx's handleSave sends it
+              // with the create/update call (see onDashboardStyleState below).
               <div className="dbe-export-wrap">
                 <button
                   type="button"
@@ -2846,71 +2912,110 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 {dashboardStylePanelOpen && (
                   <>
                     <div className="dbe-export-backdrop" onClick={() => setDashboardStylePanelOpen(false)} />
-                    <div className="dbe-export-menu dbe-theme-popover" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.03em' }}>
-                        Dashboard Level Theme
-                      </div>
-                      <label className="block">
-                        <span className="block text-xs text-slate-500 uppercase tracking-wide mb-1">Theme</span>
-                        <select
-                          value={boundThemeId || ''}
-                          onChange={(e) => bindTheme(e.target.value || null)}
-                          className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                        >
-                          <option value="">— none (local only) —</option>
-                          {themeOptions.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                      </label>
-                      {/* Explicit per user request: this popover only binds an existing Theme
-                          by reference and edits *local, this-dashboard-only* overrides on top
-                          — it never edits the shared Theme's own definition. That's only
-                          possible from the Settings tab (ThemeManager.jsx). */}
-                      <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.4 }}>
-                        Picking a Theme above only binds this dashboard to it. Fields below are
-                        local overrides for this dashboard only — to edit the Theme itself
-                        (affecting every dashboard bound to it), go to Settings.
-                      </div>
-                      {(boundThemeId || Object.keys(dashboardStyle || {}).length > 0) && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          fullWidth
-                          onClick={() => setPendingConfirm({
-                            title: 'Reset Dashboard Theme',
-                            message: 'Reset the dashboard theme to the application default? This clears all theme overrides and unbinds any linked Theme.',
-                            run: () => { bindTheme(null); persistDashboardStyle({}); },
-                          })}
-                        >
-                          Reset to Default
-                        </Button>
-                      )}
-                      {/* Local overrides, layered on top of the bound theme (if any) — an
-                          unset field here shows the bound theme's own resolved value via
-                          resolvedDefaults, exactly like a per-widget style field falls back
-                          to the widget's own real current color. */}
-                      <StyleModeSwitch value={styleMode} onChange={setStyleMode} />
-                      <WidgetStyleFields
-                        fields={DASHBOARD_STYLE_FIELDS}
-                        value={resolveStyleForMode(dashboardStyle, styleModeIsDark)}
-                        resolvedDefaults={resolveStyleForMode(boundThemeStyle, styleModeIsDark)}
-                        onChange={(key, val) => persistDashboardStyle(
-                          DASHBOARD_COLOR_KEYS.has(key)
-                            ? setModeColor(dashboardStyle, key, val, styleModeIsDark, DASHBOARD_COLOR_KEYS)
-                            : { ...dashboardStyle, [key]: val },
+                    {/* Fixed width (not content-sized) so collapsing a section doesn't shrink the popover. */}
+                    <div className="dbe-export-menu dbe-theme-popover w-[264px] max-w-[calc(100vw-32px)]" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {/* Two separate things, layered: (1) a link to a shared Theme (Settings →
+                          Themes — this popover never edits the Theme itself), and (2) this
+                          dashboard's own overrides on top of it. Each has its own clear action.
+                          Both are staged and saved with "Save dashboard", like widget edits. */}
+                      {/* Section headers are shaded, collapsible bands — spacing alone separates the
+                          two sections, no divider line. */}
+                      <section className="flex flex-col gap-2">
+                        <PopoverSectionHeader
+                          title="Theme"
+                          summary={themeSectionOpen ? null : (themeOptions.find((t) => String(t.id) === String(boundThemeId))?.name || (boundThemeId ? '…' : 'none'))}
+                          open={themeSectionOpen}
+                          onToggle={() => setThemeSectionOpen((o) => !o)}
+                        />
+                        {themeSectionOpen && (
+                          <>
+                            <p className="text-[10.5px] leading-snug text-slate-500">
+                              {boundThemeId
+                                ? 'Shared with every linked dashboard. Edit it in Settings → Themes.'
+                                : 'Link a shared theme from Settings → Themes, or style this dashboard on its own below.'}
+                            </p>
+                            <ThemePicker themes={themeOptions} value={boundThemeId} onChange={bindTheme} isDark={styleModeIsDark} />
+                          </>
                         )}
-                      />
-                      {/* No `palette` field exists in DASHBOARD_STYLE_FIELDS (it's an array,
-                          not a value the generic WidgetStyleFields renderer supports) — same
-                          override rule as everything above it: local `dashboardStyle.palette`
-                          (if set) wins over the bound Theme's own palette, via
-                          effectiveDashboardStyle in resolveWidgetProps below. */}
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.03em', marginTop: 4 }}>
-                        Chart Palette
-                      </div>
-                      <PaletteEditor
-                        value={resolveStyleForMode(dashboardStyle, styleModeIsDark)?.palette || resolveStyleForMode(boundThemeStyle, styleModeIsDark)?.palette || CHART_PALETTE}
-                        onChange={(next) => persistDashboardStyle(setModeColor(dashboardStyle, 'palette', next, styleModeIsDark, DASHBOARD_COLOR_KEYS))}
-                      />
+                      </section>
+                      <section className="mt-3 flex flex-col gap-2">
+                        <PopoverSectionHeader
+                          title="Dashboard overrides"
+                          summary={overridesSectionOpen ? null : String(dashboardOverrideCount)}
+                          open={overridesSectionOpen}
+                          onToggle={() => setOverridesSectionOpen((o) => !o)}
+                        />
+                        {overridesSectionOpen && (
+                        <>
+                        <p className="text-[10.5px] leading-snug text-slate-500">
+                          {dashboardOverrideCount > 0
+                            ? `${dashboardOverrideCount} field${dashboardOverrideCount === 1 ? '' : 's'} overridden (marked with a bar)`
+                            : 'No overrides'}
+                          {boundThemeId ? ' — everything else comes from the Theme.' : '.'}
+                        </p>
+                        {dashboardOverrideCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setPendingConfirm({
+                              title: 'Clear Dashboard Overrides',
+                              message: `Clear ${dashboardOverrideCount} override${dashboardOverrideCount === 1 ? '' : 's'} on this dashboard? ${boundThemeId ? 'Every field will follow the linked Theme again.' : 'Every field goes back to the default.'} The linked Theme is not changed.`,
+                              run: () => persistDashboardStyle({}),
+                            })}
+                            className="self-start rounded-md border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                          >
+                            Clear overrides
+                          </button>
+                        )}
+                        <StyleModeSwitch value={styleMode} onChange={setStyleMode} showHint={false} className="!mb-0" />
+                        {/* Tinted per mode (StyleModeTint) — light and dark colors are two separately
+                            saved sets. An unset field shows the linked Theme's own value via
+                            resolvedDefaults, exactly like a per-widget style field falls back to
+                            the widget's own real current color. */}
+                        <StyleModeTint mode={styleMode}>
+                        <WidgetStyleFields
+                          collapsedByDefault
+                          fields={DASHBOARD_STYLE_FIELDS}
+                          value={resolveStyleForMode(dashboardStyle, styleModeIsDark)}
+                          resolvedDefaults={{ ...cardBorderDefaults(styleModeIsDark), ...resolveStyleForMode(boundThemeStyle, styleModeIsDark) }}
+                          markOverrides
+                          groupFooters={{
+                            Border: (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                fullWidth
+                                onClick={() => setPendingConfirm({
+                                  title: 'Apply Border to All Widgets',
+                                  message: 'Use this dashboard\'s border on every widget? Border settings made on individual widgets will be cleared.',
+                                  run: () => setWidgets((prev) => Object.fromEntries(
+                                    Object.entries(prev).map(([id, w]) => [id, w.style ? { ...w, style: stripCardBorder(w.style) } : w]),
+                                  )),
+                                })}
+                              >
+                                Apply to all widgets
+                              </Button>
+                            ),
+                          }}
+                          onChange={(key, val) => persistDashboardStyle(
+                            DASHBOARD_COLOR_KEYS.has(key)
+                              ? setModeColor(dashboardStyle, key, val, styleModeIsDark, DASHBOARD_COLOR_KEYS)
+                              : { ...dashboardStyle, [key]: val },
+                          )}
+                        />
+                        {/* No `palette` field exists in DASHBOARD_STYLE_FIELDS (it's an array,
+                            not a value the generic WidgetStyleFields renderer supports) — same
+                            override rule as everything above it: local `dashboardStyle.palette`
+                            (if set) wins over the bound Theme's own palette, via
+                            effectiveDashboardStyle in resolveWidgetProps below. */}
+                        <div className={`mb-1 mt-2.5 text-[11px] font-semibold uppercase tracking-wide ${styleModeIsDark ? 'text-slate-300' : 'text-slate-500'}`}>Chart Palette</div>
+                        <PaletteEditor
+                          value={resolveStyleForMode(dashboardStyle, styleModeIsDark)?.palette || resolveStyleForMode(boundThemeStyle, styleModeIsDark)?.palette || CHART_PALETTE}
+                          onChange={(next) => persistDashboardStyle(setModeColor(dashboardStyle, 'palette', next, styleModeIsDark, DASHBOARD_COLOR_KEYS))}
+                        />
+                        </StyleModeTint>
+                        </>
+                        )}
+                      </section>
                     </div>
                   </>
                 )}
@@ -2996,31 +3101,28 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 <details className="dbe-style-section" open={openLeftSection === 'selectedWidget'}>
                 <summary onClick={(e) => { e.preventDefault(); toggleLeftSection('selectedWidget'); }}>Selected Widget</summary>
                 <div className="dbe-style-section-body">
-                <label>
-                  Title
-                  <input
-                    type="text"
-                    value={selected.title}
-                    onChange={(e) => updateWidget(selectedId, { title: e.target.value })}
-                  />
-                </label>
+                <SelectedWidgetDetails
+                  widget={selected}
+                  layoutEntry={layout.find((l) => l.i === selectedId)}
+                  tabs={tabs}
+                  datasourceName={selected.dataSource?.datasourceName || datasourceNamesById[selected.dataSource?.datasourceId]}
+                  onTitleChange={(title) => updateWidget(selectedId, { title })}
+                  onMoveToTab={(tabId) => {
+                    // No tabId = shown on every tab (same convention as slicers/global entries).
+                    setLayout((prev) => prev.map((l) => {
+                      if (l.i !== selectedId) return l;
+                      const next = { ...l };
+                      if (tabId) next.tabId = tabId; else delete next.tabId;
+                      return next;
+                    }));
+                    // Follow the widget to its new tab so it stays on screen and selected.
+                    if (tabId) setActiveTabId(tabId);
+                  }}
+                  onEditChart={onEditInChartsTab && selected.dataSource?.widgetId ? () => onEditInChartsTab(selected.dataSource.widgetId) : null}
+                >
                 {selected.type === 'chartLibrary' ? (
                   selected.dataSource?.widgetId ? (
-                    <div style={{ marginBottom: 10 }}>
-                      <div style={{ color: '#94a3b8', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 6 }}>
-                        Details
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 8, rowGap: 3, fontSize: 12 }}>
-                        <span style={{ color: '#94a3b8' }}>Datasource</span>
-                        <span style={{ color: '#334155' }}>{selected.dataSource.datasourceName || '—'}</span>
-                        <span style={{ color: '#94a3b8' }}>Widget ID</span>
-                        <span style={{ color: '#334155' }} title={selected.dataSource.widgetId}>#{String(selected.dataSource.widgetId).slice(0, 8)}</span>
-                        <span style={{ color: '#94a3b8' }}>Type</span>
-                        <span style={{ color: '#334155' }}>{selected.dataSource.chartType}</span>
-                      </div>
-                      {/* "Edit chart" now lives with the other per-widget actions
-                          (Export/Duplicate/Remove) on the widget itself, not duplicated here. */}
-                    </div>
+                    null
                   ) : (
                     <div className="dbe-style-empty">No widget picked — this shouldn't normally happen (placed via "Your Widgets" or the create wizard, both set one immediately).</div>
                   )
@@ -3045,9 +3147,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                     This widget uses a data source type that's no longer editable here — remove it and add a Real Widget instead.
                   </div>
                 )}
+                </SelectedWidgetDetails>
                 </div>
                 </details>
-                <details className="dbe-style-section" open={openLeftSection === 'selectedWidgetStyle'}>
+                <details className={`dbe-style-section dbe-style-section-tinted${styleModeIsDark ? ' is-dark' : ''}`} open={openLeftSection === 'selectedWidgetStyle'}>
                   <summary onClick={(e) => { e.preventDefault(); toggleLeftSection('selectedWidgetStyle'); }}>
                     <span>Selected Widget Style</span>
                     {Object.keys(selected.style || {}).length > 0 && (
@@ -3070,15 +3173,19 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                     )}
                   </summary>
                   <div className="dbe-style-section-body">
+                    {/* Tinted per mode, like the Theme popover's overrides — the Light | Dark switch
+                        pinned at the top of this panel picks which set of colors is edited. */}
+                    <StyleModeTint mode={styleMode} attached>
                     {(boundThemeId || Object.keys(dashboardStyle || {}).length > 0) && (
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>
+                      <div className={`mb-2 text-[11px] ${styleModeIsDark ? 'text-slate-300' : 'text-slate-500'}`}>
                         {boundThemeId
-                          ? `Inherited from Theme: ${themeOptions.find((t) => t.id === boundThemeId)?.name || '…'} (via Dashboard Level Theme)`
-                          : 'Inherited from this dashboard\'s Level Theme defaults'}
+                          ? `Inherits from the dashboard's Theme (${themeOptions.find((t) => String(t.id) === String(boundThemeId))?.name || '…'}) and overrides`
+                          : 'Inherits from the dashboard overrides'}
                         {' — any field set here overrides it.'}
                       </div>
                     )}
                     <WidgetStyleFields
+                      collapsedByDefault
                       fields={selectedStyleFields}
                       value={resolveStyleForMode(selected.style, styleModeIsDark)}
                       onChange={(key, val) => updateWidget(selectedId, {
@@ -3109,8 +3216,17 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                         titleSize: effectiveDashboardStyle.titleSize || 12,
                         valueTextSize: effectiveDashboardStyle.valueTextSize || 20,
                         axisTextSize: effectiveDashboardStyle.axisTextSize || 9,
+                        // Border: what this widget inherits while its own fields are unset — the
+                        // chart's own Charts-tab border first, then the dashboard/theme's, then
+                        // the default. Drives the Border switch's inherited On/Off state too.
+                        ...(() => {
+                          const chartStyle = resolveStyleForMode(selected.dataSource?.mapping?.style, styleModeIsDark) || {};
+                          const defaults = { showCardBorder: 'hide', ...cardBorderDefaults(styleModeIsDark) };
+                          return Object.fromEntries(Object.keys(defaults).map((k) => [k, chartStyle[k] ?? styleModeDashboardStyle[k] ?? defaults[k]]));
+                        })(),
                       }}
                     />
+                    </StyleModeTint>
                   </div>
                 </details>
                 {CATEGORY_COLOR_TYPES.has(selected.type) && (() => {

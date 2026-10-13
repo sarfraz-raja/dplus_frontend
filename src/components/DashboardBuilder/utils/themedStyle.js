@@ -20,6 +20,36 @@ export const modeKey = (isDark) => (isDark ? 'dark' : 'light');
 // for `resolvedBgColor`) — what text is actually drawn on when no bgColor/gradient is set.
 export const surfaceBg = (isDark) => (isDark ? '#22273C' : '#ffffff');
 
+// Widget card border (CARD_BORDER_FIELDS, widgetTypeRegistry.js). Default color is the same
+// slate-200 / white-10%-on-navy the plain tile border uses, as a hex so the color picker can show it.
+export const CARD_BORDER_KEYS = ['showCardBorder', 'cardBorderWidth', 'cardBorderStyle', 'cardBorderColor', 'cardBorderRadius'];
+export const cardBorderDefaults = (isDark) => ({
+  cardBorderWidth: 1, cardBorderStyle: 'solid', cardBorderColor: isDark ? '#383d50' : '#e2e8f0', cardBorderRadius: 10,
+});
+
+// Goes next to resolveCardBorder's inline style: rounds the chart's own card (each Widgets/*.jsx
+// root — the only .rounded-lg inside a tile) to sit flush inside the border, and drops TABLE's own
+// 1px border so the two don't double up.
+export const CARD_BORDERED_CLASS = '[&_.rounded-lg]:rounded-[var(--dbe-card-inner-radius)] [&_.rounded-lg]:border-0';
+
+// Inline style for a widget's tile, or null when its border is off. Both inputs are already
+// flattened for the active mode. Each key: the widget's own value, else the dashboard/theme's,
+// else the default — so an unset widget follows the dashboard, and an explicit Off/On wins.
+export function resolveCardBorder(widgetStyle, dashboardStyle, isDark) {
+  const isSet = (v) => v !== undefined && v !== null && v !== '';
+  const defaults = cardBorderDefaults(isDark);
+  const pick = (k) => (isSet(widgetStyle?.[k]) ? widgetStyle[k] : isSet(dashboardStyle?.[k]) ? dashboardStyle[k] : defaults[k]);
+  if (pick('showCardBorder') !== 'show') return null;
+  const width = Number(pick('cardBorderWidth'));
+  const radius = Number(pick('cardBorderRadius'));
+  return {
+    border: `${width}px ${pick('cardBorderStyle')} ${pick('cardBorderColor')}`,
+    borderRadius: radius,
+    // Read by CARD_BORDERED_CLASS.
+    '--dbe-card-inner-radius': `${Math.max(0, radius - width)}px`,
+  };
+}
+
 const definedEntries = (obj) => Object.fromEntries(
   Object.entries(obj || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''),
 );

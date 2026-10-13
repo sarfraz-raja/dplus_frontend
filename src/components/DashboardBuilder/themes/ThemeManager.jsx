@@ -7,7 +7,7 @@ import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
 import PaletteEditor from './PaletteEditor';
 import DASHBOARD_STYLE_FIELDS from './dashboardStyleFields';
 import StyleModeSwitch from '../widgetConfig/StyleModeSwitch';
-import { resolveStyleForMode, setModeColor } from '../utils/themedStyle';
+import { resolveStyleForMode, setModeColor, cardBorderDefaults } from '../utils/themedStyle';
 import { useTheme } from '../../../context/ThemeContext';
 
 // Color fields a theme stores per mode (light/dark).
@@ -189,6 +189,7 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
               fields={DASHBOARD_STYLE_FIELDS}
               value={resolveStyleForMode(style, styleMode === 'dark')}
               onChange={setStyleField}
+              resolvedDefaults={cardBorderDefaults(styleMode === 'dark')}
               columns={3}
             />
           </section>

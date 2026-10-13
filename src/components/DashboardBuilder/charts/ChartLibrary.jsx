@@ -20,7 +20,7 @@ import ChartLibraryWidgetView from './ChartLibraryWidgetView';
 import CHART_TYPE_META, { CHART_TYPES } from './chartTypeMeta';
 import { useTheme } from '../../../context/ThemeContext';
 import { chartTokens } from '../../../theme/tokens';
-import { resolveStyleForMode, setModeColor, copyStyleFields, countCopiedSettings, surfaceBg } from '../utils/themedStyle';
+import { resolveStyleForMode, setModeColor, copyStyleFields, countCopiedSettings, surfaceBg, resolveCardBorder, cardBorderDefaults, CARD_BORDERED_CLASS } from '../utils/themedStyle';
 import {
   listDatasources,
   getDatasourceDetail,
@@ -1296,9 +1296,13 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     // real dashboard canvas uses — previously this called renderChartWidget directly, which
     // meant drilling only ever worked once a chart was actually placed on a dashboard, not
     // while still configuring/previewing it here.
+    // This chart's own Border settings — no dashboard here, so it only shows once the chart
+    // itself turns its border on (a dashboard-level border appears on the canvas instead).
+    const cardBorder = resolveCardBorder(resolveStyleForMode(mapping.style, isDark), null, isDark);
     return (
       <div className="relative h-full">
         {renderPreviewDrillControls()}
+        <div className={cardBorder ? `h-full overflow-hidden ${CARD_BORDERED_CLASS}` : 'h-full'} style={cardBorder || undefined}>
         <ChartLibraryWidgetView
           chartType={chartType} name={name} mapping={mapping} rows={previewData.rows}
           picked loading={false} error={null} height={440}
@@ -1354,6 +1358,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
             markDirty();
           }}
         />
+        </div>
       </div>
     );
   };
@@ -1811,6 +1816,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                     titleColor: resolvedSubColor,
                     valueTextColor: resolvedTextColor,
                     axisTextColor: resolvedSubColor,
+                    ...cardBorderDefaults(isDark),
                   }}
                   columns={2}
                 />

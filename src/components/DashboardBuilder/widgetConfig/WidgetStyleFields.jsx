@@ -3,7 +3,7 @@ import Button from '../../Button';
 import PaletteEditor from '../themes/PaletteEditor';
 import FieldHintMark from '../FieldHintMark';
 import { contrastRatio } from '../utils/contrast';
-import { LOW_CONTRAST_THRESHOLD } from '../utils/themedStyle';
+import { LOW_CONTRAST_THRESHOLD, CARD_BORDER_KEYS } from '../utils/themedStyle';
 
 // Auto-groups a field into one of four collapsible sections purely from its own
 // key/type shape — no per-field `group` metadata needed on every styleFields entry across
@@ -71,10 +71,18 @@ const TEXT_STYLE_KEYS = new Set(['fontFamily', 'textAlign']);
 // Title/Value were already pulled out to fix (see their own comments above), just missed for
 // Axis when it was split out. All four now stay together.
 
+// The widget card's own border (CARD_BORDER_FIELDS) — `card*` keys, so no overlap with Shape's
+// own borderColor (Fill & Border below).
+const BORDER_FIELD_KEYS = new Set(CARD_BORDER_KEYS);
+// Groups whose section header carries an on/off switch gating every other field in the group:
+// group name -> the show/hide field key.
+const GROUP_TOGGLE_KEYS = { Title: 'showTitle', Border: 'showCardBorder' };
+
 function groupFor(field) {
   if (TITLE_FIELD_KEYS.has(field.key)) return 'Title';
   if (VALUE_FIELD_KEYS.has(field.key)) return 'Value';
   if (BACKGROUND_FIELD_KEYS.has(field.key)) return 'Background';
+  if (BORDER_FIELD_KEYS.has(field.key)) return 'Border';
   if (TABLE_COLOR_FIELD_KEYS.has(field.key)) return 'Rows & Header';
   if (field.key === 'crossFilterSource' || field.key === 'crossFilterTarget') return 'Cross-Filtering';
   if (SHAPE_COLOR_KEYS.has(field.key)) return 'Fill & Border';
@@ -91,7 +99,7 @@ function groupFor(field) {
 // than decoration. Background/Rows & Header follow — still colors, but each its own specific
 // concern rather than one catch-all "any color field" bucket. Cross-Filtering comes next —
 // the "what does this widget do" decision, worth seeing before the purely cosmetic groups.
-const GROUP_ORDER = ['Title', 'Value', 'Background', 'Rows & Header', 'Cross-Filtering', 'Layout & Behavior', 'Accent & Series', 'Axis', 'Fill & Border', 'Text', 'Text Styling', 'Other Colors'];
+const GROUP_ORDER = ['Title', 'Value', 'Background', 'Border', 'Rows & Header', 'Cross-Filtering', 'Layout & Behavior', 'Accent & Series', 'Axis', 'Fill & Border', 'Text', 'Text Styling', 'Other Colors'];
 
 const isShowHide = (field) => field.type === 'select' && field.options?.length === 2
   && field.options.every((o) => ['show', 'hide'].includes(String(o.value).toLowerCase()));
@@ -336,7 +344,7 @@ function PaletteRow({ field, current, onChange }) {
   );
 }
 
-function FieldRow({ field, value, resolvedDefaults, onChange }) {
+function FieldRow({ field, value, resolvedDefaults, onChange, markOverrides = false }) {
   const raw = value?.[field.key];
   // A field only counts as an explicit override once it holds a real value — an empty
   // string (cleared text input) or undefined (cleared via the × below) both mean "inherit
@@ -372,7 +380,7 @@ function FieldRow({ field, value, resolvedDefaults, onChange }) {
   const showClear = isOverridden && !isShowHide(field) && !isSegmented;
 
   return (
-    <div className={`dbe-style-field-wrap${isOverridden ? '' : ' inherited'}`}>
+    <div className={`dbe-style-field-wrap${isOverridden ? '' : ' inherited'}${markOverrides && isOverridden ? ' override-marked' : ''}`}>
       {row}
       {showClear && (
         <button
@@ -417,8 +425,19 @@ function FieldRow({ field, value, resolvedDefaults, onChange }) {
  * panel this was originally built for). Wide contexts with a lot of horizontal room to spare
  * (ThemeManager.jsx's Settings tab, which has 10+ fields) can pass a higher value instead of
  * leaving most of the panel empty.
+ *
+ * `groupFooters`: optional `{ [groupName]: ReactNode }` rendered at the bottom of that group's
+ * body while its fields are visible — e.g. the Dashboard Style popover's "Apply to all widgets"
+ * button under Border.
+ *
+ * `markOverrides`: draws a bar beside every field this level sets itself, so it's clear which
+ * values are overrides and which are inherited (the Dashboard Style popover, over its Theme).
+ *
+ * `collapsedByDefault`: every group starts closed (just its header row), so a long field list
+ * opens as a compact list of sections — used by the narrow Dashboard Style popover and the
+ * Selected Widget Style panel.
  */
-export default function WidgetStyleFields({ fields = [], value = {}, onChange, resolvedDefaults = {}, deferred = false, onApply, columns = 1 }) {
+export default function WidgetStyleFields({ fields = [], value = {}, onChange, resolvedDefaults = {}, deferred = false, onApply, columns = 1, groupFooters = {}, markOverrides = false, collapsedByDefault = false }) {
   const [pending, setPending] = useState(value);
   useEffect(() => { if (deferred) setPending(value); }, [deferred, value]);
 
@@ -435,9 +454,27 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
   // other type always renders its title, so this gate never applies to them) get the rest of
   // the Title group hidden while it's switched off — those color/font/size/position controls
   // are genuinely inert with no title to apply to, so showing them edits nothing.
-  const showTitleField = fields.find((f) => f.key === 'showTitle');
-  const titleVisible = !showTitleField || (activeValue.showTitle ?? showTitleField.default) !== 'hide';
-  const visibleFields = titleVisible ? fields : fields.filter((f) => f.key === 'showTitle' || !TITLE_FIELD_KEYS.has(f.key));
+  // Same gate for Border, except it defaults to OFF: its toggle is `default: null` ("unset —
+  // follow the dashboard/theme"), so the switch shows the inherited state from
+  // `resolvedDefaults` until this level sets its own, and the other border fields only appear
+  // once it's actually on.
+  const toggleState = (key) => {
+    const field = fields.find((f) => f.key === key);
+    if (!field) return null;
+    const own = activeValue[key];
+    const isOwn = own !== undefined && own !== null && own !== '';
+    const effective = isOwn ? own : (resolvedDefaults[key] ?? field.default);
+    return { field, isOwn, on: key === 'showCardBorder' ? effective === 'show' : effective !== 'hide' };
+  };
+  const titleToggle = toggleState('showTitle');
+  const borderToggle = toggleState('showCardBorder');
+  const titleVisible = !titleToggle || titleToggle.on;
+  const borderVisible = !borderToggle || borderToggle.on;
+  const visibleFields = fields.filter((f) => {
+    if (!titleVisible && f.key !== 'showTitle' && TITLE_FIELD_KEYS.has(f.key)) return false;
+    if (!borderVisible && f.key !== 'showCardBorder' && BORDER_FIELD_KEYS.has(f.key)) return false;
+    return true;
+  });
 
   const grouped = GROUP_ORDER.map((group) => ({
     group,
@@ -451,13 +488,16 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
         // next to the section name) rather than as just another row inside it — it's the
         // on/off gate for every other field in this group, not a peer of them, so it reads
         // better as part of the header than buried in the list it controls.
-        const inlineToggleField = group === 'Title' ? groupFields.find((f) => f.key === 'showTitle') : null;
-        const bodyFields = inlineToggleField ? groupFields.filter((f) => f.key !== 'showTitle') : groupFields;
-        const toggleChecked = inlineToggleField
-          ? (activeValue[inlineToggleField.key] ?? inlineToggleField.default) === 'show'
-          : false;
+        const toggleKey = GROUP_TOGGLE_KEYS[group];
+        const toggle = toggleKey === 'showTitle' ? titleToggle : toggleKey === 'showCardBorder' ? borderToggle : null;
+        const inlineToggleField = toggle?.field || null;
+        const bodyFields = inlineToggleField ? groupFields.filter((f) => f.key !== inlineToggleField.key) : groupFields;
+        const toggleChecked = !!toggle?.on;
+        // Only an inheritable toggle (`default: null`) can go back to "follow the dashboard/theme".
+        const canInherit = !!inlineToggleField && inlineToggleField.default == null && toggle.isOwn;
+        const footer = (group === 'Border' ? borderVisible : true) ? groupFooters[group] : null;
         return (
-          <details key={group} className="dbe-style-subsection" open>
+          <details key={group} className="dbe-style-subsection" open={!collapsedByDefault}>
             <summary>
               {group}
               {inlineToggleField && (
@@ -465,6 +505,17 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
                   className="ml-auto flex items-center gap-1.5 normal-case tracking-normal font-medium text-[10px]"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {canInherit && (
+                    <button
+                      type="button"
+                      title="Clear override — inherit from theme/dashboard"
+                      aria-label={`Clear ${inlineToggleField.label} override`}
+                      onClick={() => handleChange(inlineToggleField.key, undefined)}
+                      className="text-slate-400 hover:text-orange-500"
+                    >
+                      ↺
+                    </button>
+                  )}
                   {toggleChecked ? 'Show' : 'Hide'}
                   <button
                     type="button"
@@ -484,8 +535,9 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
                 style={columns > 1 ? { display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, columnGap: 24 } : undefined}
               >
                 {bodyFields.map((field) => (
-                  <FieldRow key={field.key} field={field} value={activeValue} resolvedDefaults={resolvedDefaults} onChange={handleChange} />
+                  <FieldRow key={field.key} field={field} value={activeValue} resolvedDefaults={resolvedDefaults} onChange={handleChange} markOverrides={markOverrides} />
                 ))}
+                {footer && <div className="col-span-full">{footer}</div>}
               </div>
             )}
           </details>
@@ -623,12 +675,12 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
           transition:transform .15s; box-shadow:0 1px 2px rgba(0,0,0,0.2);
         }
         .dbe-style-switch.on .dbe-style-switch-knob { transform:translateX(15px); }
-        /* Reserves a gutter for the × clear button below, on the wrap itself rather than on
-           any one row type's own right-aligned content — a value pill (slider), a switch, a
-           select, all sit flush against the row's right edge, and every one of them would
-           otherwise collide with the button rendered on top of that same corner. Reserved
-           unconditionally (not just when the button is actually rendered) so a field doesn't
-           visibly reflow every time it's overridden/cleared. */
+        /* The × clear button below sits in the top-right corner, on the field's LABEL line —
+           so only the label reserves room for it, and the control under it (color pill, select,
+           slider, text box) runs to the full width. The button is never shown on a row whose
+           control shares the label's line (switches/segmented pairs, see showClear), so
+           nothing else can collide with it. Reserved unconditionally so a label doesn't reflow
+           when the field is overridden/cleared. */
         /* min-width:0 overrides the grid item's default min-width:auto — without it, a field
            whose content has a wide intrinsic minimum (a <select> sized to its longest option,
            e.g. "Times New Roman") refuses to shrink to its 1fr grid track and forces the whole
@@ -636,10 +688,12 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
            instead of wrapping/truncating inside it (see the conversation this was reported in —
            the panel-resize handle appeared to "break" once this class of field existed, but the
            resize logic itself, in ChartLibrary.jsx, was never the actual cause). */
-        .dbe-style-field-wrap { position:relative; min-width:0; padding-right:20px; }
+        .dbe-style-field-wrap { position:relative; min-width:0; }
+        .dbe-style-field-wrap > .dbe-style-row:not(.dbe-style-row-inline) > .dbe-style-row-label { padding-right:20px; }
         .dbe-style-field-wrap.inherited { opacity:0.6; }
+        .dbe-style-field-wrap.override-marked { box-shadow:inset 2px 0 0 #64748b; padding-left:8px; }
         .dbe-style-field-clear {
-          position:absolute; top:0; right:0; width:16px; height:16px; border-radius:50%;
+          position:absolute; top:0; right:0; width:15px; height:15px; border-radius:50%;
           border:1px solid rgb(203 213 225); background:#fff; color:#475569; font-size:11px;
           line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;
         }

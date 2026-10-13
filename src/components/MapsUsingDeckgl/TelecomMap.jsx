@@ -91,7 +91,12 @@ const getSectorTip = (lat, lng, azimuth, radius_m, mapScale = 1, zoomBoost = 1) 
   const scale    = mapScale * 20;
   const factor   = c_length / (69.093 * 9000) * (scale / 20);
   const azRad    = azimuth * Math.PI / 180;
-  return [lng + Math.sin(azRad) * factor, lat + Math.cos(azRad) * factor];
+  // Longitude offset divided by cos(lat) — must stay identical to generateCoordinates
+  // (see note there) so link endpoints land on the corrected sector tips.
+  const lngScale = Math.cos(lat * Math.PI / 180);
+  // OLD (no latitude correction — skewed sectors away from the equator):
+  // return [lng + Math.sin(azRad) * factor, lat + Math.cos(azRad) * factor];
+  return [lng + Math.sin(azRad) * factor / lngScale, lat + Math.cos(azRad) * factor];
 };
 
 //hardcoded uuid for the superset dashboard on the Charts(Cellinfopopup) modal.
@@ -1257,10 +1262,20 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     // replaced with linear growth: same output at mapScale=1, keeps growing beyond 5.5
     const factor = c_length / (69.093 * 9000) * (scale / 20);
 
+    // Latitude (skew) correction: 1° of longitude spans only cos(lat) × the distance of 1° of
+    // latitude, so the east-west offset is divided by cos(lat). Without it sectors look fine near
+    // the equator (Malawi, cos≈0.97) but are squashed/rotated at higher latitudes (Canada ~46°N,
+    // cos≈0.69 → ~30% narrower, azimuths off by up to ~10°). Sizing (factor) is unchanged.
+    // getSectorTip mirrors this — change both together.
+    const lngScale = Math.cos(y * Math.PI / 180);
+    
+
     for (let j = 10; j >= 1; j--) {
         const angle = (Dir - antBW / 2 + (antBW / 10) * j) * 0.01745329252;
 
-        const x1 = x + Math.sin(angle) * factor;
+        // OLD (no latitude correction — skewed sectors away from the equator):
+        // const x1 = x + Math.sin(angle) * factor;
+        const x1 = x + Math.sin(angle) * factor / lngScale;
         const y1 = y + Math.cos(angle) * factor;
 
         coords.push([x1, y1]);

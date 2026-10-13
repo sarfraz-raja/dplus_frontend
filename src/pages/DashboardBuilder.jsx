@@ -741,6 +741,9 @@ const DashboardBuilder = () => {
           // slicer's own data (available_values/selected_values) stays backend-owned via
           // createSlicer/updateSlicer, not duplicated here.
           ...(w?.type === 'slicer' && w.dataSource?.slicerId ? { type: 'slicer', title: w.title, slicerId: w.dataSource.slicerId } : {}),
+          // A real chart renamed for this dashboard only (Selected Widget → Title) — saved only
+          // when it differs from the chart's own name; buildLocalLayoutAndWidgets reads it back.
+          ...(w?.type === 'chartLibrary' && w.title && w.dataSource?.chartName && w.title !== w.dataSource.chartName ? { title: w.title } : {}),
         };
       });
       // Tabs list rides along as one extra reserved-id entry in the same layout array (see
@@ -752,7 +755,11 @@ const DashboardBuilder = () => {
       let dashboard;
       let backendId = editingExisting?.backendId;
       if (backendId) {
-        ({ dashboard } = await updateDashboard(backendId, { name, layout: layoutToSave }));
+        // The Theme popover's link + overrides are staged in the editor (no longer saved on
+        // each change), so they're written here with everything else.
+        ({ dashboard } = await updateDashboard(backendId, {
+          name, layout: layoutToSave, theme: pendingDashboardStyle, theme_id: pendingThemeId,
+        }));
       } else {
         // Phase 19c — carries along whatever style/theme/filters were staged in the
         // editor's popovers before this first save (only reaches here via
@@ -951,6 +958,8 @@ const DashboardBuilder = () => {
                     initialLayout={editingExisting?.layout}
                     initialWidgets={editingExisting?.widgets}
                     initialTabs={editingExisting?.tabs || []}
+                    initialDashboardStyle={editingExisting?.theme || {}}
+                    initialThemeId={editingExisting?.themeId || null}
                     editable
                     onSave={handleSave}
                     onCancel={backToBrowse}
