@@ -185,6 +185,7 @@ Current variables (see `.env` for the live values and `.env.example` for the tem
 | `VITE_TIME_ZONE` | `TopBar.jsx`, `resolveTimeRange.js` | Deployment display timezone (defaults to `Africa/Libreville`) |
 | `VITE_NATIVE_FILTER_ID` | `TelecomMap.jsx` | Superset native filter ID used for cell-name filtering |
 | `VITE_SUPERSET_UI_ORIGIN`, `VITE_SUPERSET_GUEST_TOKEN_URL` | `src/utils/url.js` | Embedded Superset dashboard origin + guest-token endpoint |
+| `VITE_SUPERSET_DASHBOARD_UUID` | `TelecomMap.jsx` | Superset dashboard opened from the cell Charts popup (Telco360: `9615446e-…`); unset falls back to the Gabon/Malawi dashboard `0ccb9f27-…` |
 | `VITE_GRAFANA_URL` | `src/utils/url.js` | Embedded Grafana origin |
 
 **Guideline:** when adding config that varies per environment/deployment, add a `VITE_*` var (with a commented default in `.env.example`), read it via `import.meta.env`, and add a row to the table above — don't hardcode URLs, tokens, or feature toggles in source.

@@ -119,7 +119,7 @@ const BG_COLOR_FIELD = { key: 'bgColor', label: 'Background color', type: 'color
 // CHART_TYPE_EXTRA_STYLE_FIELDS below). `default: null` (not a hex) matches every other
 // color field's convention — the underlying Widgets/*.jsx component's own prop default
 // (`#378ADD`) is what actually renders when unset, this just lets it be overridden.
-const ACCENT_COLOR_FIELD = { key: 'color', label: 'Accent color', type: 'color', default: null };
+const ACCENT_COLOR_FIELD = { key: 'color', label: 'Accent color', type: 'color', default: null, hint: 'Color of the line, bars, area or points. Used only when the chart has no Series — with a Series set, the Color palette is used instead.' };
 
 // Two-stop background gradient (Item 9) — generalizes StatCard's own pre-existing
 // darkGradient/shadeFrom/shadeTo concept to every widget type, cascading from the theme/
@@ -224,7 +224,7 @@ const WIDGET_TYPE_REGISTRY = {
   statCard: {
     label: 'KPI Card', icon: Hash, iconColor: '#378ADD', component: StatCard, defaultSize: { w: 36, h: 18 }, dataShape: 'single-value',
     styleFields: [
-      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD' },
+      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Icon color and the light tint behind the card.' },
       // Same "Shaded Cards" mechanism as the real KPI dashboard's own "Customize colors"
       // panel (KpiMonitoringDashboard.jsx) — the user picks the diagonal gradient's two
       // literal corners directly (top-left "from", bottom-right "to") instead of a
@@ -248,7 +248,7 @@ const WIDGET_TYPE_REGISTRY = {
   gaugeCard: {
     label: 'Gauge', icon: Gauge, iconColor: '#10B981', component: GaugeCard, defaultSize: { w: 36, h: 36 }, dataShape: 'gauge',
     styleFields: [
-      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD' },
+      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Color of the progress arc.' },
       { key: 'titleColor', label: 'Title color', type: 'color', default: null },
       BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS,
     ],
@@ -256,7 +256,7 @@ const WIDGET_TYPE_REGISTRY = {
   sparklineCard: {
     label: 'Line', icon: LineChart, iconColor: '#8B5CF6', component: LineAreaChart, defaultSize: { w: 48, h: 36 }, dataShape: 'series',
     styleFields: [
-      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD' },
+      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Color of the line and the area under it.' },
       { key: 'titleColor', label: 'Title color', type: 'color', default: null },
       BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
     ],
@@ -264,7 +264,7 @@ const WIDGET_TYPE_REGISTRY = {
   barChart: {
     label: 'Bar', icon: BarChart3, iconColor: '#EC4899', component: BarChart, defaultSize: { w: 48, h: 36 }, dataShape: 'series',
     styleFields: [
-      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD' },
+      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Color of the bars.' },
       { key: 'titleColor', label: 'Title color', type: 'color', default: null },
       BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
     ],
@@ -272,7 +272,7 @@ const WIDGET_TYPE_REGISTRY = {
   horizontalBarChart: {
     label: 'Horizontal Bar', icon: BarChartHorizontal, iconColor: '#14B8A6', component: HorizontalBarChart, defaultSize: { w: 48, h: 45 }, dataShape: 'series',
     styleFields: [
-      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD' },
+      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Color of the bars.' },
       { key: 'titleColor', label: 'Title color', type: 'color', default: null },
       { key: 'limit', label: 'Rows shown', type: 'number', min: 3, max: 20, default: 8 },
       BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, ...AXIS_TEXT_STYLE_FIELDS,
@@ -281,7 +281,7 @@ const WIDGET_TYPE_REGISTRY = {
   areaChart: {
     label: 'Area', icon: AreaChartIcon, iconColor: '#6366F1', component: AreaChart, defaultSize: { w: 48, h: 36 }, dataShape: 'series',
     styleFields: [
-      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD' },
+      { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Color of the area and its line.' },
       { key: 'titleColor', label: 'Title color', type: 'color', default: null },
       BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
     ],
@@ -526,7 +526,7 @@ const CROSS_FILTER_FIELDS = [
 // CHART_PALETTE) is deliberate — an explicit default here would make every chart look
 // "overridden" even when nobody touched it, and would freeze in today's default forever
 // instead of following the dashboard theme if that changes later.
-const PALETTE_FIELD = { key: 'palette', label: 'Series colors', type: 'palette' };
+const PALETTE_FIELD = { key: 'palette', label: 'Color palette', type: 'palette' };
 // LINE-only — dots are drawn only by LineAreaChart.jsx, not the BAR/AREA/HORIZONTAL_BAR
 // components BAR_SERIES is also shared with. Exported so DashboardCanvasEditor.jsx's own
 // extraFields computation (which has to mirror chartLibraryStyleFieldsFor's hasSeries branch

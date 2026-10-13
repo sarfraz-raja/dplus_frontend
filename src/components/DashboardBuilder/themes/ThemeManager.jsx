@@ -198,10 +198,10 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
               theme use by default. */}
           <section className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-[0.6875rem] font-semibold text-slate-400 uppercase tracking-wider">Series Visualization</div>
-              <span className="text-[0.6875rem] text-slate-400">Default series colors</span>
+              <div className="text-[0.6875rem] font-semibold text-slate-400 uppercase tracking-wider">Color palette</div>
+              <span className="text-[0.6875rem] text-slate-400">Default colors for charts using this theme</span>
             </div>
-            <StyleModeSwitch value={styleMode} onChange={setStyleMode} className="!mb-2" hint={<>Series colors for <b>{styleMode}</b> mode</>} />
+            <StyleModeSwitch value={styleMode} onChange={setStyleMode} className="!mb-2" hint={<>Palette for <b>{styleMode}</b> mode</>} />
             <PaletteEditor value={palette} onChange={(next) => setStyleField('palette', next)} />
             <div className="mt-3 flex items-end gap-1.5 h-14 pt-2 border-t border-slate-100">
               {previewPalette.slice(0, 6).map((c, i) => (

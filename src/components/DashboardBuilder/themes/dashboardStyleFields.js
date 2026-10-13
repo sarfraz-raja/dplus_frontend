@@ -22,7 +22,7 @@ const DASHBOARD_STYLE_FIELDS = [
   // Widget card border — same keys as each widget's own Border section (CARD_BORDER_FIELDS),
   // so switching it on here borders every widget on the dashboard that hasn't set its own.
   ...CARD_BORDER_FIELDS,
-  { key: 'accentColor', label: 'Accent color', type: 'color', default: null },
+  { key: 'accentColor', label: 'Accent color', type: 'color', default: null, hint: 'Default color for one-color widgets on the dashboard — charts without a Series, KPI cards, gauges. A widget\'s own Accent color overrides it.' },
   // Styles the widget titles' cascade (every widget's own title text) — not the dashboard's
   // own title, see the dashboardTitle* fields below for that.
   { key: 'titleColor', label: 'Widget title color', type: 'color', default: null },

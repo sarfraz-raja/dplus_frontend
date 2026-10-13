@@ -276,7 +276,7 @@ const SERIES_FIELD = { key: 'series', label: 'Series (grouping dimension)', type
 // tab. `showIf` hides it until then, same as any other conditionally-relevant field. Writes to
 // mapping.style.palette via MappingFields' own styleValue/onStyleChange pair (see its doc
 // comment) — a style-tree value, not a real mapping key, despite living in this field list.
-const SERIES_PALETTE_FIELD = { key: 'palette', label: 'Series colors', type: 'palette', showIf: (m) => !!m.series };
+const SERIES_PALETTE_FIELD = { key: 'palette', label: 'Color palette', type: 'palette', showIf: (m) => !!m.series };
 
 // `xGroupLabel`/`yGroupLabel` — HORIZONTAL_BAR's own group headers (see its call site below):
 // its `x_axis`/`y_axis` mapping keys are the same category/measure pair every other chart_type
@@ -502,7 +502,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   const [mapping, setMapping] = useState({});
   // Style tab, per-mode colors — declared after chartType/mapping (it reads both). Legacy flat
   // colors count as both modes; see themedStyle.js.
-  const styleFields = chartLibraryStyleFieldsFor(chartType);
+  const styleFields = chartLibraryStyleFieldsFor(chartType, mapping);
   // `palette` is per-mode too, but is edited in the Data tab (SERIES_PALETTE_FIELD) for series
   // charts, so it's not necessarily in `styleFields` — always treat it as a mode color here.
   const styleColorKeys = new Set([...styleFields.filter((f) => f.type === 'color').map((f) => f.key), 'palette']);
@@ -1719,7 +1719,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                   columnsLoading={columnsLoading}
                   styleValue={styleModeView}
                   onStyleChange={onStyleFieldChange}
-                  paletteHeader={<StyleModeSwitch value={styleMode} onChange={setStyleMode} className="!mb-1" hint={<>Series colors for <b>{styleMode}</b> mode</>} />}
+                  paletteHeader={<StyleModeSwitch value={styleMode} onChange={setStyleMode} className="!mb-1" hint={<>Palette for <b>{styleMode}</b> mode</>} />}
                   datasourceId={datasourceId}
                 />
 

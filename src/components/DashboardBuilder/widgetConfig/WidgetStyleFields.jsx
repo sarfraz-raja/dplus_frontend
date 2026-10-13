@@ -87,8 +87,8 @@ function groupFor(field) {
   if (field.key === 'crossFilterSource' || field.key === 'crossFilterTarget') return 'Cross-Filtering';
   if (SHAPE_COLOR_KEYS.has(field.key)) return 'Fill & Border';
   if (['axisTextColor', 'axisTextWeight', 'axisTextSize', 'axisTextFont'].includes(field.key)) return 'Axis';
-  if (field.type === 'palette' || ACCENT_SERIES_COLOR_KEYS.has(field.key)) return 'Accent & Series';
-  if (field.key === 'color') return field.label === 'Text color' ? 'Text' : 'Accent & Series';
+  if (field.type === 'palette' || ACCENT_SERIES_COLOR_KEYS.has(field.key)) return 'Data colors';
+  if (field.key === 'color') return field.label === 'Text color' ? 'Text' : 'Data colors';
   if (field.type === 'color') return 'Other Colors'; // safety net — shouldn't normally hit
   if (TEXT_STYLE_KEYS.has(field.key) || /Weight$|Size$|Position$/.test(field.key)) return 'Text Styling';
   return 'Layout & Behavior';
@@ -99,7 +99,7 @@ function groupFor(field) {
 // than decoration. Background/Rows & Header follow — still colors, but each its own specific
 // concern rather than one catch-all "any color field" bucket. Cross-Filtering comes next —
 // the "what does this widget do" decision, worth seeing before the purely cosmetic groups.
-const GROUP_ORDER = ['Title', 'Value', 'Background', 'Border', 'Rows & Header', 'Cross-Filtering', 'Layout & Behavior', 'Accent & Series', 'Axis', 'Fill & Border', 'Text', 'Text Styling', 'Other Colors'];
+const GROUP_ORDER = ['Title', 'Value', 'Background', 'Border', 'Rows & Header', 'Cross-Filtering', 'Layout & Behavior', 'Data colors', 'Axis', 'Fill & Border', 'Text', 'Text Styling', 'Other Colors'];
 
 const isShowHide = (field) => field.type === 'select' && field.options?.length === 2
   && field.options.every((o) => ['show', 'hide'].includes(String(o.value).toLowerCase()));
@@ -404,7 +404,7 @@ function FieldRow({ field, value, resolvedDefaults, onChange, markOverrides = fa
  * missing keys — falls back to each field's own `default` for display only).
  *
  * Fields are auto-grouped into collapsible sections by concern (Title/Value/Background/Rows &
- * Header/Cross-Filtering/Layout & Behavior/Accent & Series/Axis/Fill & Border/Text/Text
+ * Header/Cross-Filtering/Layout & Behavior/Data colors/Axis/Fill & Border/Text/Text
  * Styling — see groupFor above, and GROUP_ORDER for the fixed display order) and rendered with
  * richer controls per
  * type — color swatch+hex, a slider for numbers, a switch for show/hide toggles, a

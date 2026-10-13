@@ -56,6 +56,19 @@ export const PALETTE_PRESETS = [
   { name: 'Vivid', colors: ['#E63946', '#F4A261', '#2A9D8F', '#264653', '#E9C46A', '#8338EC', '#3A86FF', '#FB5607'] },
   { name: 'Muted', colors: ['#6B8CAE', '#8FAE6B', '#AE8F6B', '#8B6BAE', '#AE6B8F', '#6BAEA6', '#AEA36B', '#6B72AE'] },
   { name: 'Monochrome Blue', colors: ['#0B3C5D', '#1D5B8A', '#2E7BB6', '#4F9BD1', '#7FBCE3', '#A8D3ED', '#0E2A43', '#3E7CA6'] },
+  // Insights Engine's Cell Compare page colors (orange / teal / green first, matching its
+  // series order), then its blue/amber/red/light-orange; violet fills the 8th slot.
+  { name: 'Insights', colors: ['#F26A1B', '#19B6C9', '#22C55E', '#3D9BFF', '#F59E0B', '#EF4444', '#FF8B3D', '#A78BFA'] },
+  // Shade-based presets — only 2-3 hue families each, in the same bright-on-dark style as
+  // 'Insights'. Ordered base hues first, then lighter shades, then deeper ones, so the first
+  // few series always get the most distinct colors.
+  { name: 'Ember & Teal', colors: ['#F26A1B', '#19B6C9', '#22C55E', '#FF9A5C', '#5FD3E0', '#6EE7A0', '#C2410C', '#0E7F8E'] },
+  { name: 'Sunset & Ocean', colors: ['#F26A1B', '#3D9BFF', '#FF9A5C', '#7DBBFF', '#C2410C', '#1D6FD6', '#FDBA74', '#0B4FA8'] },
+  { name: 'Teal & Coral', colors: ['#19B6C9', '#FF6B6B', '#5FD3E0', '#FF9B9B', '#0E7F8E', '#D94848', '#A5EBF3', '#9F2D2D'] },
+  { name: 'Forest & Amber', colors: ['#22C55E', '#F59E0B', '#6EE7A0', '#FCD34D', '#15803D', '#B45309', '#A7F3C4', '#78350F'] },
+  { name: 'Violet & Cyan', colors: ['#8B5CF6', '#19B6C9', '#C4B5FD', '#5FD3E0', '#6D28D9', '#0E7F8E', '#A78BFA', '#22D3EE'] },
+  { name: 'Rose & Indigo', colors: ['#F43F5E', '#6366F1', '#FDA4AF', '#A5B4FC', '#BE123C', '#4338CA', '#FB7185', '#818CF8'] },
+  { name: 'Traffic Light', colors: ['#22C55E', '#F59E0B', '#EF4444', '#6EE7A0', '#FCD34D', '#FCA5A5', '#15803D', '#B91C1C'] },
 ];
 
 // Darkens a hex color toward black by `amount` (0..1). Used to derive a StatCard's

@@ -3007,7 +3007,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                             override rule as everything above it: local `dashboardStyle.palette`
                             (if set) wins over the bound Theme's own palette, via
                             effectiveDashboardStyle in resolveWidgetProps below. */}
-                        <div className={`mb-1 mt-2.5 text-[11px] font-semibold uppercase tracking-wide ${styleModeIsDark ? 'text-slate-300' : 'text-slate-500'}`}>Chart Palette</div>
+                        <div className={`mb-1 mt-2.5 text-[11px] font-semibold uppercase tracking-wide ${styleModeIsDark ? 'text-slate-300' : 'text-slate-500'}`}>Color palette</div>
                         <PaletteEditor
                           value={resolveStyleForMode(dashboardStyle, styleModeIsDark)?.palette || resolveStyleForMode(boundThemeStyle, styleModeIsDark)?.palette || CHART_PALETTE}
                           onChange={(next) => persistDashboardStyle(setModeColor(dashboardStyle, 'palette', next, styleModeIsDark, DASHBOARD_COLOR_KEYS))}
