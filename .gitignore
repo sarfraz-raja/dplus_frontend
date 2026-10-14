@@ -27,6 +27,13 @@ out/
 !.env.example
 !.env.sample
 
+
+env_Airtel.txt
+env_Telco360.txt
+env_tnm.txt
+
+CLAUDE.md
+
 # =========================
 # Logs
 # =========================
@@ -77,3 +84,5 @@ temp/
 public/tiles/*.pmtiles
 dist/tiles/*.pmtiles
 public/tiles/*.pmtiles
+dist.zip
+

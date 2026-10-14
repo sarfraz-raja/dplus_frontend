@@ -1,4 +1,4 @@
-import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Plus, Play, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, LayoutGrid, Settings2, Palette, AlertTriangle, BarChart3 } from 'lucide-react';
 import MappingFields from './MappingFields';
@@ -17,7 +17,9 @@ import useChartListFilter from './useChartListFilter';
 import { chartLibraryStyleFieldsFor } from '../widgetConfig/widgetTypeRegistry';
 import { exportRowsCSV } from '../utils/exportUtils';
 import ChartLibraryWidgetView from './ChartLibraryWidgetView';
-import CHART_TYPE_META, { CHART_TYPES } from './chartTypeMeta';
+import { ANIMATION_KEYS, ChartAnimationContext, resolveAnimation, cardEntrance } from '../utils/chartAnimation';
+import CHART_TYPE_META, { CHART_TYPES, BIG_NUMBER_VARIANT, toBackendChartType, displayChartType } from './chartTypeMeta';
+import { wantsBigNumberTrend, fetchBigNumberTrend } from '../utils/bigNumberTrend';
 import { useTheme } from '../../../context/ThemeContext';
 import { chartTokens } from '../../../theme/tokens';
 import { resolveStyleForMode, setModeColor, copyStyleFields, countCopiedSettings, surfaceBg, resolveCardBorder, cardBorderDefaults, CARD_BORDERED_CLASS } from '../utils/themedStyle';
@@ -346,6 +348,34 @@ const CHART_TYPE_FIELDS = {
     SINGLE_VALUE_DATE_FILTER_GROUP,
     SINGLE_VALUE_COMPARISON_GROUP,
   ],
+  // Big Number (frontend-only type, saved as KPI_CARD + mapping.kpi_variant — see
+  // chartTypeMeta.js). Same query fields as KPI_CARD, laid out as the four questions a user
+  // actually asks, plus display-only ones (subtitle, direction, targets — COSMETIC_MAPPING_KEYS)
+  // and show_trend (a second, LINE-shaped query over the date column — runQueryAndComparison).
+  BIG_NUMBER: [
+    { key: 'bn_number_group', label: '1 · What number?', type: 'group', fields: [
+      { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
+      SINGLE_VALUE_AGG_FIELD,
+      { ...SINGLE_VALUE_DATE_FILTER_GROUP.fields[0], label: 'Date column' },
+      { ...SINGLE_VALUE_DATE_FILTER_GROUP.fields[1], label: 'Period' },
+      { key: 'subtitle', label: 'Subtitle (optional)', type: 'text', optional: true, placeholder: 'e.g. All regions, last 24 hours' },
+    ] },
+    { ...SINGLE_VALUE_COMPARISON_GROUP, key: 'bn_compare_group', label: '2 · Compare to' },
+    { key: 'bn_goal_group', label: '3 · Is higher better?', type: 'group', fields: [
+      {
+        key: 'higher_is_better', label: 'Direction', type: 'select', options: ['Higher is better', 'Lower is better'], default: 'Higher is better',
+        hint: 'Colors the comparison green when it moves the good way and red when it moves the bad way. Also decides which side of a target counts as good.',
+      },
+      { key: 'target_good', label: 'Good target (optional)', type: 'number', optional: true, placeholder: 'no target' },
+      { key: 'target_warn', label: 'Warning target (optional)', type: 'number', optional: true, placeholder: 'none', showIf: (m) => m.target_good !== undefined && m.target_good !== null && m.target_good !== '' },
+    ] },
+    { key: 'bn_trend_group', label: '4 · Show trend', type: 'group', fields: [
+      {
+        key: 'show_trend', label: 'Trend line', type: 'select', options: ['Off', 'On'], default: 'Off',
+        hint: 'Draws how this number moved over the period, under the number. Needs a Date column in step 1 (and a Period other than Latest).',
+      },
+    ] },
+  ],
   GAUGE: [
     { key: 'measure_group', label: 'Measure', type: 'group', fields: [
       { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
@@ -502,7 +532,15 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   const [mapping, setMapping] = useState({});
   // Style tab, per-mode colors — declared after chartType/mapping (it reads both). Legacy flat
   // colors count as both modes; see themedStyle.js.
-  const styleFields = chartLibraryStyleFieldsFor(chartType, mapping);
+  const styleFields = chartLibraryStyleFieldsFor(toBackendChartType(chartType), mapping);
+  // Style → Animation for the preview — this chart's own settings only (no dashboard here, so
+  // "Dashboard setting" falls back to the defaults). Memoized on the 5 values so the context
+  // value only changes when one of them does; the signature also re-keys the preview so a
+  // changed setting replays straight away.
+  const previewAnimSig = ANIMATION_KEYS.map((k) => mapping.style?.[k] || '').join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputed only when one of the 5 values changes
+  const previewAnim = useMemo(() => resolveAnimation([mapping.style]), [previewAnimSig]);
+  const previewEntrance = cardEntrance(previewAnim);
   // `palette` is per-mode too, but is edited in the Data tab (SERIES_PALETTE_FIELD) for series
   // charts, so it's not necessarily in `styleFields` — always treat it as a mode color here.
   const styleColorKeys = new Set([...styleFields.filter((f) => f.type === 'color').map((f) => f.key), 'palette']);
@@ -532,6 +570,9 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // this single in-progress widget rather than a whole canvas of them. { delta, deltaPercent,
   // deltaUp } | null (comparison fetch failed) | undefined (not applicable/not yet run).
   const [previewComparison, setPreviewComparison] = useState(undefined);
+  // Big Number's trend line — [{ x, y }] from a second, LINE-shaped query (see
+  // runQueryAndComparison), or null when off/unavailable.
+  const [previewTrend, setPreviewTrend] = useState(null);
   // True once a Preview has actually succeeded at least once for the widget currently loaded
   // — gates the auto-refresh effect below so it never fires before the user's first explicit
   // Preview click (a brand-new/unconfigured widget has nothing worth auto-running yet), but
@@ -645,6 +686,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setDirty(false);
     setPreviewData(null);
     setPreviewComparison(undefined);
+    setPreviewTrend(null);
     setPreviewError(null);
     hasPreviewedRef.current = false;
     setSaveError(null);
@@ -680,7 +722,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setCopyingStyle(true);
     try {
       const detail = await getWidgetDetail(sourceId);
-      const fields = chartLibraryStyleFieldsFor(chartType, mapping);
+      const fields = chartLibraryStyleFieldsFor(toBackendChartType(chartType), mapping);
       // 'palette' is always copied (per mode) — for series charts it lives in the Data tab, so
       // it isn't among the style fields above.
       const allowed = new Set([...fields.map((f) => f.key), 'palette']);
@@ -728,6 +770,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setPreviewError(null);
     setPreviewData(null);
     setPreviewComparison(undefined);
+    setPreviewTrend(null);
     hasPreviewedRef.current = false;
     setRunStatus('');
     // Every "New widget"/"New chart" entry point (both buttons in this file, plus
@@ -745,7 +788,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // (`++previewRequestIdRef.current`) and passed in, so editWidget's and runPreview's fetches
   // guard against each other the same way runPreview's own fetches already guarded against one
   // another — whichever call is still current when a fetch resolves wins.
-  const runQueryAndComparison = async (requestId, widgetId, mappingArg, chartTypeArg) => {
+  const runQueryAndComparison = async (requestId, widgetId, mappingArg, chartTypeArg, datasourceIdArg) => {
     const dateFilter = mappingArg.date_filter_column
       ? buildDateFilterFromPreset(mappingArg.date_filter_column, mappingArg.date_filter_range || 'Last 7 days')
       : null;
@@ -754,6 +797,14 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     if (previewRequestIdRef.current !== requestId) return; // superseded by a newer call
     setPreviewData(data);
     hasPreviewedRef.current = true;
+
+    // Big Number trend line — not awaited, so the number and its comparison never wait on it.
+    setPreviewTrend(null);
+    if (wantsBigNumberTrend(mappingArg) && datasourceIdArg) {
+      fetchBigNumberTrend({ datasourceId: datasourceIdArg, mapping: mappingArg, filters, quiet: true })
+        .then((points) => { if (previewRequestIdRef.current === requestId) setPreviewTrend(points); })
+        .catch(() => { /* optional extra — the card just shows no trend line */ });
+    }
 
     const isLatestCustom = mappingArg.compare_to === 'Custom' && mappingArg.date_filter_range === 'Latest';
     if ((chartTypeArg === 'KPI_CARD' || chartTypeArg === 'GAUGE') && mappingArg.compare_to && mappingArg.compare_to !== 'None' && (dateFilter || isLatestCustom)) {
@@ -803,6 +854,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setPreviewError(null);
     setPreviewData(null);
     setPreviewComparison(undefined);
+    setPreviewTrend(null);
     hasPreviewedRef.current = false;
     setRunStatus('');
     setDirty(false);
@@ -812,7 +864,8 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       const widget = await getWidgetDetail(summary.id);
       setName(widget.name);
       setDatasourceId(widget.datasource_id);
-      setChartType(widget.chart_type);
+      // A Big Number is stored as KPI_CARD + mapping.kpi_variant — show it as its own type.
+      setChartType(displayChartType(widget.chart_type, widget.mapping));
       setMapping(widget.mapping || {});
       await loadColumnsFor(widget.datasource_id);
       setDetailLoading(false);
@@ -828,7 +881,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       setRunning(true);
       setRunStatus('Running query…');
       try {
-        await runQueryAndComparison(requestId, summary.id, widget.mapping || {}, widget.chart_type);
+        await runQueryAndComparison(requestId, summary.id, widget.mapping || {}, widget.chart_type, widget.datasource_id);
         if (previewRequestIdRef.current === requestId) setRunStatus('');
       } catch (err) {
         if (previewRequestIdRef.current === requestId) {
@@ -886,6 +939,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setColumns([]);
     setPreviewData(null);
     setPreviewComparison(undefined);
+    setPreviewTrend(null);
     setPreviewError(null);
     markDirty();
     loadColumnsFor(id);
@@ -905,9 +959,12 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     // change even when switching between two chart_types that both group the same fields.
     const allowedKeys = new Set((CHART_TYPE_FIELDS[type] || []).flatMap((f) => (f.type === 'group' ? f.fields.map((sub) => sub.key) : [f.key])));
     setChartType(type);
-    setMapping((prev) => Object.fromEntries(
-      Object.entries(prev).filter(([k]) => allowedKeys.has(k) || k === 'style'),
-    ));
+    // kpi_variant isn't a field of any type, so the filter drops it when leaving Big Number;
+    // it's added back here when switching to it.
+    setMapping((prev) => ({
+      ...Object.fromEntries(Object.entries(prev).filter(([k]) => allowedKeys.has(k) || k === 'style')),
+      ...(type === 'BIG_NUMBER' ? { kpi_variant: BIG_NUMBER_VARIANT } : {}),
+    }));
     markDirty();
     // Preview auto-refreshes via the effect below (chartType is one of its deps) once the
     // widget has been previewed at least once — nothing else to do here.
@@ -1029,9 +1086,9 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   const saveWidget = async () => {
     let widget;
     if (editingId) {
-      widget = await updateWidget(editingId, { name: name.trim(), datasource_id: datasourceId, chart_type: chartType, mapping });
+      widget = await updateWidget(editingId, { name: name.trim(), datasource_id: datasourceId, chart_type: toBackendChartType(chartType), mapping });
     } else {
-      widget = await createWidget({ name: name.trim(), datasourceId, chartType, mapping });
+      widget = await createWidget({ name: name.trim(), datasourceId, chartType: toBackendChartType(chartType), mapping });
       setEditingId(widget.id);
     }
     setDirty(false);
@@ -1095,7 +1152,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       // all (this is the standalone preview, not a placed dashboard widget), so unlike the
       // canvas version there's no dashboard-global filter to merge with/exclude — just this
       // card's own.
-      await runQueryAndComparison(requestId, widget.id, mapping, chartType);
+      await runQueryAndComparison(requestId, widget.id, mapping, toBackendChartType(chartType), datasourceId);
       if (previewRequestIdRef.current === requestId) setRunStatus('');
     } catch (err) {
       if (previewRequestIdRef.current !== requestId) return;
@@ -1113,7 +1170,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // re-querying for it (see the auto-refresh effect below) is pure waste, and on a free-text
   // field triggers exactly the "auto-saves on every character" chatter this comment is
   // sitting next to fix. Any future purely-display-only mapping field belongs in this list.
-  const COSMETIC_MAPPING_KEYS = ['x_axis_title', 'y_axis_title', 'x_axis_date_format', 'x_axis_tick_interval_value', 'x_axis_tick_interval_unit', 'truncate_y_axis', 'y_axis_min', 'y_axis_max', 'truncate_x_axis', 'x_axis_min', 'x_axis_max'];
+  const COSMETIC_MAPPING_KEYS = ['subtitle', 'higher_is_better', 'target_good', 'target_warn', 'x_axis_title', 'y_axis_title', 'x_axis_date_format', 'x_axis_tick_interval_value', 'x_axis_tick_interval_unit', 'truncate_y_axis', 'y_axis_min', 'y_axis_max', 'truncate_x_axis', 'x_axis_min', 'x_axis_max'];
   const queryRelevantMapping = JSON.stringify(
     Object.fromEntries(Object.entries(mapping).filter(([k]) => !COSMETIC_MAPPING_KEYS.includes(k))),
   );
@@ -1303,8 +1360,11 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       <div className="relative h-full">
         {renderPreviewDrillControls()}
         <div className={cardBorder ? `h-full overflow-hidden ${CARD_BORDERED_CLASS}` : 'h-full'} style={cardBorder || undefined}>
+        <div key={previewAnimSig} className={`h-full ${previewEntrance.className}`} style={previewEntrance.style}>
+        <ChartAnimationContext.Provider value={previewAnim}>
         <ChartLibraryWidgetView
-          chartType={chartType} name={name} mapping={mapping} rows={previewData.rows}
+          chartType={toBackendChartType(chartType)} name={name} mapping={mapping} rows={previewData.rows}
+          trend={previewTrend}
           picked loading={false} error={null} height={440}
           // `mapping.style` alone still holds each 'show'/'hide' field as that raw string —
           // renderChartWidget.jsx's LineAreaChart/PieChart/etc. consumers expect the resolved
@@ -1358,6 +1418,8 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
             markDirty();
           }}
         />
+        </ChartAnimationContext.Provider>
+        </div>
         </div>
       </div>
     );

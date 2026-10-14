@@ -21,7 +21,7 @@ import { useTheme } from '../../../context/ThemeContext';
  */
 export default function ChartLibraryWidgetView({
   chartType, name, mapping, rows, loading, error, picked, height, style, onPointClick, onDrillUp,
-  drillDown, drilling, comparison, crossFilterEnabled, onPointCrossFilter, showWarnings = true,
+  drillDown, drilling, comparison, trend, crossFilterEnabled, onPointCrossFilter, showWarnings = true,
   onReorderColumns, onColumnResize, onColumnLabelChange, isDark: isDarkProp = null,
 }) {
   const [menu, setMenu] = useState(null); // { label, x, y } | null
@@ -90,7 +90,7 @@ export default function ChartLibraryWidgetView({
         </div>
       )}
       {renderChartWidget({
-        chartType, name, mapping, rows: error ? [] : (rows || []), height, style, isDark, onPointClick, comparison, drillDown, onReorderColumns, onColumnResize, onColumnLabelChange,
+        chartType, name, mapping, rows: error ? [] : (rows || []), height, style, isDark, onPointClick, comparison, trend, drillDown, onReorderColumns, onColumnResize, onColumnLabelChange,
         // Menu is offered whenever EITHER feature is reachable from this point, not just
         // drilling — a widget with both drill-down and cross-filter configured needs the menu
         // to expose cross-filter too, since left-click there is claimed by drilling (see

@@ -4,6 +4,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { chartTokens } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
+import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/utils/chartAnimation';
 
 /**
  * Radial gauge — originally built for percentage-style KPIs (RNA, Radio Network Availability,
@@ -16,6 +17,8 @@ export default function GaugeCard({
   delta = '', deltaUp = true, deltaTooltip = '',
 }) {
   const { theme } = useTheme();
+  // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
+  const chartAnimation = useChartAnimation();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
   const { text: textColor, sub: subColor } = chartTokens(isDark);
 
@@ -77,7 +80,7 @@ export default function GaugeCard({
         </div>
       )}
       <div className="flex-1 min-h-0">
-        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
+        <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
       </div>
     </div>
   );

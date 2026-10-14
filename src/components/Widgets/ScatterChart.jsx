@@ -6,6 +6,7 @@ import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 import { resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
+import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/utils/chartAnimation';
 
 /**
  * Scatter chart for correlating two KPIs (e.g. RSRP vs throughput per cell). Paired
@@ -17,12 +18,17 @@ import { resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils
 export default function ScatterChart({
   title = '', xLabel = '', yLabel = '', xAxisLabel = null, yAxisLabel = null, unit = '', data = [], color = '#378ADD', height = 140, isDark: isDarkProp = null,
   titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
-  titlePosition = 'top-left',
+  titlePosition = 'top-left', seriesOpacity = null,
   truncateXAxis = null, xAxisMin = null, xAxisMax = null,
   truncateYAxis = null, yAxisMin = null, yAxisMax = null,
 }) {
   const { theme } = useTheme();
+  // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
+  const chartAnimation = useChartAnimation();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
+  // Style tab's opacity slider (0-100, null = this chart's built-in default) — see
+  // widgetTypeRegistry.js's OPACITY fields.
+  const pointOpacity = seriesOpacity == null ? 0.75 : seriesOpacity / 100;
   const { sub: subColor } = chartTokens(isDark);
 
   const points = data.map((d) => [d.x, d.y, d.name]);
@@ -61,7 +67,7 @@ export default function ScatterChart({
       {
         type: 'scatter',
         symbolSize: 7,
-        itemStyle: { color, opacity: 0.75 },
+        itemStyle: { color, opacity: pointOpacity },
         data: points,
       },
     ],
@@ -86,7 +92,7 @@ export default function ScatterChart({
         </div>
       )}
       <div className="flex-1 min-h-0">
-        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
+        <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate />
       </div>
     </div>
   );

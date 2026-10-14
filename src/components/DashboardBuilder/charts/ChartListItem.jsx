@@ -1,6 +1,6 @@
 import React from 'react';
 import { Copy, Trash2, Download } from 'lucide-react';
-import CHART_TYPE_META from './chartTypeMeta';
+import CHART_TYPE_META, { displayChartType } from './chartTypeMeta';
 
 /**
  * One row in a Chart Library list — shared between DashboardCanvasEditor.jsx's "Your Charts"
@@ -34,7 +34,7 @@ export default function ChartListItem({
   onDelete, onDuplicate, onExport,
 }) {
   const [exporting, setExporting] = React.useState(false);
-  const meta = CHART_TYPE_META[widget.chart_type];
+  const meta = CHART_TYPE_META[displayChartType(widget.chart_type, widget.mapping)];
   const Icon = meta?.icon;
   // Rendered defensively — these fields' exact presence/naming isn't confirmed on every
   // endpoint's response shape, so each only shows up if actually resolvable, never assumed.

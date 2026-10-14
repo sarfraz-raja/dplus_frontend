@@ -5,6 +5,7 @@ import { chartTokens, FONT_WEIGHT_CSS } from '../../theme/tokens';
 import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { resolveTruncatedBounds, formatDateLabel, toAxisTimeValue } from '../DashboardBuilder/charts/axisTypeUtils';
+import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/utils/chartAnimation';
 
 /**
  * Horizontal ranked-list bar chart — "Top N sites by traffic," worst-performing cells,
@@ -30,10 +31,15 @@ export default function HorizontalBarChart({
   // color/legend convention as BarChart.jsx's own SERIES_FIELD support, just laid out on the
   // rotated axis this chart already uses (category on yAxis, measure on xAxis). `data`/`color`
   // are ignored in this mode, same as BarChart.jsx.
-  categories = null, series = null, showLegend = true, seriesColors = null, palette = null,
+  categories = null, series = null, showLegend = true, seriesColors = null, palette = null, seriesOpacity = null,
 }) {
   const { theme } = useTheme();
+  // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
+  const chartAnimation = useChartAnimation();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
+  // Style tab's opacity slider (0-100, null = this chart's built-in default) — see
+  // widgetTypeRegistry.js's OPACITY fields.
+  const barOpacity = seriesOpacity == null ? 1 : seriesOpacity / 100;
   const { text: textColor, sub: subColor } = chartTokens(isDark);
   const isMultiSeries = Array.isArray(series) && series.length > 0;
 
@@ -99,7 +105,7 @@ export default function HorizontalBarChart({
       name: s.name,
       type: 'bar',
       barMaxWidth: 16,
-      itemStyle: { color: seriesColors?.[s.name] || (palette ? palette[i % palette.length] : undefined), borderRadius: [0, 3, 3, 0] },
+      itemStyle: { color: seriesColors?.[s.name] || (palette ? palette[i % palette.length] : undefined), borderRadius: [0, 3, 3, 0], opacity: barOpacity },
       data: rankedCats.map((r) => s.data[bucketCats.indexOf(r.cat)]),
     }));
   } else {
@@ -122,7 +128,7 @@ export default function HorizontalBarChart({
       {
         type: 'bar',
         data: ranked.map((d) => d.value),
-        itemStyle: { color, borderRadius: [0, 3, 3, 0] },
+        itemStyle: { color, borderRadius: [0, 3, 3, 0], opacity: barOpacity },
         barMaxWidth: 16,
         label: { show: true, position: 'right', fontSize: valueTextSize || 9, color: valueTextColor || textColor, formatter: (p) => `${p.value}${unit}` },
       },
@@ -186,7 +192,7 @@ export default function HorizontalBarChart({
         </div>
       )}
       <div className="flex-1 min-h-0">
-        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(!crossFilterDisabled && (onPointClick || onPointContextMenu)) ? {
+        <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(!crossFilterDisabled && (onPointClick || onPointContextMenu)) ? {
           ...(onPointClick ? { click: (p) => onPointClick(rawLabels[p.dataIndex]) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(rawLabels[p.dataIndex], p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />

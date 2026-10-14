@@ -85,9 +85,10 @@ function groupFor(field) {
   if (BORDER_FIELD_KEYS.has(field.key)) return 'Border';
   if (TABLE_COLOR_FIELD_KEYS.has(field.key)) return 'Rows & Header';
   if (field.key === 'crossFilterSource' || field.key === 'crossFilterTarget') return 'Cross-Filtering';
+  if (field.key === 'animation' || field.key.startsWith('anim')) return 'Animation';
   if (SHAPE_COLOR_KEYS.has(field.key)) return 'Fill & Border';
   if (['axisTextColor', 'axisTextWeight', 'axisTextSize', 'axisTextFont'].includes(field.key)) return 'Axis';
-  if (field.type === 'palette' || ACCENT_SERIES_COLOR_KEYS.has(field.key)) return 'Data colors';
+  if (field.type === 'palette' || ACCENT_SERIES_COLOR_KEYS.has(field.key) || field.key === 'seriesOpacity' || field.key === 'areaOpacity') return 'Data colors';
   if (field.key === 'color') return field.label === 'Text color' ? 'Text' : 'Data colors';
   if (field.type === 'color') return 'Other Colors'; // safety net — shouldn't normally hit
   if (TEXT_STYLE_KEYS.has(field.key) || /Weight$|Size$|Position$/.test(field.key)) return 'Text Styling';
@@ -99,7 +100,7 @@ function groupFor(field) {
 // than decoration. Background/Rows & Header follow — still colors, but each its own specific
 // concern rather than one catch-all "any color field" bucket. Cross-Filtering comes next —
 // the "what does this widget do" decision, worth seeing before the purely cosmetic groups.
-const GROUP_ORDER = ['Title', 'Value', 'Background', 'Border', 'Rows & Header', 'Cross-Filtering', 'Layout & Behavior', 'Data colors', 'Axis', 'Fill & Border', 'Text', 'Text Styling', 'Other Colors'];
+const GROUP_ORDER = ['Title', 'Value', 'Background', 'Border', 'Rows & Header', 'Cross-Filtering', 'Layout & Behavior', 'Data colors', 'Axis', 'Fill & Border', 'Text', 'Text Styling', 'Animation', 'Other Colors'];
 
 const isShowHide = (field) => field.type === 'select' && field.options?.length === 2
   && field.options.every((o) => ['show', 'hide'].includes(String(o.value).toLowerCase()));
@@ -267,7 +268,7 @@ function IconSelectRow({ field, current, onChange }) {
 function SelectRow({ field, current, onChange }) {
   return (
     <label className="dbe-style-row">
-      <span className="dbe-style-row-label">{field.label}</span>
+      <span className="dbe-style-row-label"><span className="dbe-style-row-label-text">{field.label}</span><FieldHintMark hint={field.hint} /></span>
       <select value={current} onChange={(e) => onChange(field.key, e.target.value)}>
         {(field.options || []).map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
       </select>

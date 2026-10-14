@@ -735,10 +735,12 @@ export async function deleteSlicer(slicerId) {
 
 /** Fetches one widget's rendered data. `filters`/`drillPath` are optional runtime overrides
  * on top of the widget's own saved mapping (see mapping.drill_down for the column hierarchy). */
-export async function getWidgetData(dashboardId, widgetId, { filters, drillPath } = {}) {
+// `quiet` skips the app-wide loading overlay (background refresh — see getDashboardData).
+export async function getWidgetData(dashboardId, widgetId, { filters, drillPath, quiet = false } = {}) {
   const res = await Api.post({
     url: `${Urls.dashboardBuilder_dashboards}/${dashboardId}/widgets/${widgetId}/data`,
     data: { filters, drill_path: drillPath },
+    inst: quiet ? 0 : 1,
   });
   if (!res) {
     throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
@@ -765,14 +767,18 @@ export async function getWidgetData(dashboardId, widgetId, { filters, drillPath 
  *
  * `tabId` scopes which tab's slicers apply (plus global ones) — omit it to apply only global
  * slicers. Must be re-sent on every tab switch; the backend doesn't remember the active tab.
+ *
+ * `quiet` skips the app-wide loading overlay — for a background refresh of charts that are
+ * already on screen (see DashboardCanvasEditor's dashboardDataCache seeding).
  */
-export async function getDashboardData(dashboardId, { filters, tabId } = {}) {
+export async function getDashboardData(dashboardId, { filters, tabId, quiet = false } = {}) {
   const data = {};
   if (filters !== undefined) data.filters = filters;
   if (tabId !== undefined) data.tab_id = tabId;
   const res = await Api.post({
     url: `${Urls.dashboardBuilder_dashboards}/${dashboardId}/data`,
     data,
+    inst: quiet ? 0 : 1,
   });
   if (!res) {
     throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
@@ -816,8 +822,10 @@ export async function createWidget({ name, datasourceId, chartType, mapping }) {
 }
 
 /** Lists every widget in the reusable chart library. */
-export async function listWidgets() {
-  const res = await Api.get({ url: Urls.dashboardBuilder_widgets });
+// `quiet` skips the app-wide loading overlay (e.g. the editor's side-panel list loading behind
+// charts that are already on screen).
+export async function listWidgets({ quiet = false } = {}) {
+  const res = await Api.get({ url: Urls.dashboardBuilder_widgets, inst: quiet ? 0 : 1 });
   if (!res) {
     throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
   }
@@ -996,6 +1004,29 @@ export async function deleteTheme(id) {
     const serverMsg = res.data?.msg || res.data?.message;
     throw new Error(serverMsg || `Deleting theme ${id} failed with status ${res.status}.`);
   }
+}
+
+/** Runs an unsaved widget definition inline (POST /widgets/preview — nothing is created).
+ * Used by the Big Number card's trendline: the card's own measure re-run as a LINE over its
+ * date column. `quiet` → the no-loader axios instance (a background extra, not a user action). */
+export async function previewWidgetQuery({ datasourceId, chartType, mapping, filters, quiet = false }) {
+  const res = await Api.post({
+    url: `${Urls.dashboardBuilder_widgets}/preview`,
+    data: { datasource_id: datasourceId, chart_type: chartType, mapping, filters },
+    inst: quiet ? 0 : 1,
+  });
+  if (!res) {
+    throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  }
+  if (res.status !== 200) {
+    const serverMsg = res.data?.msg || res.data?.message;
+    throw new Error(serverMsg || `Preview query failed with status ${res.status}.`);
+  }
+  const body = res.data?.data;
+  if (!Array.isArray(body?.rows)) {
+    throw new Error("Unexpected response shape from POST /dashboard-builder/widgets/preview (see console).");
+  }
+  return { columns: body.columns, rows: body.rows };
 }
 
 /** Runs a widget's query independent of any dashboard — used for previewing in the library. */

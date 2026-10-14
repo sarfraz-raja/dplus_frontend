@@ -11,21 +11,34 @@ export const LIGHT_THEME_NAME = 'kpiLight';
 
 function buildTheme(isDark) {
   const { text, sub, axis, split, track } = chartTokens(isDark);
+  const categoryAxis = {
+    axisLine: { lineStyle: { color: axis } },
+    axisTick: { show: false },
+    axisLabel: { color: sub },
+    splitLine: { lineStyle: { color: split } },
+  };
+  const valueAxis = {
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { color: sub },
+    splitLine: { lineStyle: { color: split } },
+  };
   return {
     color: CHART_PALETTE,
     backgroundColor: 'transparent',
     textStyle: { color: text },
-    categoryAxis: {
-      axisLine: { lineStyle: { color: axis } },
-      axisTick: { show: false },
-      axisLabel: { color: sub },
-      splitLine: { lineStyle: { color: split } },
-    },
-    valueAxis: {
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: sub },
-      splitLine: { lineStyle: { color: split } },
+    categoryAxis,
+    valueAxis,
+    // Time/log axes take their own theme keys — without these, a date x-axis fell back to the
+    // main text color instead of the softer axis-label one used by every other axis.
+    timeAxis: categoryAxis,
+    logAxis: valueAxis,
+    // Mode-matched tooltip (ECharts' default is always a white box, even in dark mode). Same
+    // card surface as surfaceBg() in DashboardBuilder/utils/themedStyle.js.
+    tooltip: {
+      backgroundColor: isDark ? '#22273C' : '#ffffff',
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+      textStyle: { color: text },
     },
     gauge: {
       axisLine: { lineStyle: { color: [[1, track]] } },

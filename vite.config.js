@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { compression } from 'vite-plugin-compression2'
 
@@ -15,7 +15,20 @@ function devNoCachePlugin() {
   }
 }
 
-export default defineConfig({
+// ALLOWED_HOSTS in .env — accepts ['a', "b"] or a,b. Not VITE_-prefixed, so it never reaches client code.
+function parseHostList(value) {
+  if (!value) return undefined
+  const hosts = value
+    .replace(/^\s*\[|\]\s*$/g, '')
+    .split(',')
+    .map((h) => h.trim().replace(/^['"]|['"]$/g, '').trim())
+    .filter(Boolean)
+  return hosts.length ? hosts : undefined
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  return {
   plugins: [
     react(),
     devNoCachePlugin(),
@@ -44,11 +57,13 @@ export default defineConfig({
   server: {         
     port: 5173,
     strictPort: true,
-    allowedHosts: ['dell5070l', 'dyserver2', 'dyserver', '192.168.0.172', '192.168.0.181',"https://dataplus.live","dataplus.live"],
+    // allowedHosts: ['dell5070l', 'dyserver2', 'dyserver', '192.168.0.172', '192.168.0.181',"https://dataplus.live","dataplus.live"],
+    allowedHosts: parseHostList(env.ALLOWED_HOSTS),
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       Pragma: 'no-cache',
       Expires: '0',
     },
   },
+  }
 })

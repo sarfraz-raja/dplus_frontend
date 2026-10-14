@@ -6,6 +6,7 @@ import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 import { resolveCustomTickFormatter, toAxisTimeValue, buildCustomTimeTicks, resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
+import { useChartAnimation, useRiseEntrance } from '../DashboardBuilder/utils/chartAnimation';
 
 /**
  * Filled area trend chart — same `{label, value}[]` single-series shape and theme wiring
@@ -24,10 +25,18 @@ export default function AreaChart({
   truncateYAxis = null, yAxisMin = null, yAxisMax = null,
   // Optional multi-series grouping (mapping.series) — see BarChart.jsx's identical block for
   // the full rationale; `data`/`color` are ignored in this mode.
-  categories = null, series = null, showLegend = true, seriesColors = null, palette = null,
+  categories = null, series = null, showLegend = true, seriesColors = null, palette = null, seriesOpacity = null, areaOpacity = null,
 }) {
   const { theme } = useTheme();
+  // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
+  const chartAnimation = useChartAnimation();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
+  // Style tab's opacity slider (0-100, null = this chart's built-in default) — see
+  // widgetTypeRegistry.js's OPACITY fields.
+  const lineOpacity = seriesOpacity == null ? 1 : seriesOpacity / 100;
+  const fillOpacity = areaOpacity == null ? 0.35 : areaOpacity / 100;
+  // Dimmed fill while another series is highlighted — same 0.1 : 0.35 ratio as before.
+  const blurFillOpacity = fillOpacity * (0.1 / 0.35);
   const { text: textColor, sub: subColor } = chartTokens(isDark);
   const isMultiSeries = Array.isArray(series) && series.length > 0;
 
@@ -98,12 +107,12 @@ export default function AreaChart({
         symbol: (onPointClick || onPointContextMenu) ? 'circle' : 'none',
         symbolSize: (onPointClick || onPointContextMenu) ? 10 : undefined,
         itemStyle: (onPointClick || onPointContextMenu) ? { opacity: 0, color: sColor } : { color: sColor },
-        lineStyle: { width: 1.5, color: sColor },
-        areaStyle: { color: sColor, opacity: 0.35 },
+        lineStyle: { width: 1.5, color: sColor, opacity: lineOpacity },
+        areaStyle: { color: sColor, opacity: fillOpacity },
         emphasis: { disabled: true },
         blur: {
-          lineStyle: { opacity: 1 },
-          areaStyle: { opacity: 0.1 },
+          lineStyle: { opacity: lineOpacity },
+          areaStyle: { opacity: blurFillOpacity },
           itemStyle: { opacity: 1 },
         },
       };
@@ -120,18 +129,19 @@ export default function AreaChart({
         symbol: (onPointClick || onPointContextMenu) ? 'circle' : 'none',
         symbolSize: (onPointClick || onPointContextMenu) ? 10 : undefined,
         itemStyle: (onPointClick || onPointContextMenu) ? { opacity: 0 } : undefined,
-        lineStyle: { width: 1.5, color },
-        areaStyle: { color, opacity: 0.35 },
+        lineStyle: { width: 1.5, color, opacity: lineOpacity },
+        areaStyle: { color, opacity: fillOpacity },
         emphasis: { disabled: true },
         blur: {
-          lineStyle: { opacity: 1 },
-          areaStyle: { opacity: 0.1 },
+          lineStyle: { opacity: lineOpacity },
+          areaStyle: { opacity: blurFillOpacity },
           itemStyle: { opacity: 1 },
         },
       },
     ],
   };
 
+  const { option: animatedOption, onChartReady: onRiseReady } = useRiseEntrance(option, chartAnimation);
   return (
     <div className="kpi-area-card h-full box-border flex flex-col overflow-hidden rounded-lg bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
       {/* Reserved header row, not an absolutely-positioned overlay — see LineAreaChart.jsx's
@@ -153,7 +163,7 @@ export default function AreaChart({
         </div>
       )}
       <div className="flex-1 min-h-0">
-        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        <ReactECharts option={animatedOption} onChartReady={onRiseReady} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
           ...(onPointClick ? { click: (p) => onPointClick(clickLabels[p.dataIndex]) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(clickLabels[p.dataIndex], p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />

@@ -113,6 +113,8 @@ Not something that was implicitly covered elsewhere — worth an explicit invent
 | `ThemePicker` | `components/DashboardBuilder/dashboard/ThemePicker.jsx` | The Theme popover's linked-Theme control: a card with the theme's palette swatches + "Linked theme" badge, Change/Unlink, and an inline list of themes (palette preview each) — a link to a shared Theme, deliberately not a form input. Theme link + dashboard overrides are staged and saved by "Save dashboard" | 1 (inside `DashboardCanvasEditor`) |
 | `SelectedWidgetDetails` | `components/DashboardBuilder/dashboard/SelectedWidgetDetails.jsx` | Left panel "Selected Widget" section: type icon/label + datasource, per-dashboard title (saved in the layout entry only when it differs from the chart's own name — `dataSource.chartName` — with a Reset), Tab move, size, own-filter count, Edit chart / Copy ID | 1 (inside `DashboardCanvasEditor`) |
 | `themedStyle.js` helpers | `components/DashboardBuilder/utils/themedStyle.js` | Per-mode style colors: widget/dashboard/theme styles keep shared settings flat and colors under `colors.{light,dark}`; `resolveStyleForMode` flattens for the active theme, `mergeStyleLayers`/`setModeColor`/`copyStyleFields` edit them, `guardStyleColors` drops unreadable saved colors at render. Old flat colors = both modes. Widget card border: `CARD_BORDER_FIELDS` (`widgetTypeRegistry.js`, `card*` keys — Shape owns `borderColor`/`borderWidth`) is shared by the widget, Charts-tab, Dashboard Style and Theme panels; `resolveCardBorder` (widget → dashboard/theme → off) is drawn on the dashboard tile, not inside the chart components; Dashboard Style → Border → "Apply to all widgets" clears placement-level border overrides | — |
+| Big Number (`BigNumberCard`, `bigNumberTrend.js`) | `components/Widgets/BigNumberCard.jsx`, `components/DashboardBuilder/utils/bigNumberTrend.js` | Chart type `BIG_NUMBER` is **frontend-only**: saved as `chart_type: KPI_CARD` + `mapping.kpi_variant: 'big_number'` (no backend change). `chartTypeMeta.js`'s `toBackendChartType` (for every API call / KPI logic) and `displayChartType` (for lists, picker, fields) convert between the two — use them wherever a chart's type is sent or shown. Editor = `CHART_TYPE_FIELDS.BIG_NUMBER` (four steps; subtitle/direction/targets are cosmetic mapping keys), renderer = `renderChartWidget`'s KPI_CARD case branching on the marker. Trend line = the measure re-run as a LINE over the date column via `POST /widgets/preview` (`previewWidgetQuery`). Plain KPI Cards (no marker) are untouched | Charts tab, dashboard canvas |
+| `chartAnimation.js` | `components/DashboardBuilder/utils/chartAnimation.js` | Style → Animation (On/Off, Entrance Draw/Rise/Zoom/Fade, Speed, Style, Stagger), cascading widget → dashboard → theme → defaults (= ECharts' own, so untouched charts are unchanged). `resolveAnimation` resolves it; `ChartAnimationContext` delivers it to the 12 ECharts components in `components/Widgets/` (`applyChartAnimation`, or `useRiseEntrance` for Line/Area). `cardEntrance` drives the Zoom/Fade tile CSS (`dbe-enter-*` keyframes in `index.css`). No provider → options untouched. A new ECharts widget should read `useChartAnimation()` the same way | Dashboard canvas, Charts-tab preview |
 | `objectToQueryString`, `objectToArray`, `moreinfo` | `utils/commonFunnction.js` | Query-string building, object/array conversion, text truncation helpers | — |
 
 **Stale/near-dead, don't build on these:**
@@ -181,12 +183,14 @@ Current variables (see `.env` for the live values and `.env.example` for the tem
 | `VITE_CARTO_API_KEY` | same as above | API key for the online CARTO basemap fallback |
 | `VITE_DEFAULT_MAP_LAT` / `VITE_DEFAULT_MAP_LNG` | `DegradedCellsMap.jsx` | Default map center when no data-driven center is available |
 | `VITE_GEO_DRILLDOWN_ENABLED` | routing/sidebar config | Feature-flags the Geo Drill-Down module on/off |
-| `VITE_MICROSOFT_AUTH_ENABLED`, `VITE_CLIENT_ID` | `src/main.jsx`, `src/authConfig.js` | Toggles Microsoft/Azure AD SSO login and its MSAL client ID |
+| `VITE_MICROSOFT_AUTH_ENABLED`, `VITE_CLIENT_ID` | `src/main.jsx`, `src/pages/Login.jsx`, `src/authConfig.js` | Toggles Microsoft/Azure AD SSO login and its MSAL client ID — config-only, no code change; Azure redirect URI / HTTPS / user checklist in [`docs/MICROSOFT_SSO.md`](docs/MICROSOFT_SSO.md) |
 | `VITE_TIME_ZONE` | `TopBar.jsx`, `resolveTimeRange.js` | Deployment display timezone (defaults to `Africa/Libreville`) |
 | `VITE_NATIVE_FILTER_ID` | `TelecomMap.jsx` | Superset native filter ID used for cell-name filtering |
 | `VITE_SUPERSET_UI_ORIGIN`, `VITE_SUPERSET_GUEST_TOKEN_URL` | `src/utils/url.js` | Embedded Superset dashboard origin + guest-token endpoint |
 | `VITE_SUPERSET_DASHBOARD_UUID` | `TelecomMap.jsx` | Superset dashboard opened from the cell Charts popup (Telco360: `9615446e-…`); unset falls back to the Gabon/Malawi dashboard `0ccb9f27-…` |
+| `VITE_SUPERSET_DASHBOARD_UUID_4G` / `_5G`, `VITE_NATIVE_FILTER_ID_4G` / `_5G` | `TelecomMap.jsx` (`getCellDashboardUrl`) | Per-technology cell Charts dashboard (Telco360: 4G cells → `21efbbdc-…`, 5G → `9615446e-…`), each with its own `cell_name` native filter id (uuid without filter id = not configured). Once any of these is set, the hardcoded Gabon/Malawi dashboard is never used: an unmatched technology falls back to `VITE_SUPERSET_DASHBOARD_UUID` + `VITE_NATIVE_FILTER_ID` if both are set, otherwise the Charts click shows a "No Charts dashboard configured" alert |
 | `VITE_GRAFANA_URL` | `src/utils/url.js` | Embedded Grafana origin |
+| `ALLOWED_HOSTS` | `vite.config.js` (`server.allowedHosts`, via `loadEnv`) | Dev-server hostnames allowed to reach Vite — `['a', "b"]` or `a,b`. Deliberately not `VITE_`-prefixed so it isn't exposed to client code; unset = Vite default (localhost only). Restart the dev server after changing it |
 
 **Guideline:** when adding config that varies per environment/deployment, add a `VITE_*` var (with a commented default in `.env.example`), read it via `import.meta.env`, and add a row to the table above — don't hardcode URLs, tokens, or feature toggles in source.
 
@@ -225,6 +229,16 @@ No page polls in the background by default — a list loads once, then refreshes
 | Incident list (`Assurance/IncidentList.jsx`) | None | ↻ button |
 
 Follow the same approach for new pages: background refreshes use the no-loader axios instance (`inst: 0`) so they don't flash the app-wide loader.
+
+### Dashboard Builder data loading
+
+A saved dashboard (`DashboardCanvasEditor` with a `backendId`) loads its charts in **one batched call** (`POST /dashboards/{id}/data`). Rules that keep it from loading things twice — keep them when changing the load effects:
+
+- **Send the known saved filters in the first call.** `initialGlobalFilters` (from the dashboard detail) are sent resolved (`resolveFiltersForQuery`) instead of omitted, so relative date ranges / cleared filters don't need a second whole-dashboard fetch. A second fetch happens only if the response's saved `global_filters` differ from what was sent (they changed since the detail was loaded).
+- **The per-chart fill-in waits for the batch** (`initialBatchDone`). It exists for charts added after load; firing it on mount fetched every chart again. A failed batch still falls back to it.
+- **Preview, editor and fullscreen share already-loaded data** through `dashboard/dashboardDataCache.js` (session memory, keyed by `backendId`). A new instance starts from it and refreshes quietly (`quiet: true` → `inst: 0` on `getDashboardData` / `getWidgetData` / `listWidgets`). Drilled-in charts aren't reused.
+- **Still per-chart by design:** KPI cards with their own date filter, KPI "Compare to", and tiles with their own filters — they need different filters than the batch.
+- **Backend gaps** (`nms-backend` `get_dashboard_data`): widgets run sequentially, every tab's widgets are returned (`tab_id` only scopes slicers), and responses aren't gzip-compressed.
 
 ### Tickets & Assurance rules of thumb
 
@@ -280,6 +294,7 @@ The common thread: only #1 is a real correctness/UX bug (failures hidden from us
 ## 9. Working conventions
 
 - Never run `npm run build` unless the user explicitly asks — the Vite dev server has HMR; use it to verify changes.
+- **Topic docs live in `docs/`** — setup/deployment/how-to notes for people (e.g. [`docs/MICROSOFT_SSO.md`](docs/MICROSOFT_SSO.md)) go in their own `docs/<TOPIC>.md` file, with a one-line link from the relevant section here, rather than growing this file.
 - **Report token usage at the end of every reply** — state the approximate number of tokens used for that prompt (from the session's token counter: tokens-left at the start of the turn minus tokens-left at the end).
 - Prefer editing existing files/modules over introducing new top-level abstractions. Assume this by default — only create a new file/module/abstraction when the user explicitly asks for something new, or the task genuinely doesn't fit any existing module.
 - Match existing patterns in the module you're touching (e.g. follow the action/reducer style already used in `src/store` for new Redux state).

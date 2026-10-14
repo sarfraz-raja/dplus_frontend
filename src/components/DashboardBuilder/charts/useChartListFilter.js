@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import CHART_TYPE_META, { CHART_TYPES } from './chartTypeMeta';
+import CHART_TYPE_META, { CHART_TYPES, displayChartType } from './chartTypeMeta';
 
 // Search/type-filter state + logic shared by every "list of saved charts" UI in this app —
 // ChartLibrary.jsx's own "Charts" tab and DashboardCanvasEditor.jsx's "Your Widgets" panel
@@ -15,9 +15,11 @@ export default function useChartListFilter(sortedWidgets) {
 
   const searchLower = search.trim().toLowerCase();
   const visibleWidgets = sortedWidgets.filter((w) => {
-    const typeLabel = CHART_TYPE_META[w.chart_type]?.label || w.chart_type || '';
+    // Big Number is a KPI_CARD with a mapping marker — filter/search by what the user sees.
+    const type = displayChartType(w.chart_type, w.mapping);
+    const typeLabel = CHART_TYPE_META[type]?.label || type || '';
     const matchesText = !searchLower || w.name?.toLowerCase().includes(searchLower) || typeLabel.toLowerCase().includes(searchLower);
-    const matchesType = !typeFilter || w.chart_type === typeFilter;
+    const matchesType = !typeFilter || type === typeFilter;
     return matchesText && matchesType;
   });
 

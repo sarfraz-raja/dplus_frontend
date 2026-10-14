@@ -6,6 +6,7 @@ import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 import { resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
+import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/utils/chartAnimation';
 
 /**
  * Stacked bar/column — composition per category (e.g. traffic by technology per site).
@@ -17,12 +18,17 @@ import { resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils
  */
 export default function StackedBarChart({
   title = '', unit = '', categories = [], series = [], showLegend = true, height = 140, isDark: isDarkProp = null,
-  titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null, seriesColors = null, palette = null,
+  titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null, seriesColors = null, palette = null, seriesOpacity = null,
   titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null, valueAxisLabel = null,
   truncateYAxis = null, yAxisMin = null, yAxisMax = null,
 }) {
   const { theme } = useTheme();
+  // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
+  const chartAnimation = useChartAnimation();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
+  // Style tab's opacity slider (0-100, null = this chart's built-in default) — see
+  // widgetTypeRegistry.js's OPACITY fields.
+  const barOpacity = seriesOpacity == null ? 1 : seriesOpacity / 100;
   const { sub: subColor } = chartTokens(isDark);
   const yBounds = resolveTruncatedBounds(truncateYAxis, yAxisMin, yAxisMax);
 
@@ -54,7 +60,7 @@ export default function StackedBarChart({
       // A pinned per-series color (Phase 8b) always wins; otherwise cycle through the
       // resolved theme/dashboard palette explicitly (see PieChart.jsx's own comment on why
       // this can't just rely on ECharts' registered theme color array).
-      itemStyle: { color: seriesColors?.[s.name] || (palette ? palette[i % palette.length] : undefined) },
+      itemStyle: { color: seriesColors?.[s.name] || (palette ? palette[i % palette.length] : undefined), opacity: barOpacity },
       data: s.data,
     })),
   };
@@ -81,7 +87,7 @@ export default function StackedBarChart({
           clicked segment's own series/grouping value (params.seriesName, mapping.series)
           isn't part of the match for this first cut. */}
       <div className="flex-1 min-h-0">
-        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
           ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />

@@ -1,6 +1,6 @@
 import { FONT_FAMILY_OPTIONS } from '../../../theme/tokens';
 import { POSITION_OPTIONS } from '../../Widgets/titlePositions';
-import { CARD_BORDER_FIELDS } from '../widgetConfig/widgetTypeRegistry';
+import { CARD_BORDER_FIELDS, DASHBOARD_ANIMATION_FIELDS } from '../widgetConfig/widgetTypeRegistry';
 
 // Phase 19 — dashboard-level style defaults, rendered via the same generic WidgetStyleFields
 // renderer every widget's own per-instance style already uses (no new mechanism). Shared
@@ -69,6 +69,8 @@ const DASHBOARD_STYLE_FIELDS = [
   // VALUE_DECIMALS_FIELD) — rounds every displayed value (KPI Card number, gauge %, tooltip
   // values, bar/pie/funnel/waterfall value labels) to this many decimal places by default.
   { key: 'valueDecimals', label: 'Value decimal places', type: 'number', default: 2, min: 0, max: 4 },
+  // Animation for every widget on the dashboard (a widget's own Animation settings win).
+  ...DASHBOARD_ANIMATION_FIELDS,
 ];
 
 export default DASHBOARD_STYLE_FIELDS;

@@ -136,6 +136,32 @@ const BG_GRADIENT_FIELDS = [
 // dashboard/theme", so a widget can still say Off while the dashboard says On (and vice versa).
 // `card*` prefix, not `border*`: Shape already owns borderColor/borderWidth for its own outline.
 // Same keys in DASHBOARD_STYLE_FIELDS so a dashboard/theme can turn it on for every widget.
+// Style → Animation (see utils/chartAnimation.js for what each value does). The dashboard/theme
+// version has real defaults (= ECharts' own behavior, so nothing changes until set); the
+// widget version starts on '' = "use the dashboard's setting", the first option of each.
+const ANIMATION_OPTIONS = {
+  animation: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+  animEntrance: [{ value: 'draw', label: 'Draw' }, { value: 'rise', label: 'Rise' }, { value: 'zoom', label: 'Zoom' }, { value: 'fade', label: 'Fade' }],
+  animSpeed: [{ value: 'fast', label: 'Fast' }, { value: 'normal', label: 'Normal' }, { value: 'slow', label: 'Slow' }],
+  animEasing: [{ value: 'smooth', label: 'Smooth' }, { value: 'linear', label: 'Linear' }, { value: 'bounce', label: 'Bounce' }, { value: 'elastic', label: 'Elastic' }],
+  animStagger: [{ value: 'none', label: 'None' }, { value: 'wave', label: 'Wave' }],
+};
+const ANIMATION_FIELD_META = [
+  { key: 'animation', label: 'Animation', default: 'on', hint: 'Off shows charts instantly — useful for wall displays. Also off automatically when the device asks for reduced motion, and during PDF export.' },
+  { key: 'animEntrance', label: 'Entrance', default: 'draw', hint: 'Draw: lines left to right, bars grow, pies sweep. Rise: everything grows up from the bottom, lines included. Zoom / Fade: the whole card scales or fades in.' },
+  { key: 'animSpeed', label: 'Speed', default: 'normal', hint: 'Fast 0.4s · Normal 1s · Slow 2s.' },
+  { key: 'animEasing', label: 'Style', default: 'smooth', hint: 'How the motion feels. Bounce and Elastic overshoot slightly before settling.' },
+  { key: 'animStagger', label: 'Stagger', default: 'none', hint: 'Wave: bars / series appear one after another, and on a dashboard each widget starts a moment after the previous one.' },
+];
+// asDropdown keeps every one of these a plain <select> — a 2-option segmented control can't
+// show the dashboard-level "inherit" state, and the × clear button needs a non-segmented row.
+export const DASHBOARD_ANIMATION_FIELDS = ANIMATION_FIELD_META.map((m) => ({
+  ...m, type: 'select', asDropdown: true, options: ANIMATION_OPTIONS[m.key],
+}));
+const WIDGET_ANIMATION_FIELDS = ANIMATION_FIELD_META.map((m) => ({
+  ...m, type: 'select', asDropdown: true, default: '', options: [{ value: '', label: 'Dashboard setting' }, ...ANIMATION_OPTIONS[m.key]],
+}));
+
 export const CARD_BORDER_FIELDS = [
   { key: 'showCardBorder', label: 'Show border', type: 'select', default: null, options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
   { key: 'cardBorderWidth', label: 'Border width (px)', type: 'number', default: null, min: 1, max: 8 },
@@ -532,6 +558,24 @@ const PALETTE_FIELD = { key: 'palette', label: 'Color palette', type: 'palette' 
 // extraFields computation (which has to mirror chartLibraryStyleFieldsFor's hasSeries branch
 // field-for-field, or resolveWidgetStyle silently drops any key it doesn't know about) can
 // reuse this exact descriptor instead of redefining it and risking drift.
+// Opacity sliders (0-100%). Each default equals what the chart drew before these existed, so an
+// untouched chart looks unchanged. Same `seriesOpacity` key everywhere (line / bar / point,
+// whichever the chart draws); AREA also gets `areaOpacity` for its fill. Shared across
+// light/dark — a number, not a color. Grouped under "Data colors" (WidgetStyleFields.jsx).
+const opacityField = (label, def) => ({ key: 'seriesOpacity', label, type: 'number', min: 0, max: 100, default: def });
+const LINE_OPACITY_FIELD = opacityField('Line opacity (%)', 100);
+const BAR_OPACITY_FIELD = opacityField('Bar opacity (%)', 100);
+const POINT_OPACITY_FIELD = opacityField('Point opacity (%)', 75);
+const AREA_FILL_OPACITY_FIELD = { key: 'areaOpacity', label: 'Fill opacity (%)', type: 'number', min: 0, max: 100, default: 35 };
+const OPACITY_FIELDS_BY_TYPE = {
+  LINE: [LINE_OPACITY_FIELD],
+  AREA: [LINE_OPACITY_FIELD, AREA_FILL_OPACITY_FIELD],
+  BAR: [BAR_OPACITY_FIELD],
+  HORIZONTAL_BAR: [BAR_OPACITY_FIELD],
+  STACKED_BAR: [BAR_OPACITY_FIELD],
+  SCATTER: [POINT_OPACITY_FIELD],
+};
+
 export const SHOW_DATA_POINTS_FIELD = { key: 'showDataPoints', label: 'Data Points', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] };
 
 export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
@@ -549,6 +593,7 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   // SERIES_PALETTE_FIELD in ChartLibrary.jsx) rather than duplicated here in the Style tab.
   STACKED_BAR: [
     { key: 'showLegend', label: 'Legend', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
+    ...OPACITY_FIELDS_BY_TYPE.STACKED_BAR,
     ...CROSS_FILTER_FIELDS,
   ],
   // Single-series chart_types — one accent color, not a palette (see ACCENT_COLOR_FIELD).
@@ -562,9 +607,9 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   // four switch to STACKED_BAR's own field set instead (below) — a single accent swatch makes
   // no sense once the chart is rendering one color per named series, and the value-position
   // field has nothing left to reposition against (multiple bars/lines/areas, not one).
-  BAR: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
-  AREA: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
-  LINE: [ACCENT_COLOR_FIELD, VALUE_POSITION_FIELD, SHOW_DATA_POINTS_FIELD, ...CROSS_FILTER_FIELDS],
+  BAR: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.BAR, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
+  AREA: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.AREA, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
+  LINE: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.LINE, VALUE_POSITION_FIELD, SHOW_DATA_POINTS_FIELD, ...CROSS_FILTER_FIELDS],
   // Same field set as STACKED_BAR (palette-cycled series, not a single accent) — reused
   // verbatim once BAR/AREA/LINE/HORIZONTAL_BAR actually have mapping.series set. No
   // PALETTE_FIELD here either, same reasoning as STACKED_BAR above — its own Data-tab Series
@@ -576,11 +621,11 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   // SCATTER is deliberately excluded from CROSS_FILTER_FIELDS — its mapping (x_axis/y_axis)
   // is two raw measures (RAW_CHART_TYPES), not a dimension column, so there's no {column,
   // value} pair a click could ever produce here.
-  SCATTER: [ACCENT_COLOR_FIELD],
+  SCATTER: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.SCATTER],
   // No VALUE_POSITION_FIELD, unlike BAR/AREA/LINE above — no separate value/total text element
   // to reposition (see TitleValueOverlay.jsx). Swaps to BAR_SERIES once mapping.series is set,
   // same as BAR/AREA/LINE (see `hasSeries` below).
-  HORIZONTAL_BAR: [ACCENT_COLOR_FIELD, ...CROSS_FILTER_FIELDS],
+  HORIZONTAL_BAR: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.HORIZONTAL_BAR, ...CROSS_FILTER_FIELDS],
   // Free-text suffix appended after the value (e.g. "%", "MB", "ms") — mirrors statCard's
   // own `unit` field (widgetTypeRegistry.js's statCard entry) for the mock-widget path.
   KPI_CARD: [
@@ -688,18 +733,25 @@ const CHART_TYPES_WITH_VALUE_LABEL = new Set(['BAR', 'AREA', 'LINE', 'HORIZONTAL
 // this exactly, or resolveWidgetStyle silently drops any key it doesn't know about — can call
 // this instead of re-deriving the same branch by hand.
 export function seriesExtraStyleFields(chartType) {
-  return [...CHART_TYPE_EXTRA_STYLE_FIELDS.BAR_SERIES, ...(chartType === 'LINE' ? [SHOW_DATA_POINTS_FIELD] : [])];
+  return [...CHART_TYPE_EXTRA_STYLE_FIELDS.BAR_SERIES, ...(OPACITY_FIELDS_BY_TYPE[chartType] || []), ...(chartType === 'LINE' ? [SHOW_DATA_POINTS_FIELD] : [])];
 }
 
 export function chartLibraryStyleFieldsFor(chartType, mapping) {
   const hasAxis = CHART_TYPES_WITH_AXIS.has(chartType);
   const hasValueLabel = CHART_TYPES_WITH_VALUE_LABEL.has(chartType);
   const hasSeries = ['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR'].includes(chartType) && !!mapping?.series;
-  return [
+  const fields = [
     ...TITLE_TEXT_STYLE_FIELDS,
     BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...CARD_BORDER_FIELDS,
     ...(hasValueLabel ? VALUE_TEXT_STYLE_FIELDS : [VALUE_DECIMALS_FIELD]),
     ...(hasAxis ? AXIS_TEXT_STYLE_FIELDS : []),
     ...(hasSeries ? seriesExtraStyleFields(chartType) : (CHART_TYPE_EXTRA_STYLE_FIELDS[chartType] || [])),
+    ...WIDGET_ANIMATION_FIELDS,
   ];
+  // Big Number (a KPI_CARD with mapping.kpi_variant — see chartTypeMeta.js) has a fixed
+  // top-to-bottom layout (BigNumberCard.jsx), so the 3x3 title/value position pickers do nothing
+  // there. Plain KPI Cards keep them.
+  return mapping?.kpi_variant === 'big_number'
+    ? fields.filter((f) => f.key !== 'titlePosition' && f.key !== 'valuePosition')
+    : fields;
 }

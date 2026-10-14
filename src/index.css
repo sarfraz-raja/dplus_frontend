@@ -505,3 +505,12 @@ html[data-theme="dark"] [data-dy3-topbar] .dy3-brand-sub,
 html[data-theme="dark"] [data-dy3-topbar] .dy3-brand-sub * {
   color: #ffffff !important;
 }
+
+/* Dashboard Builder → Style → Animation card entrances (Zoom / Fade). Duration, delay and easing
+   are set inline per widget by cardEntrance() in components/DashboardBuilder/utils/chartAnimation.js.
+   Global because both the dashboard canvas and the Charts-tab preview use them. Applied to the
+   tile's content, never to .dbe-widget, whose transform react-grid-layout owns. */
+@keyframes dbe-enter-zoom { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes dbe-enter-fade { from { opacity: 0; } to { opacity: 1; } }
+.dbe-enter-zoom { animation-name: dbe-enter-zoom; animation-fill-mode: both; }
+.dbe-enter-fade { animation-name: dbe-enter-fade; animation-fill-mode: both; }

@@ -105,8 +105,33 @@ const getSectorTip = (lat, lng, azimuth, radius_m, mapScale = 1, zoomBoost = 1) 
 // Per-deployment via VITE_SUPERSET_DASHBOARD_UUID (e.g. Telco360); falls back to the
 // original Gabon/Malawi dashboard when unset, so those deployments are unchanged.
 const DASHBOARD_UUID = import.meta.env.VITE_SUPERSET_DASHBOARD_UUID || "0ccb9f27-ef5c-47bb-8c86-5126f34bad2f";
-// const FILTER_Id = "NATIVE_FILTER-Mk81LVzQVBImboTJa5NV6"; //date filter id
 const FILTER_Id = import.meta.env.VITE_NATIVE_FILTER_ID || "NATIVE_FILTER-Frwtlbdl8UhCOYVoGiXp9";  //cell_name filter
+
+// Per-technology dashboards (e.g. Telco360: a 4G and a 5G dashboard). Each dashboard has
+// its own cell_name native filter id, so uuid and filter id only count as a pair.
+const TECH_DASHBOARDS = {
+  "4G": { uuid: import.meta.env.VITE_SUPERSET_DASHBOARD_UUID_4G, filterId: import.meta.env.VITE_NATIVE_FILTER_ID_4G },
+  "5G": { uuid: import.meta.env.VITE_SUPERSET_DASHBOARD_UUID_5G, filterId: import.meta.env.VITE_NATIVE_FILTER_ID_5G },
+};
+// Any _4G/_5G var set → per-technology mode: never fall back to the hardcoded
+// Gabon/Malawi dashboard, which doesn't exist on that deployment's Superset.
+const TECH_DASHBOARDS_ENABLED = Object.values(TECH_DASHBOARDS).some((t) => t.uuid || t.filterId);
+const ENV_DEFAULT_DASHBOARD = import.meta.env.VITE_SUPERSET_DASHBOARD_UUID && import.meta.env.VITE_NATIVE_FILTER_ID
+  ? { uuid: import.meta.env.VITE_SUPERSET_DASHBOARD_UUID, filterId: import.meta.env.VITE_NATIVE_FILTER_ID }
+  : null;
+
+// Returns the cell's Charts dashboard URL, or null when none is configured for its technology.
+const getCellDashboardUrl = (d) => {
+  const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
+  let dash = { uuid: DASHBOARD_UUID, filterId: FILTER_Id };
+  if (TECH_DASHBOARDS_ENABLED) {
+    const tech = String(d.technology ?? "").trim().toUpperCase();
+    const techDash = TECH_DASHBOARDS[tech];
+    dash = techDash?.uuid && techDash?.filterId ? techDash : ENV_DEFAULT_DASHBOARD;
+  }
+  if (!dash) return null;
+  return `/Filtered-cell-dashboard/${dash.uuid}?cell=${cell}&filterId=${dash.filterId}`;
+};
 
 const GIS_DRAFT_PATH_EXTENSION = new PathStyleExtension({
   dash: true,
@@ -2986,6 +3011,22 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
     }));
   };
 
+  const openCellDashboard = (data, newTab) => {
+    const url = getCellDashboardUrl(data);
+    if (!url) {
+      dispatch(ALERTS({
+          show: true,
+          icon: 'warning',
+          buttons: [],
+          type: 1,
+          text: `No Charts dashboard configured for technology "${data.technology || 'unknown'}"`
+      }));
+      return;
+    }
+    if (newTab) window.open(url, "_blank");
+    else window.location.href = url;
+  };
+
   const siteUniqueFromPopup = (data) => data.Physical_id ?? data.site_name ?? "";
   const cellUniqueFromPopup = (data) => data.cell_name ?? data.Cell_name ?? "";
 
@@ -3634,16 +3675,10 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
               //   window.location.href = `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`;
               // }}
               onChartClick={(d) => {
-                const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
-                const reactUrl = `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`;
-                window.open(reactUrl, "_blank");
+                openCellDashboard(d, true);
               }}
               onChartRightClick={(d) => {
-                const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
-                window.open(
-                  `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`,
-                  "_blank",
-                );
+                openCellDashboard(d, true);
               }}
             />
           ) : (
@@ -3675,15 +3710,10 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
                 else openCellProRulesModal(d);
               }}
               onChartClick={(d) => {
-                const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
-                window.location.href = `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`;
+                openCellDashboard(d, false);
               }}
               onChartRightClick={(d) => {
-                const cell = encodeURIComponent(d.cell_name ?? d.Cell_name ?? "");
-                window.open(
-                  `/Filtered-cell-dashboard/${DASHBOARD_UUID}?cell=${cell}&filterId=${FILTER_Id}`,
-                  "_blank",
-                );
+                openCellDashboard(d, true);
               }}
             />
           )

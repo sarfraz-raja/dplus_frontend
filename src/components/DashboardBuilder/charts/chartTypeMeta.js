@@ -1,7 +1,7 @@
 import {
   Hash, Gauge, LineChart as LineChartIcon, BarChart3, PieChart as PieChartIcon,
   BarChartHorizontal, AreaChart as AreaChartIcon, Grid3x3, Funnel, BarChart4, Boxes,
-  ChartNoAxesCombined, ScatterChart as ScatterChartIcon, Table as TableIcon,
+  ChartNoAxesCombined, ScatterChart as ScatterChartIcon, Table as TableIcon, TrendingUp,
 } from 'lucide-react';
 
 // Icon + accent color per real backend chart_type — one source of truth shared by
@@ -18,6 +18,10 @@ const CHART_TYPE_META = {
   PIE: { icon: PieChartIcon, color: '#F97316', label: 'Pie', description: 'Best for showing how a few categories split up a whole (parts of 100%) — not for more than ~6-8 slices.' },
   AREA: { icon: AreaChartIcon, color: '#6366F1', label: 'Area', description: 'Best for a trend over time where the filled volume under the line matters, not just its shape.' },
   KPI_CARD: { icon: Hash, color: '#378ADD', label: 'KPI Card', description: 'Best for one headline number — a single metric, optionally compared against a prior period.' },
+  // Frontend-only chart type: saved to the backend as KPI_CARD + mapping.kpi_variant
+  // 'big_number' (see toBackendChartType/displayChartType below), so the backend's KPI_CARD
+  // query rules apply unchanged and existing KPI Cards are never touched.
+  BIG_NUMBER: { icon: TrendingUp, color: '#0891B2', label: 'Big Number', description: 'Best for one headline number people read at a glance — with an optional comparison, a "good/bad" color against a target, and a trend line.' },
   TABLE: { icon: TableIcon, color: '#F59E0B', label: 'Table', description: 'Best when the exact values matter more than a visual pattern, or many columns need to sit side by side.' },
   GAUGE: { icon: Gauge, color: '#10B981', label: 'Gauge', description: 'Best for one number read against a fixed target or threshold range, not a trend.' },
   HEAT_MAP: { icon: Grid3x3, color: '#DB2777', label: 'Heat Map', description: 'Best for spotting intensity patterns across a dense grid — color says more than exact numbers here.' },
@@ -30,6 +34,15 @@ const CHART_TYPE_META = {
 };
 
 export const CHART_TYPES = Object.keys(CHART_TYPE_META);
+
+// Big Number lives in the backend as a KPI_CARD with this marker in its mapping.
+export const BIG_NUMBER_VARIANT = 'big_number';
+// What to send as chart_type (every backend call, and anything that runs KPI_CARD logic).
+export const toBackendChartType = (type) => (type === 'BIG_NUMBER' ? 'KPI_CARD' : type);
+// What to show / pick fields by, given a saved widget's chart_type + mapping.
+export const displayChartType = (chartType, mapping) => (
+  chartType === 'KPI_CARD' && mapping?.kpi_variant === BIG_NUMBER_VARIANT ? 'BIG_NUMBER' : chartType
+);
 
 // Maps a widgetTypeRegistry.js mock-widget-type key to its equivalent real backend
 // chart_type — used by WidgetCreateWizard.jsx when the user picks a real datasource for a

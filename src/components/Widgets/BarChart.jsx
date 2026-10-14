@@ -6,6 +6,7 @@ import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 import { resolveCustomTickFormatter, toAxisTimeValue, buildCustomTimeTicks, resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
+import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/utils/chartAnimation';
 
 /**
  * Small single-series bar chart for a card, e.g. "Traffic by Site". Mirrors
@@ -26,10 +27,15 @@ export default function BarChart({
   // `isTimeAxis`/`dateFormat`/`tickInterval` above apply here too, same as single-series —
   // `categories` are just each series' shared x positions, so the same continuous-time-axis
   // branch (below) works whether there's one series or several.
-  categories = null, series = null, showLegend = true, seriesColors = null, palette = null,
+  categories = null, series = null, showLegend = true, seriesColors = null, palette = null, seriesOpacity = null,
 }) {
   const { theme } = useTheme();
+  // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
+  const chartAnimation = useChartAnimation();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
+  // Style tab's opacity slider (0-100, null = this chart's built-in default) — see
+  // widgetTypeRegistry.js's OPACITY fields.
+  const barOpacity = seriesOpacity == null ? 1 : seriesOpacity / 100;
   const { text: textColor, sub: subColor } = chartTokens(isDark);
   const isMultiSeries = Array.isArray(series) && series.length > 0;
 
@@ -105,7 +111,7 @@ export default function BarChart({
       name: s.name,
       type: 'bar',
       barMaxWidth: 24,
-      itemStyle: { color: seriesColors?.[s.name] || (palette ? palette[i % palette.length] : undefined), borderRadius: [2, 2, 0, 0] },
+      itemStyle: { color: seriesColors?.[s.name] || (palette ? palette[i % palette.length] : undefined), borderRadius: [2, 2, 0, 0], opacity: barOpacity },
       // Positional array (aligned to `categories`/xAxis.data by index) for the discrete
       // category axis; [epoch, value] pairs for the continuous time axis instead — same
       // isTimeAxis branch the xAxis block above already switches on.
@@ -114,7 +120,7 @@ export default function BarChart({
       {
         type: 'bar',
         data: seriesValues,
-        itemStyle: { color, borderRadius: [2, 2, 0, 0] },
+        itemStyle: { color, borderRadius: [2, 2, 0, 0], opacity: barOpacity },
         barMaxWidth: 24,
       },
     ],
@@ -142,7 +148,7 @@ export default function BarChart({
         </div>
       )}
       <div className="flex-1 min-h-0">
-        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
           ...(onPointClick ? { click: (p) => onPointClick(clickLabels[p.dataIndex]) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(clickLabels[p.dataIndex], p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />

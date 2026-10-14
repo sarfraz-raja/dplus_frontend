@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, ChevronDown, Search, Check } from 'lucide-react';
 import { cn } from '../../../utils/common';
+import CHART_TYPE_META, { displayChartType } from './chartTypeMeta';
 
 // Searchable, themed picker for "Copy style from another chart" (ChartLibrary.jsx Style tab) —
 // replaces a native <select>, whose option list can't be styled. Same-type charts are listed
 // first since their whole style transfers; other types only share the common fields.
+// A Big Number is a KPI_CARD with a mapping marker — group/filter by what the user sees.
+const typeOf = (o) => displayChartType(o.chart_type, o.mapping);
+
 const ChartStylePicker = ({ options, currentType, value, disabled, loading, onSelect }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -23,16 +27,16 @@ const ChartStylePicker = ({ options, currentType, value, disabled, loading, onSe
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = options.filter((o) => (
-      (!typeFilter || o.chart_type === typeFilter)
-      && (!q || `${o.name} ${o.chart_type} ${o.chart_type.replace(/_/g, ' ')}`.toLowerCase().includes(q))
+      (!typeFilter || typeOf(o) === typeFilter)
+      && (!q || `${o.name} ${typeOf(o)} ${typeOf(o).replace(/_/g, ' ')}`.toLowerCase().includes(q))
     ));
     return [
-      { label: 'Same type', items: filtered.filter((o) => o.chart_type === currentType) },
-      { label: 'Other types', items: filtered.filter((o) => o.chart_type !== currentType) },
+      { label: 'Same type', items: filtered.filter((o) => typeOf(o) === currentType) },
+      { label: 'Other types', items: filtered.filter((o) => typeOf(o) !== currentType) },
     ].filter((g) => g.items.length > 0);
   }, [options, query, currentType, typeFilter]);
 
-  const types = useMemo(() => [...new Set(options.map((o) => o.chart_type))].sort(), [options]);
+  const types = useMemo(() => [...new Set(options.map(typeOf))].sort(), [options]);
 
   const selected = options.find((o) => String(o.id) === String(value));
 
@@ -108,7 +112,7 @@ const ChartStylePicker = ({ options, currentType, value, disabled, loading, onSe
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate">{o.name}</span>
-                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-500">{o.chart_type}</span>
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-500">{CHART_TYPE_META[typeOf(o)]?.label || typeOf(o)}</span>
                       {isSel && <Check size={12} className="shrink-0 text-[#EC7D09]" aria-hidden="true" />}
                     </button>
                   );

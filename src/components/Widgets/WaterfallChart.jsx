@@ -6,6 +6,7 @@ import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 import { resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
+import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/utils/chartAnimation';
 
 /**
  * Waterfall chart — cumulative breakdown of what's driving a KPI change (e.g. what
@@ -24,6 +25,8 @@ export default function WaterfallChart({
   truncateYAxis = null, yAxisMin = null, yAxisMax = null,
 }) {
   const { theme } = useTheme();
+  // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
+  const chartAnimation = useChartAnimation();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
   const { sub: subColor } = chartTokens(isDark);
 
@@ -101,7 +104,7 @@ export default function WaterfallChart({
         </div>
       )}
       <div className="flex-1 min-h-0">
-        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
           ...(onPointClick ? { click: (p) => p.seriesName === 'Delta' && onPointClick(p.name) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { if (p.seriesName === 'Delta') { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } } : {}),
         } : undefined} />

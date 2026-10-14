@@ -6,6 +6,8 @@ import { echartsThemeName } from '../../theme/echartsTheme';
 import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 import { resolveCustomTickFormatter, toAxisTimeValue, buildCustomTimeTicks, resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
+import { surfaceBg } from '../DashboardBuilder/utils/themedStyle';
+import { useChartAnimation, useRiseEntrance } from '../DashboardBuilder/utils/chartAnimation';
 
 /**
  * Small single-series line+area chart for a card, e.g. "DL Throughput (Mbps)". Despite the
@@ -23,12 +25,20 @@ export default function LineAreaChart({
   truncateYAxis = null, yAxisMin = null, yAxisMax = null,
   // Optional multi-series grouping (mapping.series) — see BarChart.jsx's identical block for
   // the full rationale; `data`/`color` are ignored in this mode.
-  categories = null, series = null, showLegend = true, seriesColors = null, palette = null, showDataPoints = true,
+  categories = null, series = null, showLegend = true, seriesColors = null, palette = null, showDataPoints = true, seriesOpacity = null,
 }) {
   const { theme } = useTheme();
+  // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
+  const chartAnimation = useChartAnimation();
   const isDark = typeof isDarkProp === 'boolean' ? isDarkProp : theme === 'dark';
   const { text: textColor, sub: subColor } = chartTokens(isDark);
   const isMultiSeries = Array.isArray(series) && series.length > 0;
+  // Data-point outline matches the card behind it (was a fixed white, which drew bright rings
+  // on every point in dark mode). A gradient card falls back to the mode's plain surface.
+  const pointRingColor = bgColor || surfaceBg(isDark);
+  // Style tab's opacity slider (0-100, null = this chart's built-in default) — see
+  // widgetTypeRegistry.js's OPACITY fields.
+  const lineOpacity = seriesOpacity == null ? 1 : seriesOpacity / 100;
 
   const values = data.map((d) => d.value);
   const labels = isMultiSeries ? categories : data.map((d) => d.label);
@@ -120,12 +130,12 @@ export default function LineAreaChart({
         symbol: 'circle',
         symbolSize: 3,
         showSymbol: showDataPoints,
-        itemStyle: { color: sColor, borderColor: '#ffffff', borderWidth: 1.5 },
-        lineStyle: { width: 2, color: sColor },
+        itemStyle: { color: sColor, borderColor: pointRingColor, borderWidth: 1.5, opacity: lineOpacity },
+        lineStyle: { width: 2, color: sColor, opacity: lineOpacity },
         emphasis: { disabled: true },
         blur: {
-          lineStyle: { opacity: 1 },
-          itemStyle: { opacity: 1 },
+          lineStyle: { opacity: lineOpacity },
+          itemStyle: { opacity: lineOpacity },
         },
       };
     }) : [
@@ -136,17 +146,18 @@ export default function LineAreaChart({
         symbol: 'circle',
         symbolSize: 3,
         showSymbol: showDataPoints,
-        itemStyle: { color, borderColor: '#ffffff', borderWidth: 1.5 },
-        lineStyle: { width: 2, color },
+        itemStyle: { color, borderColor: pointRingColor, borderWidth: 1.5, opacity: lineOpacity },
+        lineStyle: { width: 2, color, opacity: lineOpacity },
         emphasis: { disabled: true },
         blur: {
-          lineStyle: { opacity: 1 },
-          itemStyle: { opacity: 1 },
+          lineStyle: { opacity: lineOpacity },
+          itemStyle: { opacity: lineOpacity },
         },
       },
     ],
   };
 
+  const { option: animatedOption, onChartReady: onRiseReady } = useRiseEntrance(option, chartAnimation);
   return (
     <div className="kpi-spark-card h-full box-border flex flex-col overflow-hidden rounded-lg bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
       {/* A real reserved row, not an absolutely-positioned overlay (the previous
@@ -178,7 +189,7 @@ export default function LineAreaChart({
         </div>
       )}
       <div className="flex-1 min-h-0">
-        <ReactECharts option={option} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
+        <ReactECharts option={animatedOption} onChartReady={onRiseReady} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
           ...(onPointClick ? { click: (p) => onPointClick(clickLabels[p.dataIndex]) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(clickLabels[p.dataIndex], p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />

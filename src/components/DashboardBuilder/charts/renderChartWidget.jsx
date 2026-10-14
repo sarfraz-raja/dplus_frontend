@@ -4,6 +4,7 @@ import AreaChart from '../../Widgets/AreaChart';
 import PieChart from '../../Widgets/PieChart';
 import LineAreaChart from '../../Widgets/LineAreaChart';
 import StatCard from '../../Widgets/StatCard';
+import BigNumberCard from '../../Widgets/BigNumberCard';
 import GaugeCard from '../../Widgets/GaugeCard';
 import ScatterChart from '../../Widgets/ScatterChart';
 import HorizontalBarChart from '../../Widgets/HorizontalBarChart';
@@ -61,7 +62,7 @@ function describeCompareTo(mapping) {
  * these props it doesn't support (e.g. StatCard has no axis, PieChart has no axis, etc.) —
  * safe to pass regardless.
  */
-export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style: styleProp = {}, isDark = false, onPointClick = null, onPointContextMenu = null, comparison = undefined, drillDown = undefined, onReorderColumns = null, onColumnResize = null, onColumnLabelChange = null }) {
+export default function renderChartWidget({ chartType, name, mapping = {}, rows = [], height = 300, style: styleProp = {}, isDark = false, onPointClick = null, onPointContextMenu = null, comparison = undefined, trend = null, drillDown = undefined, onReorderColumns = null, onColumnResize = null, onColumnLabelChange = null }) {
   // Per-mode colors flattened for the active theme, then any explicit text/line color that
   // can't be read on its background dropped (falls back to the chart's own theme default) —
   // see themedStyle.js. Applies to every caller: dashboard canvas AND the Charts-tab preview.
@@ -143,6 +144,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
     colorFrom, colorTo, valuePosition,
     valueTextColor, valueTextSize, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
     valueDecimals: valueDecimalsRaw, unit, donut, showLegend, numberFormat, showPercent, showDataPoints,
+    seriesOpacity, areaOpacity,
     cellFormatRules, bandColor, bandTextColor, headerBgColor, headerTextColor, showTitle, titleBgColor,
   } = style;
   // `showTitle` now applies to every chart_type (was TABLE-only at first — see
@@ -202,8 +204,9 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
   // one where the format was simply never touched, keeps working exactly as before).
   const xAxisCrossFilterDisabled = !!mapping.x_axis_date_format && isTimeAxis(rows.map((r) => r[xAxis]));
   const styleProps = {
-    titleColor, titleWeight, titleSize, titleFont, titlePosition, bgColor, bgGradient, palette, color,
+    isDark, titleColor, titleWeight, titleSize, titleFont, titlePosition, bgColor, bgGradient, palette, color,
     valueTextColor, valueTextSize, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
+    seriesOpacity, areaOpacity,
   };
   // Optional multi-series grouping (mapping.series — see SERIES_FIELD in ChartLibrary.jsx),
   // same grouping shape STACKED_BAR already builds below, reused by BAR/AREA/LINE's own cases.
@@ -292,6 +295,46 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             : `${comparison.delta >= 0 ? '+' : ''}${formatValue(comparison.delta)}`) // no prior-period value to divide by — fall back to the raw number even in Percent mode
         : null;
       const deltaTooltip = deltaText ? describeCompareTo(mapping) : '';
+      // Big Number (chart type BIG_NUMBER — saved as KPI_CARD + mapping.kpi_variant, see
+      // chartTypeMeta.js): same value/delta as above, its own card. Plain KPI Cards (no marker)
+      // fall through to StatCard exactly as before.
+      if (mapping.kpi_variant === 'big_number') {
+        const higherIsBetter = mapping.higher_is_better !== 'Lower is better';
+        const num = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+        const good = num(mapping.target_good);
+        const warn = num(mapping.target_warn);
+        const v = typeof rawValue === 'number' ? rawValue : num(rawValue);
+        // Higher is better: ≥ good → good, ≥ warning → warn, else bad. Lower is better mirrors it.
+        // Only a Good target set → good or bad; no targets → no status color at all.
+        let status = null;
+        if (v != null && good != null) {
+          const meets = (t) => (higherIsBetter ? v >= t : v <= t);
+          status = meets(good) ? 'good' : (warn != null && meets(warn) ? 'warn' : 'bad');
+        }
+        return (
+          <BigNumberCard
+            label={displayName}
+            subtitle={mapping.subtitle}
+            value={displayValue}
+            unit={unit}
+            status={status}
+            delta={deltaText}
+            deltaUp={comparison?.deltaUp}
+            deltaGood={deltaText ? (comparison?.deltaUp === higherIsBetter) : null}
+            deltaNote={deltaTooltip}
+            trend={trend}
+            accentColor={color || undefined}
+            bgColor={bgColor}
+            bgGradient={bgGradient}
+            valueTextColor={valueTextColor}
+            valueTextSize={valueTextSize}
+            titleColor={titleColor}
+            titleWeight={titleWeight}
+            titleSize={titleSize}
+            titleFont={titleFont}
+          />
+        );
+      }
       return (
         <StatCard
           label={displayName}

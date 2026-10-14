@@ -17,6 +17,7 @@ import { DEFAULT_STATUS_COLORS, STATUS_LABELS } from '../legacy/widgets/KpiTable
 import { resolveStyleForMode, mergeStyleLayers, setModeColor, surfaceBg, resolveCardBorder, cardBorderDefaults, CARD_BORDER_KEYS, CARD_BORDERED_CLASS } from '../utils/themedStyle';
 import StyleModeSwitch from '../widgetConfig/StyleModeSwitch';
 import ThemePicker from './ThemePicker';
+import { wantsBigNumberTrend, fetchBigNumberTrend } from '../utils/bigNumberTrend';
 import SelectedWidgetDetails from './SelectedWidgetDetails';
 import StyleModeTint from '../widgetConfig/StyleModeTint';
 import { exportWidgetCSV, exportWidgetPNG, exportDashboardCSV, exportDashboardPNG, exportDashboardPDF, exportDashboardPDFMultiPage, compositeDashboardCanvas, exportRowsCSV } from '../utils/exportUtils';
@@ -41,6 +42,8 @@ import FilterPanel from '../filters/FilterPanel';
 import FiltersToggleButton from '../filters/FiltersToggleButton';
 import FilterEditorModal from '../filters/FilterEditorModal';
 import AddSlicerModal from '../filters/AddSlicerModal';
+import { ChartAnimationContext, resolveAnimation, cardEntrance } from '../utils/chartAnimation';
+import { getCachedDashboardData, updateCachedDashboardData, seedChartLibraryData } from './dashboardDataCache';
 import { sortWidgetsByRecency, withDatasourceOnly } from '../charts/sortWidgets';
 import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
 
@@ -236,6 +239,7 @@ function resolveWidgetProps(widget, ctx) {
       drillDown: entry?.drillDown,
       drilling: !!entry?.drilling,
       comparison: entry?.comparison,
+      trend: entry?.trend,
       loading: !!dataSource.widgetId && !entry,
       error: entry?.error,
     };
@@ -458,6 +462,8 @@ function resolveWidgetProps(widget, ctx) {
         // effect above. renderChartWidget.jsx's KPI_CARD case turns this into StatCard's
         // existing delta/deltaUp props, formatted per mapping.style.delta_format.
         comparison: resolved.comparison,
+        // Big Number's trend line (null/undefined for every other chart) — see bigNumberTrendData.
+        trend: resolved.trend,
         onDrillUp: resolved.drillDown?.path?.length && onWidgetDrillUp
           ? (level) => onWidgetDrillUp(dataSource.widgetId, level)
           : undefined,
@@ -502,6 +508,10 @@ function resolveWidgetProps(widget, ctx) {
           // (only 4 real chart_types even have a movable value element), so it's chart-base
           // -> placement-override only, same as extraStyle's other per-chart_type fields.
           valuePosition: extraStyle.valuePosition,
+          // Opacity sliders (OPACITY fields, widgetTypeRegistry.js) — chart-base -> placement
+          // only, no dashboard-level fallback yet; null = the chart's built-in default.
+          seriesOpacity: extraStyle.seriesOpacity,
+          areaOpacity: extraStyle.areaOpacity,
           // TABLE-only fields (see CHART_TYPE_EXTRA_STYLE_FIELDS.TABLE) — same cascade as
           // every other extraStyle field above, just added later and initially missed here,
           // which meant they worked in ChartLibrary.jsx's own standalone preview (reads
@@ -628,7 +638,7 @@ const WidgetContent = React.memo(function WidgetContent({
   palette, accentColor, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
   bgGradientFrom, bgGradientTo, valueDecimals,
   valueTextColor, valueTextSize, titleBgColor, headerBgColor, headerTextColor, bandColor, bandTextColor,
-  mockDataCache, datasources, chartLibraryEntry, comparisonEntry,
+  mockDataCache, datasources, chartLibraryEntry, comparisonEntry, trendEntry,
   widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable,
   slicer, onSlicerChange, onSlicerRefresh, slicerBusy, onTextChange,
 }) {
@@ -652,7 +662,7 @@ const WidgetContent = React.memo(function WidgetContent({
     valueTextColor, valueTextSize, titleBgColor, headerBgColor, headerTextColor, bandColor, bandTextColor,
     dataCache: mockDataCache, datasources,
     chartLibraryData: widget.dataSource?.widgetId && chartLibraryEntry
-      ? { [widget.dataSource.widgetId]: { ...chartLibraryEntry, comparison: comparisonEntry } }
+      ? { [widget.dataSource.widgetId]: { ...chartLibraryEntry, comparison: comparisonEntry, trend: trendEntry } }
       : {},
     widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable, onTextChange,
   });
@@ -807,7 +817,17 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // the actual async fetch happens in the effect below).
   const [chartLibraryList, setChartLibraryList] = useState([]);
   const [chartListActionError, setChartListActionError] = useState(null);
-  const [chartLibraryData, setChartLibraryData] = useState({});
+  // Charts another instance of this same dashboard already loaded (the read-only preview,
+  // before "Edit" was clicked) — shown straight away, then refreshed quietly by the batched
+  // mount fetch below. Read once per mount. See dashboardDataCache.js.
+  const cachedOnMountRef = useRef(undefined);
+  if (cachedOnMountRef.current === undefined) cachedOnMountRef.current = getCachedDashboardData(backendId) || null;
+  const [chartLibraryData, setChartLibraryData] = useState(() => seedChartLibraryData(backendId));
+  const loadedFromCache = Object.keys(cachedOnMountRef.current?.chartLibraryData || {}).length > 0;
+  // A saved dashboard's first data load is one batched call (see the Phase 18 effect). Until it
+  // has answered, the per-chart fill-in effect waits — otherwise it sees an empty cache on mount
+  // and fetches every chart a second time, one request each, in parallel with the batch.
+  const [initialBatchDone, setInitialBatchDone] = useState(!backendId);
   const chartLibraryFetchingRef = useRef(new Set());
   // A single widget PLACEMENT's own filters (Filter action in the widget's own action strip,
   // distinct from the dashboard-wide `dashboardFilters`/FilterPanel) — keyed by layout id
@@ -828,21 +848,37 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // separate from chartLibraryData since it's a second, independent query (only for KPI_CARD
   // widgets that opt in via mapping.compare_to), not part of the widget's own normal rows.
   const [comparisonData, setComparisonData] = useState({});
+  // Big Number trend lines — backend widget id -> [{ x, y }] (see the effect after the
+  // comparison effects). Keyed refs work like comparisonKeyRef: a changed filter set refetches.
+  const [bigNumberTrendData, setBigNumberTrendData] = useState({});
+  const bigNumberTrendKeyRef = useRef(new Map());
   // Raw past-window rows the comparison fetch effect below retrieves, kept separate from the
   // computed `comparisonData` delta itself — see the dedicated recompute effect further down
   // for why: it lets the delta always be recomputed against whatever `chartLibraryData` (the
   // widget's own current-window rows) most recently holds, instead of the value baked in at
   // the moment the past-window fetch happened to resolve.
-  const [comparisonRawData, setComparisonRawData] = useState({});
+  const [comparisonRawData, setComparisonRawData] = useState(() => cachedOnMountRef.current?.comparisonRawData || {});
   // Map of widgetId -> the cacheKey (widgetId+compare_to+resolved filters) already fetched or
   // in flight for it — checked BEFORE fetching, and set as soon as a fetch starts (not just
   // while in-flight), so a stale value doesn't get silently kept once its cacheKey has moved
   // on, but a cacheKey that's already been fetched doesn't refetch on every subsequent render.
-  const comparisonKeyRef = useRef(new Map());
+  // Seeded only for comparisons whose rows actually arrived — one still in flight in the other
+  // instance is fetched again here rather than skipped and never filled.
+  const comparisonKeyRef = useRef(new Map(
+    (cachedOnMountRef.current?.comparisonKeys || []).filter(([id]) => cachedOnMountRef.current.comparisonRawData?.[id] !== undefined),
+  ));
   // KPI_CARD's own per-card date filter (mapping.date_filter_column/range) — same
   // cacheKey-in-a-ref dedupe pattern as comparisonKeyRef above, tracking which resolved
   // filter set this widget's own base rows were last fetched under.
   const kpiDateFilterKeyRef = useRef(new Map());
+  // Keep the shared cache current so the next instance of this dashboard (Edit, fullscreen,
+  // back to preview) starts from what's on screen now.
+  useEffect(() => {
+    if (backendId) updateCachedDashboardData(backendId, { chartLibraryData });
+  }, [backendId, chartLibraryData]);
+  useEffect(() => {
+    if (backendId) updateCachedDashboardData(backendId, { comparisonRawData, comparisonKeys: [...comparisonKeyRef.current] });
+  }, [backendId, comparisonRawData]);
   // Cross-filtering (opt-in, BAR/PIE/LINE/AREA only) — transient, never persisted to
   // dashboard.global_filters/updateDashboard, unlike dashboardFilters below. Shape:
   // { sourceWidgetId, column, value, label, targetIds: string[] }. See
@@ -1419,7 +1455,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // the already-fetched data cache below.
   useEffect(() => {
     if (!editable) return;
-    listChartLibraryWidgets().then(setChartLibraryList).catch(() => {});
+    listChartLibraryWidgets({ quiet: loadedFromCache }).then(setChartLibraryList).catch(() => {});
   }, [editable]);
 
   const refreshChartLibraryList = () => listChartLibraryWidgets().then(setChartLibraryList).catch(() => {});
@@ -1491,6 +1527,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     Object.values(widgets).forEach((w) => {
       const id = w.dataSource?.widgetId;
       if (w.dataSource?.type !== 'chartLibrary' || !id) return;
+      if (backendId && !initialBatchDone) return; // the batched load will fill it
       if (chartLibraryData[id] || chartLibraryFetchingRef.current.has(id)) return;
       chartLibraryFetchingRef.current.add(id);
       // This fetch never carries filters (it's a cache-fill for a brand-new widget, not a
@@ -1505,7 +1542,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .catch((err) => setChartLibraryData((prev) => (prev[id] ? prev : { ...prev, [id]: { error: err.message } })))
         .finally(() => chartLibraryFetchingRef.current.delete(id));
     });
-  }, [widgets, chartLibraryData, backendId]);
+  }, [widgets, chartLibraryData, backendId, initialBatchDone]);
 
   // A KPI_CARD/GAUGE's actually-effective filter set: its own date_filter_column/range if set
   // (excluding the dashboard's global filter on that SAME column, so the two can't stack into
@@ -1538,7 +1575,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       if (kpiDateFilterKeyRef.current.get(widgetId) === cacheKey) return;
       kpiDateFilterKeyRef.current.set(widgetId, cacheKey);
       const fetchPromise = backendId
-        ? getWidgetData(backendId, widgetId, { filters })
+        ? getWidgetData(backendId, widgetId, { filters, quiet: loadedFromCache })
         : getStandaloneWidgetData(widgetId, { filters });
       fetchPromise
         .then((data) => {
@@ -1626,7 +1663,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       if (comparisonKeyRef.current.get(widgetId) === cacheKey) return;
       comparisonKeyRef.current.set(widgetId, cacheKey);
       const fetchPromise = backendId
-        ? getWidgetData(backendId, widgetId, { filters: compareFilters })
+        ? getWidgetData(backendId, widgetId, { filters: compareFilters, quiet: loadedFromCache })
         : getStandaloneWidgetData(widgetId, { filters: compareFilters });
       fetchPromise
         .then((data) => {
@@ -1675,6 +1712,34 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     });
   }, [widgets, chartLibraryData, comparisonRawData]);
 
+  // Big Number "Show trend" — the card's own measure re-run as a LINE over its date column,
+  // under the same filters as its number (dashboard filters + its own Period). Only Big Numbers
+  // with the trend on fetch anything; every other widget is skipped on the first line.
+  useEffect(() => {
+    Object.values(widgets).forEach((w) => {
+      const mapping = w.dataSource?.mapping;
+      if (w.dataSource?.type !== 'chartLibrary' || !wantsBigNumberTrend(mapping)) return;
+      const widgetId = w.dataSource.widgetId;
+      const datasourceId = w.dataSource.datasourceId;
+      if (!widgetId || !datasourceId) return;
+      const filters = resolveFiltersForQuery(kpiEffectiveFilters(mapping));
+      const cacheKey = `${widgetId}:${JSON.stringify([mapping.y_axis, mapping.aggregation, mapping.date_filter_column, filters])}`;
+      if (bigNumberTrendKeyRef.current.get(widgetId) === cacheKey) return;
+      bigNumberTrendKeyRef.current.set(widgetId, cacheKey);
+      fetchBigNumberTrend({ datasourceId, mapping, filters, quiet: true })
+        .then((points) => {
+          if (bigNumberTrendKeyRef.current.get(widgetId) !== cacheKey) return; // superseded
+          setBigNumberTrendData((prev) => ({ ...prev, [widgetId]: points }));
+        })
+        .catch(() => {
+          // Optional extra — the card simply shows no trend line.
+          if (bigNumberTrendKeyRef.current.get(widgetId) === cacheKey) {
+            setBigNumberTrendData((prev) => ({ ...prev, [widgetId]: null }));
+          }
+        });
+    });
+  }, [widgets, dashboardFilters]);
+
   // Phase 18 — batched, filter-aware fetch for dashboards with a real backend id. Omitting
   // `filters` from the call (see getDashboardData's own doc comment) makes the backend
   // auto-apply whatever `global_filters` are already saved, so first paint already reflects
@@ -1699,7 +1764,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         return next;
       });
     };
-    getDashboardData(backendId, hasOverride ? { filters: deepLinkFilters } : {})
+    // The saved filters are usually already known (initialGlobalFilters comes from the same
+    // dashboard detail) — when they are, send them resolved in the FIRST call, so a relative date
+    // range or a cleared filter no longer costs a second whole-dashboard fetch (see below).
+    // Unknown/empty → omit them and let the backend apply what's saved, as before.
+    const knownFilters = !hasOverride && initialGlobalFilters?.length ? initialGlobalFilters : null;
+    let firstCall = {};
+    if (hasOverride) firstCall = { filters: deepLinkFilters };
+    else if (knownFilters) firstCall = { filters: resolveFiltersForQuery(knownFilters) };
+    // Quiet (no app-wide loader) when the charts are already showing from the shared cache.
+    getDashboardData(backendId, { ...firstCall, quiet: loadedFromCache })
       .then(({ dashboard, widgets: widgetResults }) => {
         if (cancelled) return;
         const savedFilters = dashboard.global_filters || [];
@@ -1714,6 +1788,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         }
         setBoundThemeId(dashboard.theme_id || null);
         applyWidgetResults(widgetResults);
+        setInitialBatchDone(true);
 
         // The backend's "omit filters, auto-apply dashboard.global_filters" fast path (above)
         // only works for filters it can interpret as-is — two cases it can't:
@@ -1729,19 +1804,25 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         //     path (initial/omit-filters load) that bypasses it entirely.
         // Either case: immediately re-fetch once with the corrected filter set and swap the
         // corrected widget data in — the common case (neither) never pays this second round trip.
-        const needsResolution = !hasOverride && (
-          savedFilters.some(
-            (f) => f.operator === 'BETWEEN' && f.value && typeof f.value === 'object' && !Array.isArray(f.value) && f.value.mode && f.value.mode !== 'custom',
-          )
-          || resolveFiltersForQuery(savedFilters).length !== savedFilters.length
-        );
+        // When the first call already sent the resolved saved filters, a second fetch is only
+        // needed if what's saved differs from what was sent (the filters changed since the
+        // dashboard detail was loaded, e.g. applied from another view).
+        const needsResolution = !hasOverride && (knownFilters
+          ? JSON.stringify(knownFilters) !== JSON.stringify(savedFilters)
+          : (
+            savedFilters.some(
+              (f) => f.operator === 'BETWEEN' && f.value && typeof f.value === 'object' && !Array.isArray(f.value) && f.value.mode && f.value.mode !== 'custom',
+            )
+            || resolveFiltersForQuery(savedFilters).length !== savedFilters.length
+          ));
         if (needsResolution) {
-          getDashboardData(backendId, { filters: resolveFiltersForQuery(savedFilters) })
+          getDashboardData(backendId, { filters: resolveFiltersForQuery(savedFilters), quiet: loadedFromCache })
             .then(({ widgets: resolvedWidgetResults }) => { if (!cancelled) applyWidgetResults(resolvedWidgetResults); })
             .catch(() => {});
         }
       })
-      .catch(() => {});
+      // A failed batch falls back to the per-chart fill-in, as before this gate existed.
+      .catch(() => { if (!cancelled) setInitialBatchDone(true); });
     return () => { cancelled = true; };
   }, [backendId, deepLinkFilters]);
 
@@ -2213,6 +2294,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // is visible on every tab, matching the "global" slicer/widget convention. `layout` state
   // itself is never filtered — only what's actually handed to the grid/renderer is.
   const visibleLayout = tabs.length === 0 ? layout : layout.filter((l) => !l.tabId || l.tabId === activeTabId);
+  // Animation "Wave" stagger order — reading order (top to bottom, then left to right).
+  const tileOrder = new Map([...visibleLayout].sort((a, b) => a.y - b.y || a.x - b.x).map((l, i) => [l.i, i]));
+  // Resolved animation per tile, reused while unchanged so the context value keeps its identity
+  // and WidgetContent's memoization still holds across unrelated canvas re-renders.
+  const animCacheRef = useRef(new Map());
 
   // `pixelHeightOverride` — only used by the Focus mode modal below, so a widget's chart can
   // render at the modal's own actual pixel height instead of whatever its small grid tile
@@ -2243,6 +2329,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       ? (w.filters?.length ? widgetFilterData[l.i] : chartLibraryData[w.dataSource.widgetId])
       : undefined;
     const comparisonEntry = w.dataSource?.widgetId ? comparisonData[w.dataSource.widgetId] : undefined;
+    const trendEntry = w.dataSource?.widgetId ? bigNumberTrendData[w.dataSource.widgetId] : undefined;
     // Shared context for resolveWidgetProps — used both by WidgetContent (rendering) and the
     // Export CSV button below (computed fresh on click, not cached from render, so it's
     // never stale and doesn't need `resolved` threaded out of the memoized child).
@@ -2288,6 +2375,22 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       effectiveDashboardStyle,
       effectiveIsDark,
     );
+    // Style → Animation: widget (chart -> placement) first, then dashboard/theme. Off while a
+    // multi-tab PDF export is capturing, so no chart is caught mid-animation.
+    const anim = resolveAnimation(
+      [w.dataSource?.type === 'chartLibrary' ? mergeStyleLayers(w.dataSource.mapping?.style, w.style) : w.style, effectiveDashboardStyle],
+      { disabled: isExportingAcrossTabs, index: tileOrder.get(l.i) ?? 0 },
+    );
+    const animSig = JSON.stringify(anim);
+    let animEntry = animCacheRef.current.get(l.i);
+    if (!animEntry || animEntry.sig !== animSig) {
+      animEntry = { sig: animSig, anim };
+      animCacheRef.current.set(l.i, animEntry);
+    }
+    // Remount key — changing an animation setting replays it so the effect can be seen. Leaves
+    // out the wave delay, so dragging tiles around (which reorders them) doesn't replay anything.
+    const animKey = [anim.enabled, anim.entrance, anim.duration, anim.easing, anim.stagger].join('|');
+    const entrance = cardEntrance(anim);
     return (
       <div
         key={l.i}
@@ -2456,7 +2559,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             </div>
           );
         })()}
-        <div style={textStyle} ref={(el) => { widgetNodeRefs.current[l.i] = el; }}>
+        <div
+          key={animKey}
+          style={entrance.style ? { ...textStyle, ...entrance.style } : textStyle}
+          className={entrance.className || undefined}
+          ref={(el) => { widgetNodeRefs.current[l.i] = el; }}
+        >
+          <ChartAnimationContext.Provider value={animEntry.anim}>
           <WidgetContent
             widget={w}
             pixelHeight={pixelHeight}
@@ -2488,6 +2597,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             datasources={datasources}
             chartLibraryEntry={chartLibraryEntry}
             comparisonEntry={comparisonEntry}
+            trendEntry={trendEntry}
             widgetId={l.i}
             onPointClick={stableOnPointClick}
             onDrillUp={stableOnDrillUp}
@@ -2499,6 +2609,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             onSlicerRefresh={refreshSlicer}
             slicerBusy={w.type === 'slicer' && slicerBusyId === w.dataSource?.slicerId}
           />
+          </ChartAnimationContext.Provider>
         </div>
       </div>
     );
