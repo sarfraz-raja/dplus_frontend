@@ -18,7 +18,8 @@ const themeStyle = (theme) => {
 // colors" at a glance and fits any width, unlike a row of dots competing with the name.
 function PaletteStrip({ theme, isDark, className }) {
   const palette = resolveStyleForMode(themeStyle(theme), isDark)?.palette;
-  const colors = (Array.isArray(palette) && palette.length ? palette : CHART_PALETTE).slice(0, 8);
+  // OLD: .slice(0, 8)
+  const colors = (Array.isArray(palette) && palette.length ? palette : CHART_PALETTE);
   return (
     <span className={cn('flex overflow-hidden rounded-full', className)} aria-hidden="true">
       {colors.map((c, i) => (
@@ -43,7 +44,7 @@ export default function ThemePicker({ themes = [], value = null, onChange, isDar
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate text-[13px] font-semibold text-slate-800">{linked?.name || 'Loading…'}</span>
               <span className="flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                <Link2 size={10} aria-hidden="true" /> Linked
+                <Link2 size={10} aria-hidden="true" /> Base theme {/* OLD: Linked */}
               </span>
             </div>
             <PaletteStrip theme={linked} isDark={isDark} className="h-2 w-full" />
@@ -62,7 +63,7 @@ export default function ThemePicker({ themes = [], value = null, onChange, isDar
               onClick={() => pick(null)}
               className="flex-1 border-l border-slate-200 py-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
             >
-              Unlink
+              Remove {/* OLD: Unlink */}
             </button>
           </div>
         </div>
@@ -73,7 +74,7 @@ export default function ThemePicker({ themes = [], value = null, onChange, isDar
           aria-expanded={open}
           className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-[12px] font-semibold text-slate-500 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700"
         >
-          <Palette size={13} aria-hidden="true" /> {open ? 'Close' : 'Link a theme'}
+          <Palette size={13} aria-hidden="true" /> {open ? 'Close' : 'Use a theme'} {/* OLD: Link a theme */}
         </button>
       )}
 

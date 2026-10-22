@@ -8,6 +8,7 @@ import AutoSuggestion from '../../components/FormElements/AutoSuggestion';
 import DataTable from '../../components/DataTable';
 import Button from '../../components/Button';
 import { defaultProRulesDate, normalizeProRuleRow, statusColor } from '../../components/MapsUsingDeckgl/cellProRulesStatus';
+import { PageTitle } from '../../components/FormPage';
 
 const FILTERS = ['All', 'Issues only', 'Warnings', 'OK only', 'Accessibility', 'Capacity', 'Mobility', 'Integrity', 'Quality'];
 
@@ -142,19 +143,11 @@ const CellProRulesPage = () => {
         >
             {/* ── Header ── */}
             <div className="flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                        style={{ background: '#0b1830' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M7 15l5-5 5 5" />
-                            <path d="M12 20V4" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800 leading-tight">Cell Pro Rules</h1>
-                        <p className="text-xs text-slate-400 font-medium tracking-wide">Manage cell rule status and health in the same style as DB Configuration</p>
-                    </div>
-                </div>
+                <PageTitle
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"> <path d="M7 15l5-5 5 5" /> <path d="M12 20V4" /> </svg>}
+                    title="Cell Pro Rules"
+                    subtitle="Manage cell rule status and health in the same style as DB Configuration"
+                />
 
                 {/* ── Form controls ── */}
                 <div className="flex items-end gap-3">

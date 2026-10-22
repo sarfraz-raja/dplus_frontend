@@ -13,6 +13,7 @@ import AuthActions from './store/actions/auth-actions'
 import InsightsEngineActions from './store/actions/insightsEngine-actions'
 import { Toaster } from 'react-hot-toast'
 import AiChatFab from './components/AiChatFab'
+import GlobalTooltip from './components/GlobalTooltip'
 
 class ErrorBoundary extends Component {
     constructor(props) {
@@ -185,14 +186,18 @@ function App() {
 
                 {!isFullscreen && <AiChatFab />}
                 <SweetAlerts />
+                {/* Styled tooltip for every native title="…" in the app (components/GlobalTooltip.jsx). */}
+                <GlobalTooltip />
                 <Toaster
                     position="bottom-center"
                     toastOptions={{
                         duration: 3000,
                         style: {
-                            background: '#09090b',
+                            // OLD: background '#09090b', border '1px solid #27272a'
+                            background: '#121833',
                             color: '#fafafa',
-                            border: '1px solid #27272a',
+                            border: '1px solid #2a3360',
+                            borderLeft: '3px solid #EC7D09', // OLD: #F26A1B
                             borderRadius: '8px',
                             padding: '12px 16px',
                             fontSize: '13px',
@@ -202,24 +207,26 @@ function App() {
                         },
                         error: {
                             style: {
-                                background: '#09090b',
+                                background: '#121833',
                                 color: '#fafafa',
-                                border: '1px solid #7f1d1d',
+                                border: '1px solid #2a3360',
+                                borderLeft: '3px solid #ef4444',
                             },
                             iconTheme: {
                                 primary: '#ef4444',
-                                secondary: '#09090b',
+                                secondary: '#121833',
                             },
                         },
                         success: {
                             style: {
-                                background: '#09090b',
+                                background: '#121833',
                                 color: '#fafafa',
-                                border: '1px solid #14532d',
+                                border: '1px solid #2a3360',
+                                borderLeft: '3px solid #22c55e',
                             },
                             iconTheme: {
                                 primary: '#22c55e',
-                                secondary: '#09090b',
+                                secondary: '#121833',
                             },
                         },
                     }}

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import FloatingPanel from '../../FloatingPanel';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { getDatasourceDetail, getColumnDistinctValues } from '../../../store/actions/dashboardBuilder-actions';
 import MultiSelectFilterInput from './MultiSelectFilterInput';
@@ -135,7 +136,13 @@ async function resolveColumnType(column, datasourceId, datasourceOptions) {
  * (onApply). `datasourceOptions` is only needed for resolving IN/NOT IN dropdown values
  * (see resolveColumnValues above) — harmless to omit for dashboards with no such filters.
  */
-export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters, columnValueHints = {} }) {
+// `compact`: the collapsed row is a single 32px filter icon button with a count badge (orange =
+// that many filters have a value, grey = configured but none set) and the active values in its
+// tooltip — for tight toolbars (a dashboard's title row in published/embedded views). Clicking it
+// opens the same value popover. Default = the original "Active: tag ×" row.
+// OLD: export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters, columnValueHints = {} }) {
+export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters, columnValueHints = {}, compact = false }) {
+  const popAnchorRef = useRef(null); // anchors the floating editor popover
   const [localValues, setLocalValues] = useState(filters);
   const [applying, setApplying] = useState(false);
   // Collapsed by default — a row of always-shown input boxes (empty or filled) took a full
@@ -389,20 +396,51 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
         // value yet" (see the Save-without-a-value change in FilterEditorModal.jsx), never
         // "there are no filters at all." The old "No filters applied" wording didn't
         // distinguish those two states, silently hiding that filters were already configured.
-        <button type="button" onClick={() => setExpanded(true)} className="text-slate-400 hover:text-slate-600">
-          {localValues.length} filter{localValues.length === 1 ? '' : 's'} configured — click to set values
+        // OLD: "{N} filters configured — click to set values" — too long for a toolbar; the wording
+        // moved to the tooltip.
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          title={`${localValues.length} filter${localValues.length === 1 ? '' : 's'} configured — click to set values`}
+          className="text-slate-500 hover:text-slate-700"
+        >
+          Filters · {localValues.length}
         </button>
       )}
     </div>
   );
 
+  const compactButton = (
+    <button
+      type="button"
+      onClick={() => setExpanded(true)}
+      aria-label={`Filters (${activeFilters.length} of ${localValues.length} set)`}
+      title={activeFilters.length
+        ? `Filters — ${activeFilters.map(summaryText).join(' · ')}`
+        : `${localValues.length} filter${localValues.length === 1 ? '' : 's'} configured — click to set values`}
+      className="relative w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+    >
+      <SlidersHorizontal size={14} aria-hidden="true" />
+      <span
+        className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-ui-micro font-semibold leading-none ${
+          activeFilters.length ? 'bg-[#EC7D09] text-white' : 'bg-slate-200 text-slate-600'
+        }`}
+      >
+        {activeFilters.length || localValues.length}
+      </span>
+    </button>
+  );
+  const collapsedRow = compact ? compactButton : tagsRow;
+
   if (!showExpanded) {
-    return tagsRow;
+    // OLD: return tagsRow;
+    return collapsedRow;
   }
 
   return (
-    <div className="relative">
-      {tagsRow}
+    <div className="relative" ref={popAnchorRef}>
+      {/* OLD: {tagsRow} */}
+      {collapsedRow}
       {/* Editing opens as a floating popover, not inline in place — this used to reflow the
           whole row open right where the collapsed chip sat, which (particularly inside the
           toolbar's own flex row, where this component has limited width to work with) forced
@@ -410,8 +448,10 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
           around it. A popover has its own fixed width and sits in its own stacking context
           (position:absolute), so opening it can never reflow or squeeze anything else on the
           page — see the conversation this was reported in. */}
-      <div className="fixed inset-0 z-30" onClick={() => !isDirty && setExpanded(false)} />
-      <div className="absolute left-0 top-full mt-2 z-40 w-[420px] max-w-[90vw] rounded-xl border border-slate-200 bg-white shadow-xl p-3">
+      {/* OLD: a full-screen click-catcher + an absolute popover (clippable by the toolbar's container).
+          Now the shared FloatingPanel; it closes on an outside click only while nothing is unsaved. */}
+      <FloatingPanel anchorRef={popAnchorRef} open onClose={() => { if (!isDirty) setExpanded(false); }} minWidth={420} maxHeight={560}>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <FilterPanelExpanded
           localValues={localValues} isDirty={isDirty} hasAnyValue={hasAnyValue} applying={applying}
           inputTypeFor={inputTypeFor} updateValue={updateValue} optionsByColumn={optionsByColumn} loadingColumns={loadingColumns}
@@ -419,6 +459,7 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
           onEditInFilters={onEditInFilters}
         />
       </div>
+      </FloatingPanel>
     </div>
   );
 }

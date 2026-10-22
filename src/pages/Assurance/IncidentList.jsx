@@ -7,6 +7,8 @@ import { getApiErrorMessage } from '../../utils/common';
 import DataTable from '../../components/DataTable';
 import Button from '../../components/Button';
 import IncidentModal from '../Tickets/IncidentModal';
+import { PageTitle } from '../../components/FormPage';
+import ActionButton from '../../components/ActionButton';
 
 // Incident List — GET /incidents (API doc Section 8). Read-only: incidents are created, cleared
 // and reopened entirely by the correlation/verification engines, so there is no New/Close action.
@@ -90,14 +92,7 @@ const IncidentList = () => {
         }
         if (col.key === '_actions') {
             return (
-                <button onClick={() => setOpenIncidentId(itm.id)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                    </svg>
-                    View
-                </button>
+                <ActionButton tone="neutral" icon={<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"> <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /> <circle cx="12" cy="12" r="3" /> </svg>} onClick={() => setOpenIncidentId(itm.id)}>View</ActionButton>
             );
         }
         const val = itm[col.key];
@@ -107,21 +102,11 @@ const IncidentList = () => {
     return (
         <div className="flex flex-col h-full overflow-hidden p-5 gap-4" style={{ background: '#ffffff' }}>
             <div className="flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0" style={{ background: '#0b1830' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="3" />
-                            <circle cx="4" cy="6" r="2" />
-                            <circle cx="20" cy="6" r="2" />
-                            <circle cx="12" cy="21" r="2" />
-                            <path d="M6 7l4 3M18 7l-4 3M12 15v4" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800 leading-tight">Incidents</h1>
-                        <p className="text-xs text-slate-400 font-medium tracking-wide">Intelligent Telecom Assurance — correlated alarms (read-only, fully automatic)</p>
-                    </div>
-                </div>
+                <PageTitle
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"> <circle cx="12" cy="12" r="3" /> <circle cx="4" cy="6" r="2" /> <circle cx="20" cy="6" r="2" /> <circle cx="12" cy="21" r="2" /> <path d="M6 7l4 3M18 7l-4 3M12 15v4" /> </svg>}
+                    title="Incidents"
+                    subtitle="Intelligent Telecom Assurance — correlated alarms (read-only, fully automatic)"
+                />
                 <div className="flex items-center gap-2">
                     <button onClick={() => load(true)} disabled={refreshing} title="Refresh" aria-label="Refresh incidents"
                         className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50">

@@ -8,7 +8,7 @@
 // (cascade, chart components) keeps reading plain flat keys and never learns about modes.
 // `guardStyleColors` is the render-time safety net for a color that can't be read against its
 // background (e.g. a white title saved in dark mode, now shown on light mode's white card).
-import { contrastRatio, pickReadableTextColor } from './contrast';
+import { pickReadableTextColor } from './contrast';
 
 export const STYLE_COLORS_KEY = 'colors';
 export const MODES = ['light', 'dark'];
@@ -87,44 +87,71 @@ export function resolveStyleForMode(style, isDark) {
   return overlay ? { ...flat, ...definedEntries(overlay) } : flat;
 }
 
-const isUnreadable = (fg, bg) => {
-  const ratio = contrastRatio(fg, bg);
-  return ratio != null && ratio < LOW_CONTRAST_THRESHOLD;
-};
-
-// Drops any explicit text/line color that would be near-invisible on what it's drawn on, so the
-// component falls back to its own theme-correct default instead. Non-hex values (rgba, 'auto',
-// 'transparent') can't be measured and are left alone.
+// Only fills in a readable color where the user hasn't picked one at all — it never overrides an
+// explicit pick, however low its contrast, since that's the user's own call (WidgetStyleFields'
+// warnings tell them when it's hard to read; this used to also silently drop/replace the saved
+// value at render time, which blocked deliberate choices like a light title on a background
+// that's about to be changed too). Non-hex values (rgba, 'auto', 'transparent') can't be
+// measured and are left alone.
 export function guardStyleColors(style, isDark) {
   if (!style) return style;
-  const bg = style.bgColor || style.bgGradient?.[0] || style.bgGradientFrom || surfaceBg(isDark);
   const out = { ...style };
-  const check = (key, against) => { if (out[key] && isUnreadable(out[key], against)) delete out[key]; };
-  check('titleColor', style.titleBgColor || bg);
-  check('valueTextColor', bg);
-  check('axisTextColor', bg);
-  check('color', bg);
   // Band/header text has no theme-aware fallback of its own to drop back to — unlike
   // title/value/axis text, which fall back to the component's own theme-matched default color
-  // when dropped above, VirtualizedTable.jsx's <td>/<th> fall back to a FIXED Tailwind class
+  // when unset, VirtualizedTable.jsx's <td>/<th> fall back to a FIXED Tailwind class
   // (`dark:text-white/70`) that has no idea what Band/Header background was actually picked.
-  // So instead of just dropping an unreadable value and hoping the fallback works, these two are
-  // actively COMPUTED whenever their background is set — text on a custom-colored band/header
-  // row is then always readable in both modes, not only when the saved color happens to still
-  // read fine in the mode it's viewed in.
-  if (style.bandColor) {
-    out.bandTextColor = (style.bandTextColor && !isUnreadable(style.bandTextColor, style.bandColor))
-      ? style.bandTextColor
-      : pickReadableTextColor(style.bandColor, isDark);
-  } else {
-    check('bandTextColor', bg);
+  // So these two are actively COMPUTED whenever their background is set and no explicit text
+  // color was chosen — text on a custom-colored band/header row then has a sensible readable
+  // default in both modes, without overriding a color the user did pick.
+  if (style.bandColor && !style.bandTextColor) {
+    out.bandTextColor = pickReadableTextColor(style.bandColor, isDark);
   }
-  if (style.headerBgColor) {
-    out.headerTextColor = (style.headerTextColor && !isUnreadable(style.headerTextColor, style.headerBgColor))
-      ? style.headerTextColor
-      : pickReadableTextColor(style.headerBgColor, isDark);
-  } else {
-    check('headerTextColor', bg);
+  if (style.headerBgColor && !style.headerTextColor) {
+    out.headerTextColor = pickReadableTextColor(style.headerBgColor, isDark);
+  }
+  return out;
+}
+
+// Drops values from a dashboard placement's own style that are identical to what it would
+// inherit anyway — the chart's own style (Charts tab) for that key, or, when the chart doesn't
+// set it, the dashboard's. Placing a chart used to copy both into the placement (frozen there,
+// so later chart/theme edits never reached it); removing an identical copy changes nothing on
+// screen but lets those edits through again. A value that differs is a real override and stays.
+// Per-mode colors compare per mode. Conservative where a key mixes flat and per-mode forms.
+export function stripInheritedStyle(own, chartStyle, dashboardStyle) {
+  if (!own || typeof own !== 'object') return own;
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const isSet = (v) => v !== undefined && v !== null && v !== '';
+  // Inherited value of `key` (for `mode`, or flat when mode is null) from one layer; undefined
+  // when that layer doesn't set it. A flat lookup on a layer with per-mode entries for the key
+  // is ambiguous → treated as not comparable (null), so nothing is stripped for it.
+  const from = (layer, key, mode) => {
+    if (!layer) return undefined;
+    const perMode = MODES.some((m) => isSet(layer[STYLE_COLORS_KEY]?.[m]?.[key]));
+    if (mode) return isSet(layer[STYLE_COLORS_KEY]?.[mode]?.[key]) ? layer[STYLE_COLORS_KEY][mode][key] : (isSet(layer[key]) ? layer[key] : undefined);
+    if (perMode) return null;
+    return isSet(layer[key]) ? layer[key] : undefined;
+  };
+  const inherited = (key, mode) => {
+    const c = from(chartStyle, key, mode);
+    return c !== undefined ? c : from(dashboardStyle, key, mode);
+  };
+  const { [STYLE_COLORS_KEY]: ownColors, ...flat } = own;
+  const out = {};
+  for (const [k, v] of Object.entries(flat)) {
+    const inh = inherited(k, null);
+    if (!(isSet(v) && inh !== undefined && inh !== null && same(v, inh))) out[k] = v;
+  }
+  if (ownColors) {
+    const colors = {};
+    for (const m of MODES) {
+      const kept = Object.fromEntries(Object.entries(ownColors[m] || {}).filter(([k, v]) => {
+        const inh = inherited(k, m);
+        return !(isSet(v) && inh !== undefined && same(v, inh));
+      }));
+      if (Object.keys(kept).length) colors[m] = kept;
+    }
+    if (Object.keys(colors).length) out[STYLE_COLORS_KEY] = colors;
   }
   return out;
 }

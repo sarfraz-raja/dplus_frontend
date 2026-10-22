@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import Select from '../../Select'; // shared dropdown (styled list) — replaces native <select>, CLAUDE.md §4
 import { Trash2, Plus } from 'lucide-react';
 import FormModal from '../../FormModal';
 import Button from '../../Button';
@@ -272,7 +273,7 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
       <div>
         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</label>
         <div className="flex gap-2">
-          <select
+          <Select
             value={isNow ? 'now' : 'fixed'}
             onChange={(e) => updateSelected({
               value: { ...selected.value, mode: 'custom', [side]: e.target.value === 'now' ? { type: 'now' } : '' },
@@ -283,7 +284,7 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
               {dateGranularity === 'datetime' ? 'Fixed date/time' : dateGranularity === 'time' ? 'Fixed time' : 'Fixed date'}
             </option>
             <option value="now">Now</option>
-          </select>
+          </Select>
           {!isNow && (
             <input
               type={dateGranularity === 'datetime' ? 'datetime-local' : dateGranularity === 'time' ? 'time' : 'date'}
@@ -353,26 +354,26 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Datasource</label>
-                  <select
+                  <Select
                     value={selected.datasourceId}
                     onChange={(e) => updateSelected({ datasourceId: e.target.value, column: '' })}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   >
                     <option value="">— pick a datasource —</option>
                     {datasourceOptions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
+                  </Select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Column</label>
-                  {/* A real <select> instead of <input list>/<datalist> — browsers only
+                  {/* A real select (now the shared <Select>) instead of <input list>/<datalist> — browsers only
                       surface datalist suggestions that partially match the current text, so
                       once a column was picked (an exact match) the rest of the list became
                       invisible until the field was cleared. A select always shows every
                       discovered column on click, and only lets you pick a real one. */}
-                  <select
+                  <Select
                     value={selected.column}
                     onChange={(e) => updateSelected({ column: e.target.value })}
                     disabled={!selected.datasourceId || columnsLoading}
@@ -382,11 +383,11 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                       {!selected.datasourceId ? '— pick a datasource first —' : columnsLoading ? 'Loading…' : '— pick a column —'}
                     </option>
                     {columns.map((c) => <option key={c.column_name} value={c.column_name}>{c.column_name}</option>)}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Operator</label>
-                  <select
+                  <Select
                     value={selected.operator}
                     onChange={(e) => updateSelected({
                       operator: e.target.value,
@@ -403,7 +404,7 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                     {OPERATORS.map((op) => (
                       <option key={op.value} value={op.value}>{isDateColumn && op.dateLabel ? op.dateLabel : op.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -411,7 +412,7 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                 <div className="flex flex-col gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Range type</label>
-                    <select
+                    <Select
                       value={rangeModeOf(selected.value)}
                       onChange={(e) => updateSelected({ value: defaultValueForRangeMode(e.target.value, dateGranularity) })}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
@@ -422,7 +423,7 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                       {dateGranularity !== 'time' && <option value="relative">Last N…</option>}
                       {dateGranularity !== 'time' && <option value="thisPeriod">This period…</option>}
                       <option value="custom">Custom</option>
-                    </select>
+                    </Select>
                   </div>
 
                   {rangeModeOf(selected.value) === 'relative' && (
@@ -439,24 +440,24 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Unit</label>
-                        <select
+                        <Select
                           value={selected.value?.unit || 'days'}
                           onChange={(e) => updateSelected({ value: { ...selected.value, unit: e.target.value } })}
                           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                         >
                           {RELATIVE_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
-                        </select>
+                        </Select>
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Direction</label>
-                        <select
+                        <Select
                           value={selected.value?.direction || 'before'}
                           onChange={(e) => updateSelected({ value: { ...selected.value, direction: e.target.value } })}
                           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                         >
                           <option value="before">Before now</option>
                           <option value="after">After now</option>
-                        </select>
+                        </Select>
                       </div>
                     </div>
                   )}
@@ -464,13 +465,13 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                   {rangeModeOf(selected.value) === 'thisPeriod' && (
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Period</label>
-                      <select
+                      <Select
                         value={selected.value?.unit || 'month'}
                         onChange={(e) => updateSelected({ value: { ...selected.value, unit: e.target.value } })}
                         className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                       >
                         {THIS_PERIOD_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
-                      </select>
+                      </Select>
                     </div>
                   )}
 

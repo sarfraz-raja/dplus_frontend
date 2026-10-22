@@ -3,6 +3,7 @@ import Button from '../../components/Button';
 import DataTable from '../../components/DataTable';
 import Api from '../../utils/api';
 import { Urls } from '../../utils/url';
+import { PageTitle } from '../../components/FormPage';
 
 const COLUMNS = [
     { label: 'Vendor',           key: 'vendor'           },
@@ -102,22 +103,11 @@ const KPIMeasurements = () => {
 
             {/* ── Header ── */}
             <div className="flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                        style={{ background: '#0b1830' }}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800 leading-tight">KPI Measurements</h1>
-                        <p className="text-xs text-slate-400 font-medium tracking-wide">Browse and manage KPI measurement configurations</p>
-                    </div>
-                </div>
+                <PageTitle
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"> <ellipse cx="12" cy="5" rx="9" ry="3"/> <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/> <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/> </svg>}
+                    title="KPI Measurements"
+                    subtitle="Browse and manage KPI measurement configurations"
+                />
 
                 <div className="flex items-center gap-2">
                     <Button variant="primary" size="md">

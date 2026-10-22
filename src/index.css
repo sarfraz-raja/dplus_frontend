@@ -47,15 +47,74 @@
 
 :root {
   --mainprimary: linear-gradient(to left, #101c4c, #1b0027);
-  --mainsec: #EC7D09;
+  /* --mainsec: #EC7D09; */
+  --mainsec: rgb(var(--accent));
   --topbar: linear-gradient(to right, #101c4c, #1b0027);
   background-color: #ffffff;
 
+  /* Design tokens (light). Space-separated RGB channels so Tailwind opacity modifiers work
+     (e.g. bg-accent/15) — exposed as Tailwind colors in tailwind.config.js. */
+  --surface-0: 255 255 255;   /* page background */
+  --surface-1: 255 255 255;   /* card / panel */
+  --surface-2: 246 247 251;   /* inner panel, table header strip, hover fill */
+  --line: 225 228 238;        /* 1px borders */
+  --content: 21 24 38;        /* primary text */
+  --muted: 103 112 137;       /* secondary text, labels */
+  --field: 255 255 255;       /* input background */
+  /* OLD: --accent 242 106 27 (#F26A1B) / --accent-hover 255 139 61 — a second orange from the sample UI.
+     One brand orange everywhere: the app's original #EC7D09. */
+  --accent: 236 125 9;        /* brand orange #EC7D09 — single source (BRAND_COLOR in theme/tokens.js mirrors it) */
+  --accent-hover: 240 151 58;
+  --gridline: rgba(0, 0, 0, 0.06);
+  --hoverlay: rgba(0, 0, 0, 0.035);
+  --glass: rgba(255, 255, 255, 0.55); /* frosted panels (Dashboard Builder, DataTable-era pages) */
+  /* Dashboard Builder editor type scale — the ONLY sizes/weights its panels use (CLAUDE.md §8). */
+  /* Headings follow the nesting: each level is one step smaller than its parent (all uppercase, 600).
+     OLD: one --dbe-fs-head (11px, then 10px) for every heading level. */
+  /* Tooltip colors (GlobalTooltip + CustomTooltip). OLD: solid app navy #121833. */
+  --tooltip-bg: rgba(236, 125, 9, 0.88);   /* brand orange #EC7D09, slightly see-through */
+  --tooltip-fg: #ffffff;
+  /* Compact set, in Inter (user's choice): body 11.5 / meta 10 / h1 10.5 / h2 10 / h3 10.
+     History: original 12/10.5/11/10.5/10 → compact → briefly 12/10.5/11/10.5/10.5 with Inter → back to compact. */
+  --dbe-fs-h1: 10.5px;     /* L1 panel section: Add Widget / Selected Widget, Dashboard Style sections, Theme page cards */
+  --dbe-fs-h2: 10px;   /* L2 sub-section / box: Details / Style, Shared / Light-Dark colors */
+  --dbe-fs-h3: 10px;     /* L3 field group inside a box: Title / Value / Border / Axis … */
+  --dbe-fs-head: var(--dbe-fs-h2); /* kept for any older reference */
+  --dbe-fs-body: 11.5px;   /* labels, inputs, selects, buttons, card text (weight 400; emphasis 600) */
+  --dbe-fs-meta: 10px; /* hints, notes, warnings, small pills (weight 400) */
+  /* App-wide type scale (everything except the Dashboard Builder editor, which keeps --dbe-fs-*).
+     Tailwind: text-ui-title / -heading / -body / -small / -micro. Full table: CLAUDE.md section 8. */
+  --ui-fs-title: 18px;    /* page titles (700) */
+  --ui-fs-heading: 16px;  /* modal titles (600) */
+  --ui-fs-body: 13px;     /* inputs, table cells, buttons, modal + page text (400; emphasis 600) */
+  --ui-fs-small: 12px;    /* subtitles, card titles, table header row, toolbar counts, pagination, dense grid cells */
+  --ui-fs-micro: 10px;    /* uppercase field labels, card subtitles, errors, hints */
 }
+
+/* Design tokens (dark) — OPT-IN per page. Dark mode keeps the light content area (as before)
+   until a page is fully converted; a converted page adds `dp-dark` to its root element and
+   gets these values (CSS variables inherit). OLD selector: html[data-theme="dark"] */
+html[data-theme="dark"] .dp-dark {
+  --surface-0: 3 5 12;
+  --surface-1: 12 16 28;
+  --surface-2: 19 25 41;
+  --line: 34 42 62;
+  --content: 232 234 241;
+  --muted: 138 145 168;
+  --field: 8 11 20;
+  --gridline: rgba(255, 255, 255, 0.06);
+  --hoverlay: rgba(255, 255, 255, 0.04);
+  --glass: rgb(var(--surface-1));
+}
+
+/* The app's own font stack — also used to keep dashboard CONTENT (the canvas) in the app font inside
+   the Inter-styled Dashboard Builder, so a dashboard looks the same in the editor and in view mode. */
+:root { --app-font: "Aptos", "Aptos Display", "Segoe UI", Arial, sans-serif; }
 
 body {
   margin: 0;
-  font-family: "Aptos", "Aptos Display", "Segoe UI", Arial, sans-serif;
+  /* OLD: literal stack — now var(--app-font) (same value). */
+  font-family: var(--app-font);
   background: #ffffff;
   color: #0f172a;
   -webkit-font-smoothing: antialiased;
@@ -133,8 +192,10 @@ html[data-theme="light"] body {
 }
 
 html[data-theme="dark"] body {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
+  /* background-color: #ffffff !important;
+  color: #0f172a !important; */
+  background-color: rgb(var(--surface-0)) !important;
+  color: rgb(var(--content)) !important;
 }
 
 /* App-wide scrollbar behavior: invisible at rest, revealed only while hovering the scrollable
@@ -287,12 +348,31 @@ html[data-theme="dark"] ::-webkit-scrollbar-track:hover {
  * Inline styles (e.g. map panel date inputs with style={{ backgroundColor:"#091428" }})
  * keep higher specificity and are unaffected.
  */
-html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.keep-dark-input),
+/* OLD: dark-mode form controls were forced white —
+   background-color: #ffffff !important; color: #0f172a !important; color-scheme: light;
+   Now themed via design tokens. Date/time inputs are excluded — they keep their own white rule below. */
+/* OLD: html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.keep-dark-input),
+   — search boxes are now excluded (see the search-box rule below). */
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="search"]):not(.keep-dark-input),
 html[data-theme="dark"] select,
 html[data-theme="dark"] textarea:not(.yogi-textarea) {
   background-color: #ffffff !important;
   color: #0f172a !important;
   color-scheme: light;
+}
+/* Converted (dp-dark) pages: themed form controls. Date/time inputs keep their white rule below. */
+html[data-theme="dark"] .dp-dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]):not(.keep-dark-input),
+html[data-theme="dark"] .dp-dark select,
+html[data-theme="dark"] .dp-dark textarea:not(.yogi-textarea) {
+  background-color: rgb(var(--field)) !important;
+  color: rgb(var(--content)) !important;
+  border-color: rgb(var(--line)) !important;
+  color-scheme: dark;
+}
+html[data-theme="dark"] .dp-dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.keep-dark-input):focus,
+html[data-theme="dark"] .dp-dark select:focus,
+html[data-theme="dark"] .dp-dark textarea:not(.yogi-textarea):focus {
+  border-color: rgb(var(--accent)) !important;
 }
 
 /* Checkboxes/radios keep the browser's native light look (outlined box) instead of the
@@ -317,6 +397,14 @@ html[data-theme="dark"] select::placeholder,
 html[data-theme="dark"] textarea:not(.yogi-textarea)::placeholder {
   color: #94a3b8 !important;
   opacity: 1 !important;
+}
+
+/* Search boxes are always dark in dark mode, on every page (user decision, 2026-10-21) — the one
+ * exception to the white form-control rule above. Use type="search" on any search input to get it. */
+html[data-theme="dark"] input[type="search"]:not(.keep-dark-input) {
+  background-color: #1E2235 !important;
+  color: #e2e8f0 !important;
+  color-scheme: dark;
 }
 
 html[data-theme="dark"] input.keep-dark-input {
@@ -514,3 +602,58 @@ html[data-theme="dark"] [data-dy3-topbar] .dy3-brand-sub * {
 @keyframes dbe-enter-fade { from { opacity: 0; } to { opacity: 1; } }
 .dbe-enter-zoom { animation-name: dbe-enter-zoom; animation-fill-mode: both; }
 .dbe-enter-fade { animation-name: dbe-enter-fade; animation-fill-mode: both; }
+
+/* Dark mode: table cells rendered by pages (renderCell) often hardcode dark slate/gray text,
+   which is unreadable on the dark table. Remap them to the theme text colours inside tables only.
+   Remove a selector here once its pages use text-content / text-muted directly. */
+html[data-theme="dark"] .dp-table td :is(.text-slate-900, .text-slate-800, .text-slate-700, .text-gray-900, .text-gray-800, .text-gray-700),
+html[data-theme="dark"] .dp-modal :is(.text-slate-900, .text-slate-800, .text-slate-700, .text-gray-900, .text-gray-800, .text-gray-700) {
+  color: rgb(var(--content)) !important;
+}
+html[data-theme="dark"] .dp-table td :is(.text-slate-600, .text-slate-500, .text-gray-600, .text-gray-500),
+html[data-theme="dark"] .dp-modal :is(.text-slate-600, .text-slate-500, .text-gray-600, .text-gray-500) {
+  color: rgb(var(--muted)) !important;
+}
+
+/* Dashboard Builder ACTION buttons (Copy style from…, Reset, …): tinted accent, semibold, with an icon —
+   deliberately unlike an input field (white box, regular dark text), so an action never reads as
+   editable text. 28px tall, 8px radius, Body size (CLAUDE.md §8). Add .is-sm for 22px in a header row. */
+.dbe-action-btn {
+  display:flex; align-items:center; height:28px; border-radius:8px; border:1px solid rgba(236,125,9,.35);
+  background:rgba(236,125,9,.08); color:#EC7D09; font-size:var(--dbe-fs-body); font-weight:600; white-space:nowrap;
+  cursor:pointer; transition:background-color .12s, border-color .12s;
+}
+.dbe-action-btn.is-sm { height:22px; border-radius:6px; }
+.dbe-action-btn:hover:not(:disabled) { background:rgba(236,125,9,.14); border-color:#EC7D09; }
+.dbe-action-btn:disabled { opacity:.5; cursor:default; }
+.dbe-action-btn:focus-visible { outline:none; box-shadow:0 0 0 2px rgba(236,125,9,.45); }
+
+/* Dashboard Builder UI font: Inter (self-hosted, @fontsource-variable/inter in main.jsx). Crisp at the
+   builder's small panel sizes where the app font renders rough. Scope: the builder page root and
+   FloatingPanel lists opened from it; the dashboard canvas resets to --app-font (see .dbe-canvas-wrap). */
+.dbe-font {
+  font-family: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* Dashboard Builder surface layers ("Widget Inspector" mockup): H header / B panel body / D card /
+   E element row. One standard for the builder's panels (CLAUDE.md section 8). */
+:root {
+  --dbe-surface-header: #ffffff;
+  --dbe-surface-body: #f8fafc;
+  --dbe-surface-card: #ffffff;
+  --dbe-surface-element: #f8fafc;
+  --dbe-border: #e2e8f0;
+  --dbe-card-radius: 12px;
+  --dbe-element-radius: 8px;
+  --dbe-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --dbe-dark-card: #1e2235;
+  --dbe-dark-element: #2a2f45;
+  --dbe-dark-border: rgba(255, 255, 255, 0.08);
+  --dbe-text-strong: #1e293b;
+  --dbe-text: #334155;
+  --dbe-text-muted: #64748b;
+  --dbe-text-faint: #94a3b8;
+}

@@ -9,6 +9,7 @@ import {
   createAndAttachWidget,
   getWidgetData,
 } from '../../../store/actions/dashboardBuilder-actions';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 // Minimal, self-contained sandbox for proving the real backend chain end-to-end:
 // pick a datasource -> map x/y/aggregation -> createDashboard -> createAndAttachWidget
@@ -111,7 +112,7 @@ export default function RealWidgetTester() {
       <div className="flex flex-wrap gap-4 items-end">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">Datasource</label>
-          <select
+          <Select
             className="w-56 px-3 py-2 rounded-lg border border-slate-200 text-sm"
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
@@ -120,13 +121,13 @@ export default function RealWidgetTester() {
             {datasources.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
-          </select>
+          </Select>
           {listError && <div className="text-xs text-red-500">{listError}</div>}
         </div>
 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">X Axis (dimension)</label>
-          <select
+          <Select
             className="w-48 px-3 py-2 rounded-lg border border-slate-200 text-sm"
             value={xAxis}
             onChange={(e) => setXAxis(e.target.value)}
@@ -136,12 +137,12 @@ export default function RealWidgetTester() {
             {columns.map((c) => (
               <option key={columnName(c)} value={columnName(c)}>{c.display_name || columnName(c)}</option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">Y Axis (measure)</label>
-          <select
+          <Select
             className="w-48 px-3 py-2 rounded-lg border border-slate-200 text-sm"
             value={yAxis}
             onChange={(e) => setYAxis(e.target.value)}
@@ -151,18 +152,18 @@ export default function RealWidgetTester() {
             {columns.map((c) => (
               <option key={columnName(c)} value={columnName(c)}>{c.display_name || columnName(c)}</option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">Aggregation</label>
-          <select
+          <Select
             className="w-32 px-3 py-2 rounded-lg border border-slate-200 text-sm"
             value={aggregation}
             onChange={(e) => setAggregation(e.target.value)}
           >
             {AGGREGATIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-1">

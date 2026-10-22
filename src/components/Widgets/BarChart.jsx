@@ -7,6 +7,7 @@ import { POSITION_TEXT_ALIGN } from './titlePositions';
 import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 import { resolveCustomTickFormatter, toAxisTimeValue, buildCustomTimeTicks, resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
 import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/utils/chartAnimation';
+import { formatAxisValue } from './chartStyleHelpers';
 
 /**
  * Small single-series bar chart for a card, e.g. "Traffic by Site". Mirrors
@@ -15,7 +16,7 @@ import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/util
  */
 export default function BarChart({
   title = '', unit = '', data = [], color = '#378ADD', height = 90, isDark: isDarkProp = null,
-  titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
+  titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, titleBgColor = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
   titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
   isTimeAxis = false, valueAxisLabel = null, dateFormat = undefined, tickInterval = undefined,
@@ -28,6 +29,8 @@ export default function BarChart({
   // `categories` are just each series' shared x positions, so the same continuous-time-axis
   // branch (below) works whether there's one series or several.
   categories = null, series = null, showLegend = true, seriesColors = null, palette = null, seriesOpacity = null,
+  // Style → Value labels (BAR_VALUE_LABELS_FIELD): 'hide' (default) | 'inside' | 'top'.
+  barValueLabels = 'hide',
 }) {
   const { theme } = useTheme();
   // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
@@ -60,12 +63,30 @@ export default function BarChart({
   // arbitrary exact spacing like "every 3 hours".
   const customTicks = isTimeAxis ? buildCustomTimeTicks(timeXValues, tickInterval) : undefined;
   const yBounds = resolveTruncatedBounds(truncateYAxis, yAxisMin, yAxisMax);
+  // Value labels on each bar. 'inside' runs the number vertically up the inside of the bar
+  // (Superset-style) in white; 'top' sits above the bar in the normal text color. Compact
+  // numbers (17.8k) like the Y axis. On a time axis the point value is [epoch, value].
+  const showBarLabels = barValueLabels === 'inside' || barValueLabels === 'top';
+  const barLabel = showBarLabels ? {
+    show: true,
+    ...(barValueLabels === 'inside'
+      ? { position: 'inside', rotate: 90, color: '#ffffff' }
+      : { position: 'top', color: subColor }),
+    fontSize: 9,
+    formatter: (p) => formatAxisValue(Array.isArray(p.value) ? p.value[1] : p.value),
+  } : undefined;
+  // Inside labels: hide one that doesn't fit in its bar's height (a short bar would spill
+  // white text over the background); top labels: just drop ones that overlap each other.
+  const barLabelLayout = barValueLabels === 'inside'
+    ? (p) => (p.labelRect.height > p.rect.height - 2 ? { hide: true } : {})
+    : barValueLabels === 'top' ? { hideOverlap: true } : undefined;
+  const labelProps = showBarLabels ? { label: barLabel, labelLayout: barLabelLayout } : {};
 
   const option = {
     // Extra bottom margin only when the category axis has a title — the default 18px is
     // already tight for tick labels alone. Extra left margin when the Y axis has a title too —
     // see axisTitle.js's own doc comment.
-    grid: { left: gridMarginForVerticalTitle(valueAxisLabel, 28, 42), right: 4, top: 8, bottom: (categoryAxisLabel ? 32 : 18) + (isMultiSeries ? 14 : 0) },
+    grid: { left: gridMarginForVerticalTitle(valueAxisLabel, 28, 42), right: 4, top: barValueLabels === 'top' ? 16 : 8, bottom: (categoryAxisLabel ? 32 : 18) + (isMultiSeries ? 14 : 0) },
     xAxis: isTimeAxis ? {
       type: 'time',
       // See LineAreaChart.jsx's own comment — pairs with toAxisTimeValue above.
@@ -100,7 +121,7 @@ export default function BarChart({
       axisLabel: {
         fontSize: axisTextSize || 8,
         color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined,
-        formatter: (v) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : v),
+        formatter: formatAxisValue,
       },
     },
     tooltip: { trigger: 'axis', valueFormatter: (v) => `${v} ${unit}` },
@@ -116,12 +137,14 @@ export default function BarChart({
       // category axis; [epoch, value] pairs for the continuous time axis instead — same
       // isTimeAxis branch the xAxis block above already switches on.
       data: isTimeAxis ? s.data.map((v, j) => [timeXValues[j], v]) : s.data,
+      ...labelProps,
     })) : [
       {
         type: 'bar',
         data: seriesValues,
         itemStyle: { color, borderRadius: [2, 2, 0, 0], opacity: barOpacity },
         barMaxWidth: 24,
+        ...labelProps,
       },
     ],
   };
@@ -132,13 +155,18 @@ export default function BarChart({
           own comment for why (a bar can reach the very top of the chart just as easily as a
           line can, so no fixed title position can reliably avoid it). */}
       {title && (
-        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
+        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ minHeight: Math.max(20, Math.ceil((titleSize || 12) * 1.35) + 10), background: titleBgColor || undefined }}>
           <span
             className="kpi-bar-title font-bold text-[0.6875rem] block truncate"
             style={{
               color: titleColor || subColor,
               fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
               fontSize: titleSize ? `${titleSize}px` : undefined,
+              // `text-xs` (below) bakes in a fixed 16px line-height — with fontSize overridden
+              // larger, the glyph still rendered inside that 16px line box and got clipped by
+              // the card's own overflow-hidden (the crop was in the line-height, not the row's
+              // own height, which the row-height fix above didn't touch).
+              lineHeight: titleSize ? 1.3 : undefined,
               fontFamily: titleFont || undefined,
               textAlign: POSITION_TEXT_ALIGN[titlePosition] || 'left',
             }}

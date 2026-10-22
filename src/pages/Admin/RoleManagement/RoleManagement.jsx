@@ -5,6 +5,8 @@ import Button from '../../../components/Button';
 import FormModal from '../../../components/FormModal';
 import DataTable from '../../../components/DataTable';
 import RoleManagementForm from './RoleManagementForm';
+import { PageTitle } from '../../../components/FormPage';
+import ActionButton from '../../../components/ActionButton';
 
 const COLUMNS = [
     { label: 'Role Name',     key: 'label'      },
@@ -57,16 +59,7 @@ const RoleManagement = () => {
 
     const renderCell = (row, col) => {
         if (col.key === '_actions') return (
-            <button
-                onClick={() => openEdit(row)}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-[#0b1830]/20 text-[#0b1830] bg-[#0b1830]/5 hover:bg-[#0b1830]/10 transition-colors"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-                Edit
-            </button>
+            <ActionButton kind="edit" onClick={() => openEdit(row)} />
         );
 
         if (col.key === 'permission') {
@@ -88,18 +81,11 @@ const RoleManagement = () => {
 
                 {/* Header */}
                 <div className="flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                            style={{ background: '#0b1830' }}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-slate-800 leading-tight">Role Management</h1>
-                            <p className="text-xs text-slate-400 font-medium tracking-wide">Configure roles and module access permissions</p>
-                        </div>
-                    </div>
+                    <PageTitle
+                        icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"> <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/> </svg>}
+                        title="Role Management"
+                        subtitle="Configure roles and module access permissions"
+                    />
                 </div>
 
                 {/* DataTable */}

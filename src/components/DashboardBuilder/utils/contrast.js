@@ -19,6 +19,16 @@ function relativeLuminance([r, g, b]) {
   return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
 }
 
+// true when `hex` is a dark color (white text reads better on it than near-black), false when
+// light, null when it isn't a readable hex ('auto', unset, rgba…) — callers then fall back to the
+// app theme. Lets a widget pick light/dark chrome from its REAL background, not the app theme.
+export function isDarkColor(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const l = relativeLuminance(rgb);
+  return (1.05 / (l + 0.05)) > ((l + 0.05) / 0.05);
+}
+
 // Ratio from 1 (identical) to 21 (black-on-white). Returns null if either color isn't a valid
 // hex string (e.g. still 'auto'/unset) — callers treat that as "nothing to check."
 export function contrastRatio(hexA, hexB) {

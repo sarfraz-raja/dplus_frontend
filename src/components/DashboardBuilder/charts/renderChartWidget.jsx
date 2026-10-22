@@ -17,6 +17,7 @@ import VirtualizedTable from './VirtualizedTable';
 import { isTimeAxis, isTimeValue, formatDateLabel, DEFAULT_TIME_AXIS_FORMAT, resolveTickInterval } from './axisTypeUtils';
 import { formatCompactNumber } from '../utils/formatNumber';
 import { resolveStyleForMode, guardStyleColors } from '../utils/themedStyle';
+import { isDarkColor } from '../utils/contrast';
 
 // Undernote for a single-value chart_type's delta (KPI_CARD/GAUGE — see
 // SINGLE_VALUE_COMPARISON_GROUP in ChartLibrary.jsx) — what it's actually being compared
@@ -99,11 +100,14 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
   // `mapping.x_axis_title`/`mapping.y_axis_title` (see X_AXIS_TITLE_FIELD/Y_AXIS_TITLE_FIELD
   // in ChartLibrary.jsx) — when left blank, falls back to the underlying column name
   // (xAxis/yAxis) rather than hiding the axis title entirely.
-  const categoryAxisLabel = (() => {
+  // Style → Axis → "Axis titles" Hide (chart, or dashboard/theme): no axis titles on any chart
+  // type — handled here, where they're computed, so every axis chart follows it.
+  const hideAxisTitles = style.showAxisTitles === 'hide';
+  const categoryAxisLabel = hideAxisTitles ? '' : (() => {
     const base = mapping.x_axis_title || xAxis;
     return latestAsOf != null ? `${base} (As of ${latestAsOf})` : base;
   })();
-  const valueAxisLabel = mapping.y_axis_title || yAxis;
+  const valueAxisLabel = hideAxisTitles ? '' : (mapping.y_axis_title || yAxis);
   // Fully custom tick spacing (X_AXIS_TICK_INTERVAL_VALUE_FIELD/_UNIT_FIELD in ChartLibrary.jsx)
   // — undefined when left blank, meaning "Auto" (ECharts' own span/width-based spacing).
   const tickInterval = resolveTickInterval(mapping.x_axis_tick_interval_value, mapping.x_axis_tick_interval_unit);
@@ -144,8 +148,10 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
     colorFrom, colorTo, valuePosition,
     valueTextColor, valueTextSize, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
     valueDecimals: valueDecimalsRaw, unit, donut, showLegend, numberFormat, showPercent, showDataPoints,
-    seriesOpacity, areaOpacity,
-    cellFormatRules, bandColor, bandTextColor, headerBgColor, headerTextColor, showTitle, titleBgColor,
+    seriesOpacity, areaOpacity, showDelta, showDeltaNote, deltaTextSize, titleIcon, deltaPosition,
+    showGridLines, yAxisTicks, fillStyle, barValueLabels,
+    cellFormatRules, bandColor, bandTextColor, headerBgColor, headerTextColor, showTitle, titleBgColor, pageSize, pagerColor, tableFrame, gridLines, gridColor, tableToolbar,
+    ringWidth, gaugeMax,
   } = style;
   // `showTitle` now applies to every chart_type (was TABLE-only at first — see
   // widgetTypeRegistry.js's SHOW_TITLE_FIELD), so this is resolved once, here, rather than
@@ -204,9 +210,13 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
   // one where the format was simply never touched, keeps working exactly as before).
   const xAxisCrossFilterDisabled = !!mapping.x_axis_date_format && isTimeAxis(rows.map((r) => r[xAxis]));
   const styleProps = {
-    isDark, titleColor, titleWeight, titleSize, titleFont, titlePosition, bgColor, bgGradient, palette, color,
+    isDark, titleColor, titleWeight, titleSize, titleFont, titlePosition, titleBgColor, bgColor, bgGradient, palette, color,
     valueTextColor, valueTextSize, axisTextColor, axisTextWeight, axisTextSize, axisTextFont,
     seriesOpacity, areaOpacity,
+    // Line/Area look (chartStyleHelpers.js) — other components ignore these.
+    showGridLines, yAxisTicks, fillStyle,
+    // Bar value labels (BAR_VALUE_LABELS_FIELD) — only BarChart reads it.
+    barValueLabels,
   };
   // Optional multi-series grouping (mapping.series — see SERIES_FIELD in ChartLibrary.jsx),
   // same grouping shape STACKED_BAR already builds below, reused by BAR/AREA/LINE's own cases.
@@ -318,12 +328,26 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             value={displayValue}
             unit={unit}
             status={status}
-            delta={deltaText}
+            // Style → Comparison (BIG_NUMBER_STYLE_FIELDS): hide the change, or just its
+            // "vs <period>" text. The period stays on the change as a hover tooltip either way.
+            delta={showDelta === 'hide' ? null : deltaText}
             deltaUp={comparison?.deltaUp}
             deltaGood={deltaText ? (comparison?.deltaUp === higherIsBetter) : null}
             deltaNote={deltaTooltip}
-            trend={trend}
+            // Off unless switched on (BIG_NUMBER_STYLE_FIELDS default) — unset counts as hidden.
+            showDeltaNote={showDeltaNote === 'show'}
+            titleIcon={titleIcon}
+            titlePosition={titlePosition}
+            valuePosition={valuePosition}
+            deltaPosition={deltaPosition}
+            deltaTextSize={deltaTextSize}
+            // Only while "Show trend" is On (the default; only 'Off' turns it off) — a trend fetched earlier must not linger after it's
+            // switched off (the dashboard keeps fetched trends by chart id).
+            trend={mapping.show_trend !== 'Off' ? trend : null}
             accentColor={color || undefined}
+            lineOpacity={seriesOpacity}
+            fillOpacity={areaOpacity}
+            fillStyle={fillStyle}
             bgColor={bgColor}
             bgGradient={bgGradient}
             valueTextColor={valueTextColor}
@@ -332,6 +356,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             titleWeight={titleWeight}
             titleSize={titleSize}
             titleFont={titleFont}
+            isDark={isDark}
           />
         );
       }
@@ -387,6 +412,8 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
           delta={gaugeDeltaText}
           deltaUp={comparison?.deltaUp}
           deltaTooltip={gaugeDeltaTooltip}
+          ringWidth={ringWidth}
+          max={gaugeMax || 100}
           {...styleProps}
         />
       );
@@ -471,9 +498,13 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
     }
     case 'TABLE': {
       const cols = mapping.columns || [];
+      // Light or dark table chrome (toolbar, header, text, lines, pager) follows the card's REAL
+      // background — a dark Background/gradient picked for Light mode gets dark chrome too, and
+      // vice versa — not the app theme. Unset background = the app theme, as before.
+      const surfaceDark = isDarkColor(bgGradient ? bgGradient[0] : bgColor) ?? isDark;
       return (
         <div
-          className="border border-slate-100 dark:border-white/10 rounded-lg h-full flex flex-col overflow-hidden bg-white dark:bg-[#22273C]"
+          className={`border rounded-lg h-full flex flex-col overflow-hidden ${surfaceDark ? 'border-white/10 bg-[#22273C]' : 'border-slate-100 bg-white'}`}
           style={{ background: bgGradient ? `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` : bgColor || undefined }}
         >
           {/* A real reserved row, not an absolutely-positioned overlay — same reasoning as
@@ -485,7 +516,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
           {name && showTitle !== 'hide' && (
             <div className="shrink-0 px-2.5 pt-2 pb-1" style={{ background: titleBgColor || undefined }}>
               <span
-                className="font-semibold text-xs text-slate-700 dark:text-white/90 block truncate"
+                className={`font-semibold text-xs block truncate ${surfaceDark ? 'text-white/90' : 'text-slate-700'}`}
                 style={{
                   color: titleColor || undefined,
                   fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
@@ -504,12 +535,13 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
               </span>
             </div>
           )}
-          <div className="flex-1 min-h-0">
+          <div className={`flex-1 min-h-0${tableFrame === 'on' && !(name && showTitle !== 'hide') ? ' pt-1.5' : ''}`}>
           <VirtualizedTable
             rows={rows}
             cols={cols}
             round={round}
             valueTextColor={valueTextColor}
+            valueTextSize={valueTextSize}
             cellFormatRules={cellFormatRules}
             // Picking a Band color IS turning banding on — no separate toggle (see
             // widgetTypeRegistry.js's TABLE styleFields comment). `bandColor` only reaches
@@ -529,6 +561,13 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             onColumnResize={onColumnResize}
             columnLabels={mapping.column_labels}
             onColumnLabelChange={onColumnLabelChange}
+            pageSize={Number(pageSize) > 0 ? Math.round(Number(pageSize)) : null}
+            pagerColor={pagerColor}
+            isDark={surfaceDark}
+            framed={tableFrame === 'on'}
+            showToolbar={tableToolbar === 'show'}
+            gridLines={gridLines || 'rows'}
+            gridColor={gridColor}
           />
           </div>
         </div>

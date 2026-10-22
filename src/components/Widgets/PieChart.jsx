@@ -16,7 +16,7 @@ import { useChartAnimation, applyChartAnimation } from '../DashboardBuilder/util
  */
 export default function PieChart({
   title = '', unit = '', data = [], donut = false, showValueLabels = true, showLegend = true, height = 140, isDark: isDarkProp = null,
-  titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null, seriesColors = null, palette = null,
+  titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, titleBgColor = null, valueTextColor = null, valueTextSize = null, seriesColors = null, palette = null,
   titlePosition = 'top-left', onPointClick = null, onPointContextMenu = null,
 }) {
   const { theme } = useTheme();
@@ -58,13 +58,18 @@ export default function PieChart({
   return (
     <div className="kpi-pie-card h-full box-border flex flex-col overflow-hidden rounded-lg bg-white dark:bg-[#22273C]" style={bgGradient ? { background: `linear-gradient(135deg, ${bgGradient[0]}, ${bgGradient[1]})` } : bgColor ? { background: bgColor } : undefined}>
       {title && (
-        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
+        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ minHeight: Math.max(20, Math.ceil((titleSize || 12) * 1.35) + 10), background: titleBgColor || undefined }}>
           <span
             className="kpi-pie-title font-bold text-[0.6875rem] block truncate"
             style={{
               color: titleColor || subColor,
               fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
               fontSize: titleSize ? `${titleSize}px` : undefined,
+              // `text-xs` (below) bakes in a fixed 16px line-height — with fontSize overridden
+              // larger, the glyph still rendered inside that 16px line box and got clipped by
+              // the card's own overflow-hidden (the crop was in the line-height, not the row's
+              // own height, which the row-height fix above didn't touch).
+              lineHeight: titleSize ? 1.3 : undefined,
               fontFamily: titleFont || undefined,
               textAlign: POSITION_TEXT_ALIGN[titlePosition] || 'left',
             }}

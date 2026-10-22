@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import DashboardCanvasEditor from './DashboardCanvasEditor';
 import { getDashboardDetail } from '../../../store/actions/dashboardBuilder-actions';
 import { buildLocalLayoutAndWidgets } from './buildLocalLayoutAndWidgets';
+import DashboardViewActions from './DashboardViewActions';
 
 // Phase 18 B6 — lets another page link into a published dashboard pre-filtered, mirroring
 // the existing TelecomMap.jsx -> Filtered-cell-dashboard pattern (?cell=X&filterId=Y) but
@@ -51,7 +52,23 @@ function isPublished(dashboard) {
  * security boundary — any client holding a valid Bearer token can still call
  * getDashboardDetail directly. Real access control is a backend concern, out of scope here.
  */
-export default function EmbeddedDashboard({ dashboardId, height }) {
+// Auto-refresh: runs at the dashboard's saved default (layout settings sentinel) unless
+// `autoRefreshSeconds` is passed (the fullscreen preview passes the viewer's session choice).
+// `showRefreshControls` draws Refresh now + the interval picker above the canvas (fullscreen);
+// a change goes to `onAutoRefreshChange`, or — with no such handler — stays local to this view.
+// Toolbar (always, unless `toolbar={false}`): filter values (only when the dashboard has filters),
+// then ↻ Refresh · Auto-refresh · Export — viewer features that need no setup. `fullscreen` (the
+// builder's fullscreen preview) also gets the Filters setup button and leaves room for its fixed ✕.
+// OLD: export default function EmbeddedDashboard({ dashboardId, height }) {
+// OLD: export default function EmbeddedDashboard({ dashboardId, height, autoRefreshSeconds, showRefreshControls = false, onAutoRefreshChange }) {
+export default function EmbeddedDashboard({ dashboardId, height, autoRefreshSeconds, toolbar = true, fullscreen = false, onAutoRefreshChange }) {
+  const editorRef = useRef(null);
+  const [refreshState, setRefreshState] = useState({ refreshing: false, lastRefreshedAt: null });
+  const [localSeconds, setLocalSeconds] = useState(null);
+  // With the top bar (`showRefreshControls`, fullscreen), filters move into it — same pair as the
+  // preview header in DashboardBuilder.jsx (Filters button + value strip, via the editor's ref) —
+  // instead of the editor's own strap, so fullscreen shows exactly what the preview shows.
+  const [filterState, setFilterState] = useState({ filters: [], datasourceOptions: [] });
   const [state, setState] = useState({ loading: true, error: null, dashboard: null, widgets: null });
   const location = useLocation();
   const deepLinkFilters = useMemo(() => parseDeepLinkFilters(location.search), [location.search]);
@@ -99,9 +116,28 @@ export default function EmbeddedDashboard({ dashboardId, height }) {
     );
   }
 
-  const { widgets: localWidgets, layout, tabs } = buildLocalLayoutAndWidgets(state.widgets, state.dashboard.layout);
+  // OLD: const { widgets: localWidgets, layout, tabs } = buildLocalLayoutAndWidgets(…);
+  const { widgets: localWidgets, layout, tabs, settings } = buildLocalLayoutAndWidgets(state.widgets, state.dashboard.layout, state.dashboard.theme && typeof state.dashboard.theme === 'object' ? state.dashboard.theme : null);
+  const seconds = autoRefreshSeconds !== undefined ? autoRefreshSeconds : (localSeconds ?? settings?.refreshInterval ?? 0);
+
+  // Viewer toolbar — handed to the canvas as `titleBarActions`, so it sits on the dashboard title
+  // line instead of its own row. OLD: a separate <div className="flex … pb-2"> row above the canvas.
+  // OLD: the filter / refresh / auto-refresh / export markup was inline here — now the shared
+  // DashboardViewActions (also used by the Dashboard Builder preview's title row).
+  const titleBarActions = toolbar ? (
+    <DashboardViewActions
+      editorRef={editorRef}
+      filterState={filterState}
+      seconds={seconds}
+      onSecondsChange={(sec) => (onAutoRefreshChange ? onAutoRefreshChange(sec) : setLocalSeconds(sec))}
+      refreshState={refreshState}
+      showFilterSetup={fullscreen}
+      className={fullscreen ? 'pr-10' : ''}
+    />
+  ) : null;
 
   return (
+    <>
     <div style={{ height: height || '100%' }}>
       <DashboardCanvasEditor
         key={dashboardId}
@@ -112,8 +148,19 @@ export default function EmbeddedDashboard({ dashboardId, height }) {
         initialLayout={layout}
         initialWidgets={localWidgets}
         initialTabs={tabs}
+        // Same reason as the builder preview: style/theme from the detail call, not after /data.
+        initialDashboardStyle={state.dashboard.theme && typeof state.dashboard.theme === 'object' ? state.dashboard.theme : {}}
+        initialThemeId={state.dashboard.theme_id || null}
         editable={false}
+        ref={editorRef}
+        // Filters live in the toolbar above when it's shown (same as the builder's preview header).
+        showFiltersInline={!toolbar}
+        onFiltersState={toolbar ? setFilterState : undefined}
+        autoRefreshSeconds={seconds}
+        onRefreshState={setRefreshState}
+        titleBarActions={titleBarActions}
       />
     </div>
+    </>
   );
 }

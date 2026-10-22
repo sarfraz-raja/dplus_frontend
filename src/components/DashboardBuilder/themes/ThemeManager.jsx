@@ -4,10 +4,12 @@ import FormModal from '../../FormModal';
 import { createTheme, listThemes, getThemeDetail, updateTheme, deleteTheme } from '../../../store/actions/dashboardBuilder-actions';
 import { CHART_PALETTE } from '../../../theme/tokens';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
+import EditedBadge, { sameStyleValue } from '../widgetConfig/EditedBadge';
 import PaletteEditor from './PaletteEditor';
 import DASHBOARD_STYLE_FIELDS from './dashboardStyleFields';
 import StyleModeSwitch from '../widgetConfig/StyleModeSwitch';
 import { resolveStyleForMode, setModeColor, cardBorderDefaults } from '../utils/themedStyle';
+import { dashboardColorDefaults } from '../widgetConfig/widgetTypeRegistry';
 import { useTheme } from '../../../context/ThemeContext';
 
 // Color fields a theme stores per mode (light/dark).
@@ -20,7 +22,10 @@ const THEME_COLOR_KEYS = new Set([...DASHBOARD_STYLE_FIELDS.filter((f) => f.type
  * `embedded`: renders as a plain in-page panel for use as the Dashboard Builder's "Settings"
  * tab, same convention DatasourceManager.jsx/ChartLibrary.jsx already use for their own tabs.
  */
-const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen, embedded = false }, ref) {
+// True when the theme sets a palette in either mode (flat or colors.{light,dark}).
+const MODES_HAVE_PALETTE = (st) => ['light', 'dark'].some((m) => (resolveStyleForMode(st, m === 'dark')?.palette || []).length > 0);
+
+const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen, embedded = false, tabs = null }, ref) {
   const [themes, setThemes] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState(null);
@@ -29,6 +34,8 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
   const [detailLoading, setDetailLoading] = useState(false);
   const [name, setName] = useState('');
   const [style, setStyle] = useState({});
+  // Style as last loaded/saved — the Style panel's "Edited" badges compare against it.
+  const [savedStyle, setSavedStyle] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -40,11 +47,14 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
   // chart editor and Dashboard Style popover follow. Palette stays shared (edited separately).
   const { theme: appTheme } = useTheme();
   const [styleMode, setStyleMode] = useState(appTheme === 'dark' ? 'dark' : 'light');
+  // Color palette card (inside the colors box): open if this theme sets a palette, then user-controlled.
+  const [paletteOpen, setPaletteOpen] = useState(() => MODES_HAVE_PALETTE(style));
   const setStyleField = (key, val) => setStyle((prev) => (
     THEME_COLOR_KEYS.has(key) ? setModeColor(prev, key, val, styleMode === 'dark', THEME_COLOR_KEYS) : { ...prev, [key]: val }
   ));
   // The series palette for the mode being edited (a legacy single palette counts as both).
   const palette = resolveStyleForMode(style, styleMode === 'dark')?.palette || [];
+  const paletteEdited = !sameStyleValue(palette, resolveStyleForMode(savedStyle, styleMode === 'dark')?.palette);
 
   const refreshList = async () => {
     setListLoading(true);
@@ -69,6 +79,7 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
     // Seed a fresh theme's chart palette from the app's own default, so "Create theme"
     // starts from something usable instead of an empty swatch row every time.
     setStyle({ palette: [...CHART_PALETTE] });
+    setSavedStyle({ palette: [...CHART_PALETTE] });
     setSaveError(null);
     setConfirmingDelete(false);
     setDeleteError(null);
@@ -89,6 +100,7 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
     try {
       const theme = await getThemeDetail(summary.id);
       setStyle(theme.style || {});
+      setSavedStyle(theme.style || {});
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -107,6 +119,7 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
         const theme = await createTheme({ name: name.trim(), style });
         setEditingId(theme.id);
       }
+      setSavedStyle(style);
       await refreshList();
     } catch (err) {
       setSaveError(err.message);
@@ -133,46 +146,66 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
   const previewPalette = palette.length ? palette : CHART_PALETTE;
 
   const content = (
-    <div className={`flex gap-5 ${embedded ? 'h-full' : 'h-[62vh]'}`}>
-      {/* Left: identity + style cards, stacked, footer pinned below */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-1">
+    <div className={`flex ${embedded ? 'h-full gap-4' : 'h-[62vh] gap-5'}`}>
+      {/* Left: identity + style cards, stacked, footer pinned below. Embedded (Settings tab): editor and
+          library are two separate glass cards, like Dashboards / Charts. */}
+      <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${embedded ? 'rounded-xl backdrop-blur-md border border-white/60 dark:border-line shadow-lg p-3' : ''}`} style={embedded ? { background: 'var(--glass)' } : undefined}>
+        {/* OLD: overflow-y-auto here scrolled Identity + Style together. Now Identity (top) and the
+            footer (bottom) stay fixed; only the Style card's content scrolls. */}
+        <div className="flex-1 flex flex-col gap-4 min-h-0">
           {detailLoading && <div className="text-xs text-slate-400">Loading theme…</div>}
 
-          {/* Identity — name + a bigger live preview so a change is visible immediately
-              without needing to bind a dashboard first. */}
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-[0.6875rem] font-semibold text-slate-400 uppercase tracking-wider mb-3">Identity</div>
-            <div className="flex gap-4 items-start">
-              <label className="flex-1 flex flex-col gap-1">
-                <span className="text-xs font-medium text-slate-500">Theme name</span>
+          {/* OLD: name input + one 176×96 preview (dark navy, read the flat style.bgColor — ignored the
+              per-mode colors) → empty space under the input. Now one compact row: name on the left,
+              a Light and a Dark mini widget tile on the right drawn from that mode's resolved colors.
+              Clicking a tile switches the colors box below to that mode. */}
+          <section className="shrink-0 rounded-xl bg-white px-4 py-3">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex min-w-[220px] max-w-md flex-1 flex-col gap-1.5">
+                <label htmlFor="theme-name" className="text-dbe-h1 font-semibold uppercase tracking-wider text-slate-400">Theme name</label>
                 <input
+                  id="theme-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Corporate Brand"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#EC7D09]/25 focus:border-[#EC7D09]"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-dbe-body focus:border-[#EC7D09] focus:outline-none focus:ring-2 focus:ring-[#EC7D09]/25"
                 />
-              </label>
-              <div
-                className="w-44 h-24 shrink-0 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between p-3 overflow-hidden"
-                style={{ background: style.bgColor || '#0f172a' }}
-              >
-                <div
-                  className="text-xs truncate"
-                  style={{
-                    color: style.titleColor || '#e2e8f0',
-                    fontWeight: style.titleWeight === 'bold' ? 700 : 500,
-                    fontSize: style.titleSize ? `${style.titleSize}px` : 12,
-                  }}
-                >
-                  {name.trim() || 'Theme preview'}
-                </div>
-                <div className="flex gap-1">
-                  {previewPalette.slice(0, 8).map((c, i) => (
-                    <div key={i} className="w-3.5 h-3.5 rounded-full shrink-0" style={{ background: c }} />
-                  ))}
-                </div>
+                <p className="text-dbe-meta text-slate-400">Dashboards that pick this as their base theme follow later edits.</p>
+              </div>
+              <div className="ml-auto flex shrink-0 gap-2" role="group" aria-label="Theme preview">
+                {[['light', 'Light'], ['dark', 'Dark']].map(([mode, label]) => {
+                  const isDark = mode === 'dark';
+                  const r = { ...dashboardColorDefaults(isDark), ...cardBorderDefaults(isDark), ...resolveStyleForMode(style, isDark) };
+                  const cols = r.palette?.length ? r.palette : CHART_PALETTE;
+                  const active = styleMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setStyleMode(mode)}
+                      title={`Edit ${label} colors`}
+                      aria-pressed={active}
+                      className={`flex w-36 flex-col gap-1 rounded-lg p-1.5 text-left transition-shadow ${active ? 'ring-2 ring-[#EC7D09]' : 'ring-1 ring-slate-200 hover:ring-slate-300'}`}
+                      style={{ background: isDark ? '#1e2235' : '#f8fafc' }}
+                    >
+                      <span className={`px-0.5 text-dbe-meta font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</span>
+                      <span
+                        className="flex h-[52px] flex-col justify-between overflow-hidden rounded-md px-2 py-1.5"
+                        style={{ background: r.bgColor || (isDark ? '#262b3d' : '#ffffff'), border: `1px solid ${r.cardBorderColor}` }}
+                      >
+                        <span className="truncate text-dbe-meta font-semibold" style={{ color: r.titleColor || (isDark ? '#e2e8f0' : '#1e293b') }}>
+                          {name.trim() || 'Widget title'}
+                        </span>
+                        <span className="flex h-6 items-end gap-0.5">
+                          {cols.slice(0, 8).map((c, i) => (
+                            <span key={i} className="flex-1 rounded-t-[2px]" style={{ background: c, height: `${35 + ((i * 41) % 65)}%` }} />
+                          ))}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </section>
@@ -182,48 +215,58 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
               overrides against, so a theme can only ever set fields that are genuinely
               readable somewhere else, and anything configurable there is guaranteed to
               exist here too. */}
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-[0.6875rem] font-semibold text-slate-400 uppercase tracking-wider mb-3">Style</div>
-            <StyleModeSwitch value={styleMode} onChange={setStyleMode} />
+          <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200 bg-white p-4">
+            <div className="shrink-0 text-dbe-h1 font-semibold text-slate-400 uppercase tracking-wider mb-3">Style</div>
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {/* OLD: <StyleModeSwitch value={styleMode} onChange={setStyleMode} /> — moved onto the colors box header. */}
             <WidgetStyleFields
+              colorMode={styleMode}
+              onColorModeChange={setStyleMode}
               fields={DASHBOARD_STYLE_FIELDS}
               value={resolveStyleForMode(style, styleMode === 'dark')}
+              savedValue={resolveStyleForMode(savedStyle, styleMode === 'dark')}
               onChange={setStyleField}
-              resolvedDefaults={cardBorderDefaults(styleMode === 'dark')}
+              resolvedDefaults={{ titleSize: 11, axisTextSize: 9, ...dashboardColorDefaults(styleMode === 'dark'), ...cardBorderDefaults(styleMode === 'dark') }}
               columns={3}
+              // Series colors dashboards bound to this theme use by default — per mode, so inside the colors box.
+              colorFooter={(
+                // Collapsible like the other groups (same .dbe-style-subsection card from WidgetStyleFields);
+                // starts open only when this theme sets a palette for the mode shown.
+                // Held open with an "Edited" badge while this mode's palette differs from the saved one.
+                <details className="dbe-style-subsection mt-1.5" open={paletteOpen || paletteEdited}>
+                  {/* OLD: open={…this mode's palette is set…} — re-decided on every Light ↔ Dark switch, so the
+                      card opened/closed by itself. Now its own state: starts open only if a palette is set,
+                      then stays as the user leaves it across mode switches. */}
+                  <summary onClick={(e) => { e.preventDefault(); if (!paletteEdited) setPaletteOpen((o) => !o); }}>
+                    Color palette
+                    {paletteEdited && <EditedBadge />}
+                    <span className="ml-auto normal-case tracking-normal font-normal text-dbe-meta text-slate-400">Default series colors for charts using this theme</span>
+                  </summary>
+                  <div className="dbe-style-subsection-body">
+                  <PaletteEditor value={palette} onChange={(next) => setStyleField('palette', next)} />
+                  <div className="mt-3 flex h-14 items-end gap-1.5 border-t border-slate-100 pt-2">
+                    {/* OLD: previewPalette.slice(0, 6) — showed 6 bars for an 8-color palette */}
+                    {previewPalette.map((c, i) => (
+                      <div key={i} className="flex-1 rounded-t-sm" style={{ background: c, height: `${30 + ((i * 37) % 70)}%` }} />
+                    ))}
+                  </div>
+                  </div>
+                </details>
+              )}
             />
+            </div>
           </section>
 
-          {/* Series Visualization — categorical chart palette dashboards bound to this
-              theme use by default. */}
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-[0.6875rem] font-semibold text-slate-400 uppercase tracking-wider">Color palette</div>
-              <span className="text-[0.6875rem] text-slate-400">Default colors for charts using this theme</span>
-            </div>
-            <StyleModeSwitch value={styleMode} onChange={setStyleMode} className="!mb-2" hint={<>Palette for <b>{styleMode}</b> mode</>} />
-            <PaletteEditor value={palette} onChange={(next) => setStyleField('palette', next)} />
-            <div className="mt-3 flex items-end gap-1.5 h-14 pt-2 border-t border-slate-100">
-              {previewPalette.slice(0, 6).map((c, i) => (
-                <div
-                  key={i}
-                  className="flex-1 rounded-t-sm"
-                  style={{ background: c, height: `${30 + ((i * 37) % 70)}%` }}
-                />
-              ))}
-            </div>
-          </section>
+          {/* OLD: a separate "Color palette" section here, with its own second Light/Dark switch. The palette
+              is stored per mode like every other color, so it now lives inside the Style section's colors
+              box (colorFooter above), driven by that box's one switch — same as the Dashboard Style popover. */}
         </div>
 
-        <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={save}
-            disabled={!name.trim() || saving}
-            className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[#EC7D09] hover:opacity-90 disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create theme'}
-          </button>
+        {/* OLD: Create/Save on the left. Now right-aligned like the editor toolbars: messages left,
+            Delete, then the primary Create/Save last (far right). */}
+        <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-end gap-2">
+          {saveError && <div className="mr-auto text-xs text-red-500">{saveError}</div>}
+          {deleteError && <div className="mr-auto text-xs text-red-500">{deleteError}</div>}
           {editingId && !confirmingDelete && (
             <button
               type="button"
@@ -244,16 +287,23 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
               </button>
             </div>
           )}
-          {saveError && <div className="text-xs text-red-500 ml-1">{saveError}</div>}
-          {deleteError && <div className="text-xs text-red-500 ml-1">{deleteError}</div>}
+          <button
+            type="button"
+            onClick={save}
+            disabled={!name.trim() || saving}
+            className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[#EC7D09] hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create theme'}
+          </button>
         </div>
       </div>
 
       {/* Right: Theme Library — saved theme cards */}
-      <div className="w-64 shrink-0 border-l border-slate-100 pl-4 flex flex-col gap-3 overflow-y-auto">
+      <div className={`w-64 shrink-0 flex flex-col gap-3 overflow-y-auto ${embedded ? 'rounded-xl backdrop-blur-md border border-white/60 dark:border-line shadow-lg p-3' : 'border-l border-slate-100 pl-4'}`} style={embedded ? { background: 'var(--glass)' } : undefined}>
+        {tabs /* Settings → Themes | Color palettes switch (embedded only) */}
         <div className="flex items-center justify-between">
-          <div className="text-[0.6875rem] font-semibold text-slate-400 uppercase tracking-wider">Theme Library</div>
-          <button type="button" onClick={resetForm} className="flex items-center gap-1 text-xs font-semibold text-[#EC7D09] hover:opacity-80">
+          <div className="text-dbe-h1 font-semibold text-slate-400 uppercase tracking-wider">Theme Library</div>
+          <button type="button" onClick={resetForm} className="flex items-center gap-1 text-dbe-body font-semibold text-[#EC7D09] hover:opacity-80">
             <Plus size={13} /> New
           </button>
         </div>
@@ -262,7 +312,8 @@ const ThemeManager = React.forwardRef(function ThemeManager({ isOpen, setIsOpen,
         <div className="flex flex-col gap-2">
           {themes.map((t) => {
             const themePalette = resolveStyleForMode(t.style, appTheme === 'dark')?.palette;
-            const swatches = (themePalette?.length ? themePalette : CHART_PALETTE).slice(0, 4);
+            // OLD: .slice(0, 4) — the library card showed only 4 of the theme's colors.
+            const swatches = (themePalette?.length ? themePalette : CHART_PALETTE);
             const active = editingId === t.id;
             return (
               <button

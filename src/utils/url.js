@@ -89,6 +89,9 @@ export const Urls={
     // dashboard (a plain field on the dashboard, not a join table, since a dashboard can only
     // bind one theme at a time — unlike widgets, which are many-per-dashboard).
     dashboardBuilder_themes:"/dashboard-builder/themes", // POST (create) / GET (list)
+    // Custom colour palettes (built-ins stay in theme/tokens.js PALETTE_PRESETS). GET list / POST create,
+    // /<id> GET / PATCH (name and/or colors) / DELETE. Picking one COPIES its colours (no link).
+    dashboardBuilder_palettes:"/dashboard-builder/palettes",
     // Slicers (interactive filters) — /dashboards/{id}/slicers for create+list (scoped to a
     // dashboard, mirroring the widgets join pattern above), /slicers/{id} for update/delete/
     // refresh-values on an individual slicer (its own standalone resource once created).

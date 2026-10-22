@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import FieldHintMark from '../FieldHintMark';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 // Threshold-rule conditional formatting for the TABLE widget — same shape as Power BI's
 // "Background color by rule" / Superset's per-column conditional formatting: pick a column,
@@ -81,13 +82,13 @@ export default function ConditionalFormatRules({ columns = [], value = [], onCha
         {value.map((entry, i) => (
           <div key={entry.column} className="dbe-cfr-entry">
             <div className="dbe-cfr-entry-header">
-              <select value={entry.column} onChange={(e) => updateEntry(i, { column: e.target.value })}>
+              <Select value={entry.column} onChange={(e) => updateEntry(i, { column: e.target.value })}>
                 {columns.map((c) => (
                   <option key={c.column_name} value={c.column_name} disabled={usedColumns.has(c.column_name) && c.column_name !== entry.column}>
                     {c.display_name || c.column_name}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button
                 type="button"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeEntry(i); }}
@@ -111,9 +112,9 @@ export default function ConditionalFormatRules({ columns = [], value = [], onCha
             </div>
             {entry.rules.map((rule, ri) => (
               <div key={ri} className="dbe-cfr-rule">
-                <select value={rule.operator} onChange={(e) => updateRule(i, ri, { operator: e.target.value })} className="dbe-cfr-op">
+                <Select value={rule.operator} onChange={(e) => updateRule(i, ri, { operator: e.target.value })} className="dbe-cfr-op">
                   {OPERATORS.map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
-                </select>
+                </Select>
                 <input
                   type="number"
                   value={rule.value}
@@ -144,8 +145,8 @@ export default function ConditionalFormatRules({ columns = [], value = [], onCha
         .dbe-cfr-entry { display:flex; flex-direction:column; gap:8px; padding:10px; border-radius:10px; background:rgb(248 250 252); border:1px solid rgb(226 232 240); }
         [data-theme="dark"] .dbe-cfr-entry { background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.08); }
         .dbe-cfr-entry-header { display:flex; align-items:center; gap:6px; }
-        .dbe-cfr-entry-header select { flex:1; min-width:0; font-size:11px; padding:6px 8px; border:1px solid rgb(226 232 240); border-radius:8px; background:#fff; color:#1e293b; }
-        [data-theme="dark"] .dbe-cfr-entry-header select { background:#111527; border-color:rgba(255,255,255,0.1); color:#f1f5f9; }
+        .dbe-cfr-entry-header select, .dbe-cfr-entry-header .dp-select { flex:1; min-width:0; font-size:11px; padding:6px 8px; border:1px solid rgb(226 232 240); border-radius:8px; background:#fff; color:#1e293b; }
+        [data-theme="dark"] .dbe-cfr-entry-header select, [data-theme="dark"] .dbe-cfr-entry-header .dp-select { background:#111527; border-color:rgba(255,255,255,0.1); color:#f1f5f9; }
         .dbe-cfr-mode { display:flex; gap:2px; padding:2px; background:rgb(226 232 240); border-radius:8px; }
         [data-theme="dark"] .dbe-cfr-mode { background:rgba(255,255,255,0.08); }
         .dbe-cfr-mode button { flex:1; padding:5px 0; font-size:10px; font-weight:500; color:#64748b; background:transparent; border:none; border-radius:6px; cursor:pointer; text-align:center; transition:background .12s, color .12s; }

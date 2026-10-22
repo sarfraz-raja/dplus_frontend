@@ -8,6 +8,11 @@
  * minimal pub-sub as datasourceEvents.js, applied to the same class of problem: any component
  * that mutates a widget notifies, every component holding a widget list cache refetches.
  */
+//
+// Payload `{ source, list }` (both optional): `source` is the notifying component's own token,
+// so it can skip its own notification (it has just refreshed itself — reacting again fetched the
+// same list twice); `list` is the freshly fetched GET /widgets result, so other listeners can use
+// it instead of each fetching the identical ~180 kB list again. No list → listeners refetch.
 const listeners = new Set();
 
 export function subscribeWidgetsChanged(cb) {
@@ -15,6 +20,6 @@ export function subscribeWidgetsChanged(cb) {
   return () => listeners.delete(cb);
 }
 
-export function notifyWidgetsChanged() {
-  listeners.forEach((cb) => cb());
+export function notifyWidgetsChanged({ source, list } = {}) {
+  listeners.forEach((cb) => cb({ source, list }));
 }

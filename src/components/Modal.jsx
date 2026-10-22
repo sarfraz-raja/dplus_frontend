@@ -37,52 +37,48 @@
 
 // export default Modal
 import React from 'react'
-import { UilTimesCircle } from '@iconscout/react-unicons'
 import Button from './Button'
-const Modal = ({ size, modalHead = "", children, isOpen, setIsOpen, closeButton = false, showHeader = true }) => {
+import FormModal from './FormModal'
 
-    const sizeType = {
-        xl: 'w-[96vw] h-[96vh] md:w-[80vw] md:h-[86vh]',
-        lg: 'w-[92vw] h-[86vh] md:w-[70vw] md:h-[78vh]',
-        sm: 'w-[90vw] md:w-[48vw] h-[70vh]',
-        modal: 'w-[94vw] h-[38vh] md:w-[48vw] h-[28vh]',
-        full: 'w-[98vw] h-[98vh] md:w-[98vw] md:h-[98vh]',
-        form: 'w-[94vw] md:w-[640px] max-h-[90vh]',
-    }
-
-    return (
-        <div
-            className={isOpen ? 'z-[4000] flex justify-around place-items-center fixed rm-scroll overflow-hidden top-0 bottom-0 right-0 left-0' : 'hidden'}
-            style={{ background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)' }}
-            onClick={() => { setIsOpen(prev => !prev) }}
-        >
-            <div
-                onClick={(e) => e.stopPropagation()}
-                className={`relative bg-white ${sizeType[size]} rounded-2xl overflow-auto modal-inner shadow-2xl`}
-            >
-                {showHeader && (
-                    <div className='sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-2xl'
-                        style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
-                        <h1 className='text-white font-semibold text-base tracking-wide'>{modalHead}</h1>
-                        <button
-                            onClick={() => { setIsOpen(prev => !prev) }}
-                            className='text-white/70 hover:text-white transition-colors'
-                        >
-                            <UilTimesCircle size="22" />
-                        </button>
-                    </div>
-                )}
-                <div className='bg-white overflow-x-hidden p-4'>
-                    {children}
-                </div>
-                {closeButton &&
-                    <div className='w-24 absolute bottom-4 right-4'>
-                        <Button name={"Close"} onClick={(e) => { setIsOpen(prev => !prev) }} />
-                    </div>
-                }
-            </div>
-        </div>
-    )
+// Modal is now a thin wrapper over FormModal — one modal look for the whole app (neutral header,
+// close button, backdrop + Esc handling). It keeps its older props so no caller changes:
+// modalHead → title, showHeader={false} → no header, closeButton → a Close button in the footer,
+// and its own size names (below). Like before, the content stays mounted (hidden) while closed.
+//
+// OLD sizes (fixed heights; `sm` left a blank area under short forms, `md` didn't exist so the
+// dialog got no width at all):
+//     xl: 'w-[96vw] h-[96vh] md:w-[80vw] md:h-[86vh]',
+//     lg: 'w-[92vw] h-[86vh] md:w-[70vw] md:h-[78vh]',
+//     sm: 'w-[90vw] md:w-[48vw] h-[70vh]',
+//     modal: 'w-[94vw] h-[38vh] md:w-[48vw] h-[28vh]',
+//     full: 'w-[98vw] h-[98vh] md:w-[98vw] md:h-[98vh]',
+//     form: 'w-[94vw] md:w-[640px] max-h-[90vh]',
+const sizeType = {
+    xl: 'w-[96vw] h-[96vh] md:w-[80vw] md:h-[86vh]',
+    lg: 'w-[92vw] h-[86vh] md:w-[70vw] md:h-[78vh]',
+    sm: 'w-[90vw] md:w-[48vw] max-h-[80vh]',
+    md: 'w-[90vw] md:w-[560px] max-h-[80vh]',
+    modal: 'w-[94vw] h-[38vh] md:w-[48vw] md:h-[28vh]',
+    full: 'w-[98vw] h-[98vh] md:w-[98vw] md:h-[98vh]',
+    form: 'w-[94vw] md:w-[640px] max-h-[90vh]',
 }
+
+const Modal = ({ size, modalHead = "", children, isOpen, setIsOpen, closeButton = false, showHeader = true }) => (
+    <FormModal
+        isOpen={isOpen}
+        setIsOpen={setIsOpen}
+        title={modalHead}
+        hideHeader={!showHeader}
+        panelClassName={sizeType[size] ?? sizeType.form}
+        keepMounted
+        footer={closeButton ? (
+            <div className="flex justify-end">
+                <Button variant="secondary" size="sm" onClick={() => setIsOpen(false)}>Close</Button>
+            </div>
+        ) : null}
+    >
+        {children}
+    </FormModal>
+)
 
 export default Modal

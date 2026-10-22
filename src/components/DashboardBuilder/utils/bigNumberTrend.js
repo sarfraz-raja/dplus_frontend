@@ -6,11 +6,12 @@ import { measureKey } from '../charts/renderChartWidget';
 // backend change. Shared by the Charts-tab preview (ChartLibrary.jsx) and the dashboard
 // canvas (DashboardCanvasEditor.jsx) so both draw the same line.
 
-// Only for a Big Number with the trend switched on and a real period ('Latest' is a single
-// instant — nothing to draw over).
+// Only for a Big Number with the trend on (the default — unset counts as On, only 'Off' turns
+// it off) and a real period ('Latest' is a single instant — nothing to draw over).
+export const isBigNumberTrendOn = (mapping) => mapping?.show_trend !== 'Off';
 export const wantsBigNumberTrend = (mapping) => (
   mapping?.kpi_variant === 'big_number'
-  && mapping.show_trend === 'On'
+  && isBigNumberTrendOn(mapping)
   && !!mapping.date_filter_column
   && mapping.date_filter_range !== 'Latest'
 );
@@ -23,6 +24,11 @@ export async function fetchBigNumberTrend({ datasourceId, mapping, filters, quie
     x_axis: xKey,
     y_axis: mapping.y_axis,
     ...(mapping.aggregation ? { aggregation: mapping.aggregation } : {}),
+    // The backend caps a LINE at 1000 rows and, with no sorting, adds no ORDER BY — a long
+    // period on fine-grained data (e.g. "This year" of 15-min rows) then returned an arbitrary
+    // 1000 timestamps. Newest-first makes the cap keep the most recent 1000 points; they're put
+    // back in time order below.
+    sorting: [{ column: xKey, direction: 'DESC' }],
   };
   const { rows } = await previewWidgetQuery({ datasourceId, chartType: 'LINE', mapping: trendMapping, filters, quiet });
   const yKey = measureKey(mapping.y_axis);

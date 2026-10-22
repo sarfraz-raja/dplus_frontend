@@ -221,6 +221,8 @@ import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
 import '@fortawesome/fontawesome-free/css/solid.min.css';
 
 import App from './App.jsx';
+// Inter (self-hosted, works offline) — the Dashboard Builder's UI font, applied via .dbe-font (index.css).
+import '@fontsource-variable/inter';
 import './index.css';
 
 import { BrowserRouter } from 'react-router-dom';

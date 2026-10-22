@@ -1,3 +1,5 @@
+import { stripInheritedStyle } from '../utils/themedStyle';
+
 // Turns a backend {dashboard, attachedWidgets} response into DashboardCanvasEditor's own local
 // {widgets, layout, tabs} shape — the single source of truth for that mapping, shared by every
 // caller that needs it (pages/DashboardBuilder.jsx's own preview/edit hydration, and
@@ -25,8 +27,26 @@ export const LOCAL_PERSISTABLE_TYPES = new Set(['textBox', 'shape']);
 // below match it (it has no `type` any of them check for), so it's automatically skipped when
 // reconstructing widgets/layout — only read here, explicitly, for its `tabs` array.
 export const TABS_SENTINEL_ID = '__dbe_tabs__';
+// Dashboard-wide settings with no backend field either — same piggyback as the tabs entry.
+// Shape: { i: SETTINGS_SENTINEL_ID, refreshInterval } — refreshInterval = saved default
+// auto-refresh in seconds (0 / absent = off); viewers can override it for their session.
+export const SETTINGS_SENTINEL_ID = '__dbe_settings__';
+// Auto-refresh choices (seconds). Nothing under 30s — every refresh runs live DB queries.
+export const REFRESH_INTERVAL_OPTIONS = [
+  { value: 0, label: 'Off' },
+  { value: 30, label: '30 seconds' },
+  { value: 60, label: '1 minute' },
+  { value: 120, label: '2 minutes' },
+  { value: 300, label: '5 minutes' },
+  { value: 600, label: '10 minutes' },
+  { value: 1800, label: '30 minutes' },
+  { value: 3600, label: '1 hour' },
+];
+export const refreshIntervalShort = (sec) => (sec >= 3600 ? `${sec / 3600}h` : sec >= 60 ? `${sec / 60}m` : `${sec}s`);
 
-export function buildLocalLayoutAndWidgets(attachedWidgets, dashboardLayout) {
+// `dashboardStyle` (optional): the dashboard's own saved style (dashboard.theme) — used only to
+// drop frozen copies from placement styles (stripInheritedStyle).
+export function buildLocalLayoutAndWidgets(attachedWidgets, dashboardLayout, dashboardStyle = null) {
   const layoutByLocalId = Object.fromEntries((dashboardLayout || []).map((l) => [l.i, l]));
   const widgets = {};
   const layout = [];
@@ -49,7 +69,9 @@ export function buildLocalLayoutAndWidgets(attachedWidgets, dashboardLayout) {
       // dashboard.layout entry (see handleSave below), the same JSON array that already
       // reliably round-trips position via PATCH /dashboards/{id}. Without this, every
       // save-then-refetch silently reset every real widget's style back to {}.
-      style: fromDashboardLayout?.style || {},
+      // Identical copies of the chart's/dashboard's own values (seeded in on placement before
+      // that stopped) are dropped so later chart/theme edits reach this placement again.
+      style: stripInheritedStyle(fromDashboardLayout?.style || {}, w.mapping?.style, dashboardStyle),
     };
     const pos = fromDashboardLayout || w.position || {};
     layout.push({
@@ -93,5 +115,8 @@ export function buildLocalLayoutAndWidgets(attachedWidgets, dashboardLayout) {
   }
   const tabsEntry = layoutByLocalId[TABS_SENTINEL_ID];
   const tabs = Array.isArray(tabsEntry?.tabs) ? tabsEntry.tabs : [];
-  return { widgets, layout, tabs };
+  const settingsEntry = layoutByLocalId[SETTINGS_SENTINEL_ID];
+  const refreshInterval = Number(settingsEntry?.refreshInterval) > 0 ? Number(settingsEntry.refreshInterval) : 0;
+  // OLD: return { widgets, layout, tabs };
+  return { widgets, layout, tabs, settings: { refreshInterval } };
 }

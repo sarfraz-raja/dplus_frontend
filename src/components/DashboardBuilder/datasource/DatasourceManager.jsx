@@ -4,6 +4,7 @@ import FormModal from '../../FormModal';
 import { previewDatasource, registerDatasource, listDatasources, getDatasourceDetail, deleteDatasource, updateDatasource, refreshDatasourceSchema, updateDatasourceColumn, sampleDatasource, listWidgets, listDatasourceMetrics, createDatasourceMetric, updateDatasourceMetric, deleteDatasourceMetric } from '../../../store/actions/dashboardBuilder-actions';
 import { notifyDatasourcesChanged } from '../../../store/actions/datasourceEvents';
 import { ValidateExpressionButton } from '../charts/AdvancedSqlFields';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 // Same defensive id-field guess as columnId just below, for the same reason (the API doc's
 // example doesn't show it) — see listDatasourceMetrics' own doc comment.
@@ -435,7 +436,8 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
   const content = (
       <div className={`flex gap-4 ${embedded ? 'h-full' : 'h-[65vh]'}`}>
         {/* Left: name + source (query or table) + preview */}
-        <div className="flex-1 flex flex-col gap-4 min-w-0 overflow-y-auto pr-1 dsm-no-scrollbar">
+        {/* Embedded (Datasources tab): editor and list are two separate glass cards, like Dashboards / Charts. */}
+        <div className={`flex-1 flex flex-col gap-4 min-w-0 overflow-y-auto pr-1 dsm-no-scrollbar ${embedded ? 'rounded-xl backdrop-blur-md border border-white/60 dark:border-line shadow-lg p-3' : ''}`} style={embedded ? { background: 'var(--glass)' } : undefined}>
           {/* Box 1: query/table definition — kept separate from the results box below it so
               editing the source and reviewing what it returned read as two distinct steps. */}
           <div className="bg-white rounded-xl shadow border border-slate-100 p-4 flex flex-col gap-3">
@@ -750,7 +752,7 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
                           <td className="px-2 py-1 text-slate-400">{c.data_type}</td>
                           <td className="px-2 py-1 text-slate-400">
                             {editable ? (
-                              <select
+                              <Select
                                 value={c.is_measure ? 'measure' : c.is_dimension ? 'dimension' : 'none'}
                                 disabled={savingThis}
                                 onChange={(e) => {
@@ -762,21 +764,21 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
                                 <option value="none">—</option>
                                 <option value="dimension">Dimension</option>
                                 <option value="measure">Measure</option>
-                              </select>
+                              </Select>
                             ) : (
                               c.is_measure ? 'Measure' : c.is_dimension ? 'Dimension' : '—'
                             )}
                           </td>
                           <td className="px-2 py-1 text-slate-400">
                             {editable && c.is_measure ? (
-                              <select
+                              <Select
                                 value={c.default_aggregation || 'SUM'}
                                 disabled={savingThis}
                                 onChange={(e) => updateColumn(c, { default_aggregation: e.target.value })}
                                 className="text-xs border border-slate-200 rounded px-1 py-0.5"
                               >
                                 {['SUM', 'AVG', 'COUNT', 'MIN', 'MAX'].map((agg) => <option key={agg} value={agg}>{agg}</option>)}
-                              </select>
+                              </Select>
                             ) : (
                               c.default_aggregation || '—'
                             )}
@@ -926,7 +928,7 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
         </div>
 
         {/* Right: saved datasources list */}
-        <div className="w-56 shrink-0 border-l border-slate-100 pl-3 flex flex-col gap-2 overflow-y-auto dsm-no-scrollbar">
+        <div className={`w-56 shrink-0 flex flex-col gap-2 overflow-y-auto dsm-no-scrollbar ${embedded ? 'rounded-xl backdrop-blur-md border border-white/60 dark:border-line shadow-lg p-3' : 'border-l border-slate-100 pl-3'}`} style={embedded ? { background: 'var(--glass)' } : undefined}>
           <button
             type="button"
             onClick={resetForm}
@@ -1003,14 +1005,14 @@ function MetricEditRow({ draft, setDraft, datasourceId, saving, error, onSave, o
           placeholder="Name (e.g. drop_rate)"
           className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
         />
-        <select
+        <Select
           value={draft.kind}
           onChange={(e) => set({ kind: e.target.value })}
           className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
         >
           <option value="metric">Metric (aggregate, e.g. SUM/AVG ratio)</option>
           <option value="column">Column (calculated dimension, e.g. CASE bucket)</option>
-        </select>
+        </Select>
       </div>
       <textarea
         value={draft.expression}

@@ -3,9 +3,11 @@ import { createPortal } from 'react-dom';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../../components/DataTable';
-import FormModal from '../../components/FormModal';
+import ConfirmModal from '../../components/ConfirmModal';
 import Button from '../../components/Button';
+import ActionButton from '../../components/ActionButton';
 import AlertConfigurationActions from '../../store/actions/alertConfiguration-actions';
+import { PageTitle } from '../../components/FormPage';
 
 const COLUMNS = [
     { label: 'Report Name', key: 'report_name' },
@@ -375,35 +377,11 @@ const XReportSchedulerList = () => {
                 <span className="flex items-center gap-1.5">
                     <DetailsPopover item={itm} />
                     {itm.status !== 'deleted' ? (
-                        <button onClick={() => navigate(`/xalerts/report-scheduler/edit/${itm.id}`)}
-                            title="Edit"
-                            className="flex items-center justify-center w-7 h-7 rounded-md border border-blue-200 text-blue-500 bg-white hover:bg-blue-50 hover:border-blue-300 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                            </svg>
-                        </button>
+                        <ActionButton kind="edit" iconOnly title="Edit" onClick={() => navigate(`/xalerts/report-scheduler/edit/${itm.id}`)} />
                     ) : (
-                        <button disabled
-                            title="Deleted schedulers cannot be edited"
-                            className="flex items-center justify-center w-7 h-7 rounded-md border border-slate-200 text-slate-300 bg-slate-50 cursor-not-allowed">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                <line x1="3" y1="21" x2="21" y2="3"/>
-                            </svg>
-                        </button>
+                        <ActionButton kind="edit" iconOnly disabled title="Deleted schedulers cannot be edited" />
                     )}
-                    <button onClick={() => openDelete(itm)}
-                        title="Delete"
-                        className="flex items-center justify-center w-7 h-7 rounded-md border border-red-200 text-red-400 bg-white hover:bg-red-50 hover:border-red-300 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                            <path d="M10 11v6M14 11v6"/>
-                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                        </svg>
-                    </button>
+                    <ActionButton kind="delete" iconOnly title="Delete" onClick={() => openDelete(itm)} />
                 </span>
             );
         }
@@ -427,21 +405,11 @@ const XReportSchedulerList = () => {
 
                 {/* Header */}
                 <div className="flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                            style={{ background: '#0b1830' }}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14 2 14 8 20 8"/>
-                                <line x1="16" y1="13" x2="8" y2="13"/>
-                                <line x1="16" y1="17" x2="8" y2="17"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-slate-800 leading-tight">Report Scheduler</h1>
-                            <p className="text-xs text-slate-400 font-medium tracking-wide">Manage scheduled report deliveries</p>
-                        </div>
-                    </div>
+                    <PageTitle
+                        icon={<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"> <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/> <polyline points="14 2 14 8 20 8"/> <line x1="16" y1="13" x2="8" y2="13"/> <line x1="16" y1="17" x2="8" y2="17"/> </svg>}
+                        title="Report Scheduler"
+                        subtitle="Manage scheduled report deliveries"
+                    />
                     <Button onClick={() => navigate('/xalerts/report-scheduler/new')} variant="primary">
                         + New Report
                     </Button>
@@ -458,33 +426,18 @@ const XReportSchedulerList = () => {
             </div>
 
             {/* Delete confirmation modal */}
-            <FormModal title="Delete Report Scheduler" headerColor="#b91c1c" isOpen={deleteModalOpen} setIsOpen={setDeleteModalOpen}>
-                <div className="flex flex-col items-center gap-3 py-4 px-2 text-center">
-                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                            <path d="M10 11v6M14 11v6"/>
-                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                        </svg>
-                    </div>
-                    <p className="text-slate-700 text-sm font-medium">
-                        Delete <strong>{deleteTarget?.report_name}</strong>?
-                    </p>
-                    <p className="text-xs text-red-400">This action cannot be undone.</p>
-                </div>
-                <div className="flex justify-end gap-3 mt-2">
-                    <button type="button" onClick={() => setDeleteModalOpen(false)}
-                        className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
-                        Cancel
-                    </button>
-                    <button type="button" onClick={confirmDelete} disabled={deleting}
-                        className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm disabled:opacity-60"
-                        style={{ background: '#b91c1c' }}>
-                        {deleting ? 'Deleting...' : 'Delete'}
-                    </button>
-                </div>
-            </FormModal>
+            <ConfirmModal
+                isOpen={deleteModalOpen}
+                tone="danger"
+                title="Delete Report Scheduler"
+                message={<>Delete <strong>{deleteTarget?.report_name}</strong>?</>}
+                detail="This action cannot be undone."
+                confirmLabel="Delete"
+                busy={deleting}
+                busyLabel="Deleting…"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteModalOpen(false)}
+            />
         </>
     );
 };

@@ -6,6 +6,8 @@ import Button from '../../../components/Button';
 import FormModal from '../../../components/FormModal';
 import AssuranceActions from '../../../store/actions/assurance-actions';
 import SlaProfileForm from './SlaProfileForm';
+import { PageTitle } from '../../../components/FormPage';
+import ActionButton from '../../../components/ActionButton';
 
 const COLUMNS = [
     { label: 'Name',                  key: 'name' },
@@ -62,14 +64,7 @@ const SlaProfileManager = () => {
             return <span className={`font-medium ${isEnabled ? 'text-green-700' : 'text-slate-400'}`}>{isEnabled ? 'Enabled' : 'Disabled'}</span>;
         }
         if (col.key === '_actions') return (
-            <button onClick={() => openEdit(itm)}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-                Edit
-            </button>
+            <ActionButton kind="edit" onClick={() => openEdit(itm)} />
         );
         const val = itm[col.key];
         return <span className="truncate max-w-[160px] block" title={String(val ?? '')}>{val ?? '—'}</span>;
@@ -78,18 +73,11 @@ const SlaProfileManager = () => {
     return (
         <div className="flex flex-col h-full overflow-hidden p-5 gap-4" style={{ background: '#ffffff' }}>
             <div className="flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0" style={{ background: '#0b1830' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10" />
-                            <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800 leading-tight">SLA Profiles</h1>
-                        <p className="text-xs text-slate-400 font-medium tracking-wide">Intelligent Telecom Assurance — ack/response/resolution targets</p>
-                    </div>
-                </div>
+                <PageTitle
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"> <circle cx="12" cy="12" r="10" /> <polyline points="12 6 12 12 16 14" /> </svg>}
+                    title="SLA Profiles"
+                    subtitle="Intelligent Telecom Assurance — ack/response/resolution targets"
+                />
                 <Button onClick={openAdd} variant="primary" className="flex items-center gap-2">+ New Profile</Button>
             </div>
 

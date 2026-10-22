@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import WIDGET_TYPE_REGISTRY from '../widgetConfig/widgetTypeRegistry';
 import { listDatasources } from '../../../store/actions/dashboardBuilder-actions';
 import { subscribeDatasourcesChanged } from '../../../store/actions/datasourceEvents';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 /**
  * "Add a widget" flow: the chart type is already known (whichever palette icon was
@@ -59,14 +60,14 @@ export default function WidgetCreateWizard({ open, initialType, onClose, onConfi
 
         <label className="text-xs font-medium text-slate-600">
           Dataset
-          <select
+          <Select
             value={selectedDatasourceId}
             onChange={(e) => setSelectedDatasourceId(e.target.value)}
             className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm"
           >
             <option value="">{datasourcesLoading ? 'Loading…' : 'Select a dataset'}</option>
             {datasources.map((ds) => <option key={ds.id} value={ds.id}>{ds.name}</option>)}
-          </select>
+          </Select>
         </label>
         {!datasourcesLoading && datasources.length === 0 && (
           <div className="text-xs text-slate-400">No datasets registered yet — add one in the Datasources tab first.</div>

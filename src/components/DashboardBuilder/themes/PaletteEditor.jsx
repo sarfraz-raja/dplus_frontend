@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { PALETTE_PRESETS } from '../../../theme/tokens';
+import usePalettes from './usePalettes';
 
 // A small horizontal strip of color dots — the swatch preview shown next to a preset's name,
 // both in the trigger (once picked) and in each dropdown row (Superset's own "Color scheme"
@@ -8,7 +9,8 @@ import { PALETTE_PRESETS } from '../../../theme/tokens';
 function SwatchStrip({ colors, size = 12 }) {
   return (
     <div className="flex items-center -space-x-1 shrink-0">
-      {colors.slice(0, 8).map((c, i) => (
+      {/* OLD: colors.slice(0, 8) */}
+      {colors.map((c, i) => (
         <span
           key={i}
           className="rounded-full border border-white"
@@ -29,20 +31,24 @@ function SwatchStrip({ colors, size = 12 }) {
  * drives a per-dashboard override (DashboardCanvasEditor.jsx) and a per-chart one
  * (MappingFields.jsx's SERIES_PALETTE_FIELD) without duplicating this UI three times.
  */
+import FloatingPanel from '../../FloatingPanel';
+
 export default function PaletteEditor({ value = [], onChange }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
+  // OLD: own outside-click listener + an absolute list inside this component — a scrolling parent
+  // (Themes / Style panels) clipped it. The list is now a shared FloatingPanel (portal), never clipped.
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDocMouseDown = (e) => {
-      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocMouseDown);
-    return () => document.removeEventListener('mousedown', onDocMouseDown);
-  }, [open]);
-
-  const matchingPreset = PALETTE_PRESETS.find((p) => JSON.stringify(p.colors) === JSON.stringify(value));
+  // Built-in (tokens.js) + Custom (GET /dashboard-builder/palettes, shared list). Picking one COPIES its
+  // colours into this theme/chart — later edits to the palette don't change it (backend Option A).
+  const custom = usePalettes();
+  const same = (a, b) => JSON.stringify((a || []).map((c) => String(c).toLowerCase())) === JSON.stringify((b || []).map((c) => String(c).toLowerCase()));
+  // OLD: const matchingPreset = PALETTE_PRESETS.find(…) — built-ins only.
+  const matchingPreset = PALETTE_PRESETS.find((p) => same(p.colors, value)) || custom.find((p) => same(p.colors, value));
+  const groups = [
+    { label: 'Built-in', items: PALETTE_PRESETS.map((p) => ({ key: `b:${p.name}`, name: p.name, colors: p.colors })) },
+    { label: 'Custom', items: custom.map((p) => ({ key: `c:${p.id}`, name: p.name, colors: p.colors })) },
+  ].filter((g) => g.items.length > 0);
 
   return (
     <div ref={rootRef} className="relative">
@@ -58,25 +64,30 @@ export default function PaletteEditor({ value = [], onChange }) {
         <ChevronDown size={13} className={`text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
-        <div className="absolute z-20 top-full mt-1.5 w-full rounded-xl border border-slate-200 bg-white shadow-lg py-1 max-h-60 overflow-y-auto">
-          {PALETTE_PRESETS.map((p) => {
-            const active = matchingPreset?.name === p.name;
-            return (
-              <button
-                key={p.name}
-                type="button"
-                onClick={() => { onChange([...p.colors]); setOpen(false); }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors ${active ? 'bg-orange-50' : ''}`}
-              >
-                <SwatchStrip colors={p.colors} />
-                <span className="flex-1 text-xs font-medium text-slate-700 truncate">{p.name}</span>
-                {active && <Check size={13} className="text-[#EC7D09] shrink-0" />}
-              </button>
-            );
-          })}
+      <FloatingPanel anchorRef={rootRef} open={open} onClose={() => setOpen(false)} maxHeight={320}>
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          {groups.map((g) => (
+            <div key={g.label}>
+              <p className="px-3 pb-1 pt-2 text-dbe-h3 font-semibold uppercase tracking-wider text-slate-400">{g.label}</p>
+              {g.items.map((p) => {
+                const active = matchingPreset?.name === p.name && same(matchingPreset?.colors, p.colors);
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => { onChange([...p.colors]); setOpen(false); }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[#EC7D09]/[0.08] transition-colors ${active ? 'bg-[#EC7D09]/[0.08]' : ''}`}
+                  >
+                    <SwatchStrip colors={p.colors} />
+                    <span className="flex-1 text-dbe-body text-slate-700 truncate">{p.name}</span>
+                    {active && <Check size={13} className="text-[#EC7D09] shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
-      )}
+      </FloatingPanel>
     </div>
   );
 }

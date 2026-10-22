@@ -1,4 +1,5 @@
 import React from 'react';
+import { HelpCircle } from 'lucide-react';
 import CustomTooltip from '../CustomTooltip';
 
 /**
@@ -18,9 +19,18 @@ export default function FieldHintMark({ hint }) {
     // CustomTooltip's own root is a block-level `flex flex-col` div (fine for its other,
     // already-block callers) — wrapped in `inline-block` here so it lays out next to the
     // preceding label text instead of forcing a line break after it.
-    <span className="inline-block align-middle shrink-0">
+    // OLD marker: an orange "**" right after the label text. Now one "?" help icon, pushed to the far
+    // right of the label row (ml-auto — callers put label + mark in a flex row), same everywhere.
+    <span className="ml-auto inline-block shrink-0 pl-1.5 align-middle">
       <CustomTooltip text={hint} wrap>
-        <span className="text-[10px] font-bold text-[#EC7D09] cursor-help select-none ml-1">**</span>
+        <span
+          tabIndex={0}
+          role="img"
+          aria-label={hint}
+          className="flex h-3.5 w-3.5 cursor-help items-center justify-center text-slate-400 hover:text-[#EC7D09] focus:text-[#EC7D09] focus:outline-none"
+        >
+          <HelpCircle size={13} aria-hidden="true" />
+        </span>
       </CustomTooltip>
     </span>
   );

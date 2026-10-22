@@ -403,7 +403,7 @@ const TopBar = ({ isSidebarOpen, isMobileViewport, onSidebarToggle, isFullscreen
                 <div className="px-4 py-3">
                   <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
                     <Search className="h-4 w-4 text-slate-400 dark:text-white/40" />
-                    <input type="text" value={timezoneQuery} onChange={(event) => setTimezoneQuery(event.target.value)} placeholder="Search timezone..." className="ml-2 w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-white/25" />
+                    <input type="search" value={timezoneQuery} onChange={(event) => setTimezoneQuery(event.target.value)} placeholder="Search timezone..." className="keep-dark-input ml-2 w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-white/25" />
                   </div>
                 </div>
                 <div className="max-h-80 space-y-1 overflow-y-auto px-2 pb-3">

@@ -4,8 +4,9 @@ import {
   ScatterChart as ScatterChartIcon, Table, AlertTriangle, MapPin, Server, ListFilter, Type, Square,
   Circle, Minus, Triangle, Diamond, ArrowRight, Pentagon, Hexagon, Octagon, Star, Plus,
 } from 'lucide-react';
-import { FONT_FAMILY_OPTIONS } from '../../../theme/tokens';
+import { FONT_FAMILY_OPTIONS, chartTokens } from '../../../theme/tokens';
 import { POSITION_OPTIONS } from '../../Widgets/titlePositions';
+import { KPI_ICON_OPTIONS } from '../../Widgets/kpiIcons';
 import ChartLibraryWidgetView from '../charts/ChartLibraryWidgetView';
 import SlicerWidgetCard from '../filters/SlicerWidgetCard';
 import StatCard from '../../Widgets/StatCard';
@@ -230,12 +231,17 @@ const VALUE_DECIMALS_FIELD = { key: 'valueDecimals', label: 'Decimal places', ty
 VALUE_TEXT_STYLE_FIELDS.push(VALUE_DECIMALS_FIELD);
 
 // Axis text color/weight/size/font — for widgets with a visible category/value axis.
-const AXIS_TEXT_STYLE_FIELDS = textStyleFields({
+// Show/hide the axis titles (the column names drawn along each axis — or an X/Y axis title
+// override). Every chart with axes; also a dashboard/theme field (DASHBOARD_STYLE_FIELDS), so a
+// dashboard can hide them everywhere at once. Hidden in renderChartWidget, where the axis
+// labels are computed, so every chart type honours it.
+export const SHOW_AXIS_TITLES_FIELD = { key: 'showAxisTitles', label: 'Axis titles', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] };
+const AXIS_TEXT_STYLE_FIELDS = [...textStyleFields({
   colorKey: 'axisTextColor', colorLabel: 'Axis text color',
   weightKey: 'axisTextWeight', weightLabel: 'Axis text weight',
   sizeKey: 'axisTextSize', sizeLabel: 'Axis text size (px)',
   fontKey: 'axisTextFont', fontLabel: 'Axis text font',
-});
+}), SHOW_AXIS_TITLES_FIELD];
 
 // w values are in grid-column units — GRID_CONFIG.cols is 144 (12 visual columns × 12,
 // see DashboardCanvasEditor.jsx), so these are the old 12-col widths ×12.
@@ -284,7 +290,9 @@ const WIDGET_TYPE_REGISTRY = {
     styleFields: [
       { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Color of the line and the area under it.' },
       { key: 'titleColor', label: 'Title color', type: 'color', default: null },
-      BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
+      // OLD: BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
+      // Value text color/size/position removed — this chart's value readout is disabled, so they did nothing.
+      BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, VALUE_DECIMALS_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
     ],
   },
   barChart: {
@@ -292,7 +300,9 @@ const WIDGET_TYPE_REGISTRY = {
     styleFields: [
       { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Color of the bars.' },
       { key: 'titleColor', label: 'Title color', type: 'color', default: null },
-      BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
+      // OLD: BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
+      // Value text color/size/position removed — this chart's value readout is disabled, so they did nothing.
+      BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, VALUE_DECIMALS_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
     ],
   },
   horizontalBarChart: {
@@ -309,7 +319,9 @@ const WIDGET_TYPE_REGISTRY = {
     styleFields: [
       { key: 'color', label: 'Accent color', type: 'color', default: '#378ADD', hint: 'Color of the area and its line.' },
       { key: 'titleColor', label: 'Title color', type: 'color', default: null },
-      BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
+      // OLD: BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...VALUE_TEXT_STYLE_FIELDS, VALUE_POSITION_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
+      // Value text color/size/position removed — this chart's value readout is disabled, so they did nothing.
+      BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, VALUE_DECIMALS_FIELD, ...AXIS_TEXT_STYLE_FIELDS,
     ],
   },
   // Its own dataShape ('heatmap', not 'series') — a 2D day/hour grid is genuinely a
@@ -567,6 +579,18 @@ const LINE_OPACITY_FIELD = opacityField('Line opacity (%)', 100);
 const BAR_OPACITY_FIELD = opacityField('Bar opacity (%)', 100);
 const POINT_OPACITY_FIELD = opacityField('Point opacity (%)', 75);
 const AREA_FILL_OPACITY_FIELD = { key: 'areaOpacity', label: 'Fill opacity (%)', type: 'number', min: 0, max: 100, default: 35 };
+// Line/Area look (Widgets/chartStyleHelpers.js) — chart + placement level, drawn by
+// LineAreaChart/AreaChart. Defaults = how these charts always looked (grid shown, 2 Y splits,
+// flat fill). `fillStyle` is also Big Number's trend fill (BIG_NUMBER_STYLE_FIELDS).
+const GRID_LINES_FIELD = { key: 'showGridLines', label: 'Grid lines', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] };
+const Y_AXIS_TICKS_FIELD = {
+  key: 'yAxisTicks', label: 'Y-axis ticks', type: 'select', default: 'few', asDropdown: true,
+  options: [{ value: 'few', label: 'Few' }, { value: 'normal', label: 'Normal' }, { value: 'many', label: 'Many' }],
+};
+const FILL_STYLE_FIELD = { key: 'fillStyle', label: 'Fill style', type: 'select', default: 'solid', options: [{ value: 'solid', label: 'Solid' }, { value: 'fade', label: 'Fade' }] };
+const LINE_LOOK_FIELDS = [GRID_LINES_FIELD, Y_AXIS_TICKS_FIELD];
+const AREA_LOOK_FIELDS = [GRID_LINES_FIELD, Y_AXIS_TICKS_FIELD, FILL_STYLE_FIELD];
+
 const OPACITY_FIELDS_BY_TYPE = {
   LINE: [LINE_OPACITY_FIELD],
   AREA: [LINE_OPACITY_FIELD, AREA_FILL_OPACITY_FIELD],
@@ -574,6 +598,14 @@ const OPACITY_FIELDS_BY_TYPE = {
   HORIZONTAL_BAR: [BAR_OPACITY_FIELD],
   STACKED_BAR: [BAR_OPACITY_FIELD],
   SCATTER: [POINT_OPACITY_FIELD],
+};
+
+// BAR only — each bar's value drawn on the chart: Hide (default = the original look), Inside
+// (rotated to run vertically inside the bar, like Superset) or Top (above the bar). Works for
+// single and series-grouped bars; drawn by BarChart.jsx.
+export const BAR_VALUE_LABELS_FIELD = {
+  key: 'barValueLabels', label: 'Value labels', type: 'select', default: 'hide', asDropdown: true,
+  options: [{ value: 'hide', label: 'Hide' }, { value: 'inside', label: 'Inside bar' }, { value: 'top', label: 'Top of bar' }],
 };
 
 export const SHOW_DATA_POINTS_FIELD = { key: 'showDataPoints', label: 'Data Points', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] };
@@ -607,9 +639,10 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   // four switch to STACKED_BAR's own field set instead (below) — a single accent swatch makes
   // no sense once the chart is rendering one color per named series, and the value-position
   // field has nothing left to reposition against (multiple bars/lines/areas, not one).
-  BAR: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.BAR, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
-  AREA: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.AREA, VALUE_POSITION_FIELD, ...CROSS_FILTER_FIELDS],
-  LINE: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.LINE, VALUE_POSITION_FIELD, SHOW_DATA_POINTS_FIELD, ...CROSS_FILTER_FIELDS],
+  // OLD BAR/AREA/LINE also had VALUE_POSITION_FIELD — no effect (value readout disabled in BarChart/AreaChart/LineAreaChart).
+  BAR: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.BAR, BAR_VALUE_LABELS_FIELD, ...CROSS_FILTER_FIELDS],
+  AREA: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.AREA, ...AREA_LOOK_FIELDS, ...CROSS_FILTER_FIELDS],
+  LINE: [ACCENT_COLOR_FIELD, ...OPACITY_FIELDS_BY_TYPE.LINE, ...LINE_LOOK_FIELDS, SHOW_DATA_POINTS_FIELD, ...CROSS_FILTER_FIELDS],
   // Same field set as STACKED_BAR (palette-cycled series, not a single accent) — reused
   // verbatim once BAR/AREA/LINE/HORIZONTAL_BAR actually have mapping.series set. No
   // PALETTE_FIELD here either, same reasoning as STACKED_BAR above — its own Data-tab Series
@@ -659,6 +692,21 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   // value) drops it — same numberFormat field as KPI_CARD, reused verbatim (both center a
   // single formatted number).
   GAUGE: [
+    // The chartLibrary GAUGE's own ring color/width controls — GaugeCard.jsx already accepted
+    // `color` (reused from the generic ACCENT_COLOR_FIELD every other single-series chart has)
+    // and had the ring's width hardcoded at 10px with no field exposing it at all. The legacy
+    // mock `gaugeCard` widget type (above) already had its own Accent color field; this chart_type
+    // just never got the same treatment.
+    ACCENT_COLOR_FIELD,
+    { key: 'ringWidth', label: 'Ring width (px)', type: 'number', min: 2, max: 30, default: 10 },
+    // The ring's own max was previously hardcoded at 100 with no field at all — combined with
+    // `showPercent` only ever appending a literal "%" rather than computing one, a non-0-100
+    // measure (e.g. a SUM'd traffic value in the millions) both drew a meaningless ring (every
+    // value past 100 just pins the arc at full) and showed a nonsense "<bignumber>%" label.
+    // `showPercent` now actually divides by this before formatting (see GaugeCard.jsx), and the
+    // ring itself always plots value/max regardless of showPercent — so raise this to the
+    // measure's real ceiling for a non-percentage gauge, same as Y Axis Max on an axis chart.
+    { key: 'gaugeMax', label: 'Max value', type: 'number', default: 100, hint: 'The ring (and Show as percent, when on) are both value ÷ this × 100.' },
     {
       key: 'numberFormat', label: 'Number format', type: 'select', default: 'compact', asDropdown: true,
       options: [
@@ -700,6 +748,26 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
     // header with no explicit color just keeps that hardcoded default.
     { key: 'headerBgColor', label: 'Header background color', type: 'color', default: null },
     { key: 'headerTextColor', label: 'Header text color', type: 'color', default: null, contrastBg: 'headerBgColor' },
+    // Grid — every table line in one place: the frame (inset, rounded, outer border), which inner
+    // lines are drawn, and ONE color for all of them (rows, columns, frame). No per-line widths or
+    // colors on purpose — a few derived settings instead of many manual ones (CLAUDE.md §8).
+    { key: 'tableFrame', label: 'Table frame', type: 'select', default: 'off', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] },
+    { key: 'gridLines', label: 'Grid lines', type: 'select', default: 'rows', options: [{ value: 'rows', label: 'Rows' }, { value: 'rows-columns', label: 'Rows + columns' }, { value: 'none', label: 'None' }] },
+    { key: 'gridColor', label: 'Grid line color', type: 'color', default: null, hint: 'Row and column lines, and the frame border when Table frame is on.' },
+    // Pagination — 'off' (default) keeps the original single scrolling list; a number splits the
+    // rows into pages with a ‹ 1 2 3 › pager under the table (VirtualizedTable.jsx). Own row type
+    // (PageSizeRow in WidgetStyleFields.jsx): these presets + "Custom…" for any other count.
+    {
+      key: 'pageSize', label: 'Rows per page', type: 'pageSize', default: 'off', fullWidth: true,
+      options: [{ value: 'off', label: 'Off (scroll)' }, ...[5, 10, 15, 20, 25, 50, 100].map((n) => ({ value: String(n), label: String(n) }))],
+    },
+    // Current-page button color of that pager. `inlineIn`: not its own row — PageSizeRow draws it
+    // as a swatch at the end of the Rows per page row. Not type 'color', so it's one value for
+    // both Light and Dark (stored flat, not under colors.{light,dark}); unset = brand orange.
+    { key: 'pagerColor', label: 'Pager color', type: 'inlineColor', default: null, inlineIn: 'pageSize' },
+    // Toolbar above the table for whoever views it: a search box, "Show N entries per page" (when
+    // Rows per page is on) and the row count. Live controls only — nothing the viewer picks is saved.
+    { key: 'tableToolbar', label: 'Search & entries', type: 'select', default: 'hide', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }], hint: 'A search box, "Show N entries per page" (when Rows per page is on) and the row count above the table.' },
   ],
 };
 
@@ -710,7 +778,9 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
 // the specific chart_type currently selected, instead of showing every field unconditionally
 // (axis controls on a KPI Card, etc.) regardless of whether it's a no-op for that type.
 const CHART_TYPES_WITH_AXIS = new Set(['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR', 'SCATTER', 'STACKED_BAR', 'WATERFALL', 'HEAT_MAP']);
-const CHART_TYPES_WITH_VALUE_LABEL = new Set(['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR', 'PIE', 'FUNNEL', 'TREEMAP', 'GAUGE', 'KPI_CARD', 'TABLE']);
+// OLD: new Set(['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR', 'PIE', 'FUNNEL', 'TREEMAP', 'GAUGE', 'KPI_CARD', 'TABLE'])
+// BAR/AREA/LINE removed — their value readout is disabled, so value text color/size did nothing.
+const CHART_TYPES_WITH_VALUE_LABEL = new Set(['HORIZONTAL_BAR', 'PIE', 'FUNNEL', 'TREEMAP', 'GAUGE', 'KPI_CARD', 'TABLE']);
 
 /**
  * The actual style fields to render for a 'chartLibrary' widget's Style panel, given the
@@ -733,8 +803,110 @@ const CHART_TYPES_WITH_VALUE_LABEL = new Set(['BAR', 'AREA', 'LINE', 'HORIZONTAL
 // this exactly, or resolveWidgetStyle silently drops any key it doesn't know about — can call
 // this instead of re-deriving the same branch by hand.
 export function seriesExtraStyleFields(chartType) {
-  return [...CHART_TYPE_EXTRA_STYLE_FIELDS.BAR_SERIES, ...(OPACITY_FIELDS_BY_TYPE[chartType] || []), ...(chartType === 'LINE' ? [SHOW_DATA_POINTS_FIELD] : [])];
+  return [
+    ...CHART_TYPE_EXTRA_STYLE_FIELDS.BAR_SERIES,
+    ...(OPACITY_FIELDS_BY_TYPE[chartType] || []),
+    ...(chartType === 'LINE' ? [SHOW_DATA_POINTS_FIELD, ...LINE_LOOK_FIELDS] : []),
+    ...(chartType === 'AREA' ? AREA_LOOK_FIELDS : []),
+    ...(chartType === 'BAR' ? [BAR_VALUE_LABELS_FIELD] : []),
+  ];
 }
+
+// What a chart actually draws when a text-size field is unset (Widgets/*.jsx's own fallbacks) —
+// the style panels show these as the inherited value instead of guessing (a slider with no
+// value otherwise sits at its range midpoint, e.g. 28). Title: 11px (12 for Gauge/Big Number);
+// value: the big number of a KPI Card 20 / Big Number 32 / Gauge 22, a label elsewhere 9;
+// axis: 9.
+export function chartTextSizeDefaults(chartType, mapping) {
+  const isBigNumber = chartType === 'BIG_NUMBER' || (chartType === 'KPI_CARD' && mapping?.kpi_variant === 'big_number');
+  return {
+    titleSize: isBigNumber || chartType === 'GAUGE' ? 12 : 11,
+    // OLD: Table fell through to 9 — its real default is text-xs (12px).
+    valueTextSize: isBigNumber ? 32 : chartType === 'KPI_CARD' ? 20 : chartType === 'GAUGE' ? 22 : chartType === 'TABLE' ? 12 : 9,
+    axisTextSize: 9,
+  };
+}
+
+// What a chart actually draws when a color field is unset (Widgets/*.jsx's own fallbacks), per
+// light/dark — the style panels show these instead of "auto" + a blank swatch, so the real color
+// is visible and its hex can be copied. A gradient/title background that isn't set draws
+// nothing over the card, so its real default is the card background itself.
+export function chartColorDefaults(chartType, mapping, isDark) {
+  const { text, sub } = chartTokens(isDark);
+  const surface = isDark ? '#22273C' : '#ffffff';
+  const isBigNumber = chartType === 'BIG_NUMBER' || (chartType === 'KPI_CARD' && mapping?.kpi_variant === 'big_number');
+  const heat = '#EC4899';
+  return {
+    bgColor: surface,
+    bgGradientFrom: surface,
+    bgGradientTo: surface,
+    titleBgColor: surface,
+    titleColor: sub,
+    valueTextColor: text,
+    rowTextColor: text,
+    axisTextColor: sub,
+    // The one-color chart accent: line / bars / area / points / gauge / KPI tint.
+    color: isBigNumber ? '#0891B2' : (chartType === 'HEAT_MAP' ? heat : '#378ADD'),
+    // Heat strip: high end, and the low end's ~9% tint of it on the card (HeatStripChart.jsx).
+    colorTo: heat,
+    colorFrom: isDark ? '#352a45' : '#fdf0f7',
+    upColor: '#10B981',
+    downColor: '#EF4444',
+    // Table header row (VirtualizedTable.jsx's bg-slate-50 / #2a2f47) and banding.
+    headerBgColor: isDark ? '#2a2f47' : '#f8fafc',
+    headerTextColor: text,
+    bandColor: '#F1F5F9',
+    bandTextColor: text,
+    // Table grid lines (VirtualizedTable.jsx's border-slate-100 / white at 10% on the dark card).
+    gridColor: isDark ? '#383D50' : '#F1F5F9',
+  };
+}
+
+// The same for the dashboard/theme-level fields (DASHBOARD_STYLE_FIELDS): the widget defaults
+// above, plus the dashboard's own canvas, heading and the Accent color every one-color chart
+// falls back to.
+export function dashboardColorDefaults(isDark) {
+  const { text } = chartTokens(isDark);
+  return {
+    ...chartColorDefaults(null, null, isDark),
+    // The builder canvas (.dbe-canvas-wrap) is #fff in both app themes — dark styling is opt-in
+    // per page and the builder hasn't opted in — so that's what an unset background really is.
+    dashboardBgColor: '#ffffff',
+    // Unset gradient stops draw as the canvas color (see the canvas style in DashboardCanvasEditor).
+    dashboardBgGradientFrom: '#ffffff',
+    dashboardBgGradientTo: '#ffffff',
+    accentColor: '#378ADD',
+    dashboardTitleColor: text,
+  };
+}
+
+// Big Number only (a KPI_CARD with mapping.kpi_variant — see chartTypeMeta.js): the comparison
+// line under the number — the change itself (▲ +12%) and the "vs <period>" text after it.
+// Plain KPI Cards never get these. Registered on the canvas via DashboardCanvasEditor's
+// extraFields + style object, like every other per-chart_type style field.
+// The trend line reuses Line/Area's own fields and keys (color → falls back to the
+// dashboard/theme Accent color; seriesOpacity/areaOpacity → chart + placement only, as for
+// Line/Area), so it styles and cascades exactly like those charts. Fill default 12 = what the
+// sparkline drew before these existed.
+//
+// Title icon + positions: the same 3x3 position pickers as other widgets (titlePosition stays the
+// shared TITLE_TEXT_STYLE_FIELDS one); valuePosition/deltaPosition are Big Number's own with
+// defaults that reproduce its original layout (number and change stacked, middle-left) — the
+// generic VALUE_POSITION_FIELD defaults to top-right, so chartLibraryStyleFieldsFor swaps it out.
+export const BIG_NUMBER_STYLE_FIELDS = [
+  { key: 'titleIcon', label: 'Title icon', type: 'iconSelect', default: 'none', options: KPI_ICON_OPTIONS },
+  { ...VALUE_POSITION_FIELD, default: 'mid-left' },
+  { key: 'deltaPosition', label: 'Change position', type: 'position', default: 'mid-left', options: POSITION_OPTIONS },
+  { ...ACCENT_COLOR_FIELD, label: 'Trend line color', hint: 'Color of the trend line and its fill. Unset, it uses the dashboard\'s Accent color. A target status (green/amber/red) colors it instead when targets are set.' },
+  { ...LINE_OPACITY_FIELD, label: 'Trend line opacity (%)' },
+  { ...AREA_FILL_OPACITY_FIELD, label: 'Trend fill opacity (%)', default: 12 },
+  { ...FILL_STYLE_FIELD, label: 'Trend fill style' },
+  { key: 'showDelta', label: 'Show change', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
+  // Off by default — the period (often a long custom date range) is still the change's hover
+  // tooltip; turning this on writes it out after the change.
+  { key: 'showDeltaNote', label: 'Show compared period', type: 'select', default: 'hide', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
+  { key: 'deltaTextSize', label: 'Change text size (px)', type: 'number', default: 12, min: 8, max: 24 },
+];
 
 export function chartLibraryStyleFieldsFor(chartType, mapping) {
   const hasAxis = CHART_TYPES_WITH_AXIS.has(chartType);
@@ -748,10 +920,13 @@ export function chartLibraryStyleFieldsFor(chartType, mapping) {
     ...(hasSeries ? seriesExtraStyleFields(chartType) : (CHART_TYPE_EXTRA_STYLE_FIELDS[chartType] || [])),
     ...WIDGET_ANIMATION_FIELDS,
   ];
-  // Big Number (a KPI_CARD with mapping.kpi_variant — see chartTypeMeta.js) has a fixed
-  // top-to-bottom layout (BigNumberCard.jsx), so the 3x3 title/value position pickers do nothing
-  // there. Plain KPI Cards keep them.
+  // Big Number (a KPI_CARD with mapping.kpi_variant — see chartTypeMeta.js) swaps KPI Card's
+  // value position (default top-right) for its own (default middle-left) and adds its icon,
+  // change position, comparison and trend fields. Plain KPI Cards are unchanged.
+  // KPI Card / Big Number draw their title as a floating overlay (TitleValueOverlay), not a
+  // header row, so there's no strip for Title background to colour — hidden for both.
+  const kpiFields = chartType === 'KPI_CARD' ? fields.filter((f) => f.key !== 'titleBgColor') : fields;
   return mapping?.kpi_variant === 'big_number'
-    ? fields.filter((f) => f.key !== 'titlePosition' && f.key !== 'valuePosition')
-    : fields;
+    ? [...kpiFields.filter((f) => f.key !== 'valuePosition'), ...BIG_NUMBER_STYLE_FIELDS]
+    : kpiFields;
 }

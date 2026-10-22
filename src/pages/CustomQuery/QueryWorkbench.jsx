@@ -6,8 +6,10 @@ import { Urls } from '../../utils/url';
 import { getDefaultDb, dbOptionLabel } from '../../utils/common';
 import { RUN_QUERY } from '../../store/reducers/customQuery-reducer';
 import Modal from '../../components/Modal';
-import Table from '../../components/Table';
+import Table, { TableCell, TableEmpty, TableRow, tableFrameCls } from '../../components/Table';
 import Button from '../../components/Button';
+import { FormPageHeader, FORM_PAGE_X_WIDE } from '../../components/FormPage';
+import Select from '../../components/Select';
 
 // ─── Save Query Popover (with query name input) ────────────────────────────────
 const VISIBILITY_OPTIONS = [
@@ -584,35 +586,30 @@ const QueryWorkbench = () => {
 
     return (
         <>
-        <div
-            className="flex flex-col p-5 gap-4 overflow-hidden"
-            style={{ height: 'calc(100vh - 4rem)', background: '#ffffff' }}
-        >
-            {/* ── Header ── */}
-            <div className="flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    {/* Mobile sidebar toggle */}
+        {/* OLD: style={{ height: 'calc(100vh - 4rem)' }} — a guessed header height; h-full fits Layout's wrapper exactly (CLAUDE.md §8) */}
+        <div className="flex flex-col h-full bg-white overflow-hidden">
+            {/* ── Header ── (wide: tool page, no centred column) */}
+            <FormPageHeader
+                wide
+                leading={
+                    /* Mobile sidebar toggle */
                     <button
                         className="sm:hidden p-1.5 rounded-lg border border-slate-200 bg-white shadow-sm shrink-0"
                         onClick={() => setShowSidebar(s => !s)}
+                        aria-label="Show saved queries"
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
                     </button>
-                    <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                        style={{ background: '#0b1830' }}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800 leading-tight">Query Workbench</h1>
-                        <p className="text-xs text-slate-400 font-medium tracking-wide">Write and execute custom SQL queries</p>
-                    </div>
-                </div>
-
-                {/* Mode Switcher */}
+                }
+                icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                    </svg>
+                }
+                title="Query Workbench"
+                subtitle="Write and execute custom SQL queries"
+                actions={
+                /* Mode Switcher */
                 <div className="flex rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-white">
                     {[{ key: 'sql', label: 'SQL Mode' }, { key: 'builder', label: 'Visual Builder' }].map(m => (
                         <button
@@ -628,10 +625,11 @@ const QueryWorkbench = () => {
                         </button>
                     ))}
                 </div>
-            </div>
+                }
+            />
 
             {/* ── Two-Panel Layout ── */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className={`flex-1 flex overflow-hidden pb-4 ${FORM_PAGE_X_WIDE}`}>
 
                 {/* Mobile overlay backdrop */}
                 {showSidebar && (
@@ -700,7 +698,7 @@ const QueryWorkbench = () => {
                                     <label className="text-xs font-semibold text-slate-700 shrink-0">
                                         DB Server <span className="text-red-500">*</span>
                                     </label>
-                                    <select
+                                    <Select
                                         value={server}
                                         onChange={(e) => setServer(String(e.target.value))}
                                         className="w-full sm:w-56 px-3 py-1.5 text-xs rounded outline-none border border-slate-200 bg-white focus:border-blue-400 transition-colors"
@@ -711,7 +709,7 @@ const QueryWorkbench = () => {
                                         {databaseList.map((db) => (
                                             <option key={db.value} value={String(db.value)}>{dbOptionLabel(db)}</option>
                                         ))}
-                                    </select>
+                                    </Select>
                                     <SaveQueryPopover onSave={(name, visibleTo) => saveQuery(name, undefined, undefined, visibleTo)} disabled={!canExecute} />
                                     <ExportDropdown onExportCSV={exportCSV} onExportExcel={exportExcel} disabled={!canExecute} highlight={rowsClipped} />
                                 </div>
@@ -887,10 +885,8 @@ const QueryWorkbench = () => {
                     </div>
 
                     {/* ── Results Panel (or empty placeholder to hold layout) ── */}
-                    <div
-                        className="flex-1 overflow-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0"
-                        style={{ background: 'rgba(255,255,255,0.6)' }}
-                    >
+                    {/* OLD: glass frame — className="flex-1 overflow-auto rounded-xl backdrop-blur-md border border-white/60 shadow-lg min-h-0" style={{ background: 'rgba(255,255,255,0.6)' }} */}
+                    <div className={tableFrameCls}>
                     {!hasResults && !showExportHint && (
                         <div className="flex items-center justify-center h-full text-slate-400 text-sm select-none">
                             Run a query to see results
@@ -914,28 +910,17 @@ const QueryWorkbench = () => {
                                     No data found — query returned 0 rows
                                 </div>
                             ) : (
-                                <Table headers={columns} className="min-w-full text-left text-sm">
+                                <Table headers={columns} dense>
                                     <tbody>
                                         {allRows.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={columns.length} className="p-0 select-none">
-                                                    <div className="sticky left-0 w-fit px-4 py-6 text-left text-xs text-slate-400 whitespace-nowrap">
-                                                        No data found — query returned 0 rows
-                                                    </div>
-                                                </td>
-                                            </tr>
+                                            <TableEmpty colSpan={columns.length} pinLeft>No data found — query returned 0 rows</TableEmpty>
                                         ) : rows.map((row, idx) => (
-                                            <tr
-                                                key={idx}
-                                                className="border-b border-white/40 transition-colors text-slate-700"
-                                                style={{ background: idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.6)'}
-                                                onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
-                                            >
+                                            // Query results have no id column to key on; the row set is replaced whole on each run.
+                                            <TableRow key={idx} index={idx}>
                                                 {columns.map(col => (
-                                                    <td key={col} className="px-4 py-1.5 text-xs whitespace-nowrap">{row[col] ?? '—'}</td>
+                                                    <TableCell key={col} dense>{row[col] ?? '—'}</TableCell>
                                                 ))}
-                                            </tr>
+                                            </TableRow>
                                         ))}
                                     </tbody>
                                 </Table>
@@ -975,14 +960,7 @@ const QueryWorkbench = () => {
                 </div>
 
                 <div className="flex justify-end mt-4">
-                    <button
-                        type="button"
-                        onClick={() => setErrorModalOpen(false)}
-                        className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm"
-                        style={{ background: '#b91c1c' }}
-                    >
-                        OK
-                    </button>
+                    <Button variant="danger" size="sm" onClick={() => setErrorModalOpen(false)}>OK</Button>
                 </div>
             </div>
         </Modal>
@@ -1045,7 +1023,7 @@ const VisualBuilder = ({
             {/* Tables list */}
             <div className="w-48 shrink-0 flex flex-col gap-2">
                 <label className="text-xs font-medium text-slate-600">Server</label>
-                <select
+                <Select
                     value={builderServer}
                     onChange={e => {
                         setBuilderServer(e.target.value);
@@ -1057,12 +1035,12 @@ const VisualBuilder = ({
                 >
                     <option value="">Select Server</option>
                     {databaseList.map(db => <option key={db.value} value={String(db.value)}>{dbOptionLabel(db)}</option>)}
-                </select>
+                </Select>
 
                 {dboList.length > 0 && (
                     <>
                         <label className="text-xs font-medium text-slate-600 mt-1">Schema</label>
-                        <select
+                        <Select
                             value={builderSchema}
                             onChange={e => {
                                 setBuilderSchema(e.target.value);
@@ -1073,12 +1051,12 @@ const VisualBuilder = ({
                         >
                             <option value="">Select Schema</option>
                             {dboList.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-                        </select>
+                        </Select>
                     </>
                 )}
 
                 <label className="text-xs font-medium text-slate-600 mt-1">Tables</label>
-                <select
+                <Select
                     value={selectedTable || ''}
                     onChange={e => setSelectedTable(e.target.value || null)}
                     disabled={tables.length === 0}
@@ -1088,7 +1066,7 @@ const VisualBuilder = ({
                         {!builderServer ? 'Select a server first' : !builderSchema ? 'Select a schema first' : tables.length === 0 ? 'No tables found' : 'Select Table'}
                     </option>
                     {tables.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-                </select>
+                </Select>
             </div>
 
             {/* Conditions + preview */}
@@ -1100,13 +1078,13 @@ const VisualBuilder = ({
                 {conditions.map((cond, i) => (
                     <div key={i} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                         <span className="text-[9px] font-bold text-slate-400 w-6 shrink-0">{i === 0 ? 'IF' : 'AND'}</span>
-                        <select value={cond.col} onChange={e => updateCondition(i, 'col', e.target.value)} className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded bg-white">
+                        <Select value={cond.col} onChange={e => updateCondition(i, 'col', e.target.value)} className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded bg-white">
                             <option value="">Column</option>
                             {selectedTableCols.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <select value={cond.op} onChange={e => updateCondition(i, 'op', e.target.value)} className="w-28 px-2 py-1.5 text-xs border border-slate-200 rounded bg-white">
+                        </Select>
+                        <Select value={cond.op} onChange={e => updateCondition(i, 'op', e.target.value)} className="w-28 px-2 py-1.5 text-xs border border-slate-200 rounded bg-white">
                             {CONDITION_OPS.map(op => <option key={op} value={op}>{op}</option>)}
-                        </select>
+                        </Select>
                         <input
                             value={cond.val}
                             onChange={e => updateCondition(i, 'val', e.target.value)}

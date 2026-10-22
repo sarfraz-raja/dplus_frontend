@@ -5,10 +5,20 @@ import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import EmailChipInput from '../../components/EmailChipInput';
 import AlertConfigurationActions from '../../store/actions/alertConfiguration-actions';
+import Button from '../../components/Button';
+import Select from '../../components/Select';
+import FormPage, {
+    FormCard as Card, FormCardHeader as CardHeader, FormPageBody, FormPageHeader,
+    FORM_CARD_HEADER_HEIGHT as HEADER_HEIGHT, formInputCls, formLabelCls, formErrorCls,
+} from '../../components/FormPage';
 
-const inputCls = "w-full border border-slate-200 rounded-md px-2 py-1 sm:px-2.5 sm:py-1.5 lg:px-2 lg:py-1 text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
-const labelCls = "block text-[9px] lg:text-[10px] text-slate-500 uppercase tracking-wide mb-0.5 font-medium";
-const errorCls = "text-[9px] text-red-500 mt-0.5";
+// OLD (page-local field styles, now shared with the other config pages via components/FormPage):
+// const inputCls = "w-full border border-slate-200 rounded-md px-2 py-1 sm:px-2.5 sm:py-1.5 lg:px-2 lg:py-1 text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
+// const labelCls = "block text-[9px] lg:text-[10px] text-slate-500 uppercase tracking-wide mb-0.5 font-medium";
+// const errorCls = "text-[9px] text-red-500 mt-0.5";
+const inputCls = formInputCls;
+const labelCls = formLabelCls;
+const errorCls = formErrorCls;
 
 const SOURCE_TYPES = [
     { value: 'v1_dashboard', label: 'V1 Dashboard' },
@@ -72,7 +82,7 @@ const StatusPicker = ({ value, originalStatus, onChange }) => {
             <button
                 type="button"
                 onClick={() => setOpen((v) => !v)}
-                className={`w-full flex items-center justify-between gap-1.5 border rounded-md px-2 py-1 sm:px-2.5 sm:py-1.5 lg:px-2 lg:py-1 text-xs font-semibold transition-colors cursor-pointer hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-orange-400
+                className={`w-full flex items-center justify-between gap-1.5 border rounded-md px-2 py-1 sm:px-2.5 sm:py-1.5 lg:px-2 lg:py-1 text-xs font-semibold transition-colors cursor-pointer hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-accent/40
                     ${STATUS_STYLES[value] || 'bg-slate-100 text-slate-500'} border-transparent
                     ${value && value !== originalStatus ? 'ring-1 ring-amber-400' : ''}
                 `}
@@ -108,25 +118,7 @@ const StatusPicker = ({ value, originalStatus, onChange }) => {
 
 const isVersioned = () => true; // all source types need source_id + theme
 
-const Card = ({ children, className = '' }) => (
-    <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
-        {children}
-    </div>
-);
-
-const HEADER_HEIGHT = 'min-h-[38px] lg:min-h-[34px]';
-
-const CardHeader = ({ icon, title, subtitle }) => (
-    <div className={`flex items-center gap-2 px-3 py-2 lg:px-3 lg:py-1.5 border-b border-slate-100 shrink-0 box-border ${HEADER_HEIGHT}`}>
-        <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background: '#0b1830' }}>
-            {icon}
-        </div>
-        <div>
-            <p className="text-xs font-semibold text-slate-700 leading-none">{title}</p>
-            {subtitle && <p className="text-[10px] text-slate-400 mt-0.5">{subtitle}</p>}
-        </div>
-    </div>
-);
+// Card / CardHeader / HEADER_HEIGHT now come from components/FormPage (FormCard, FormCardHeader).
 
 const CardHeaderTabs = ({ icon, tabs, value, onChange }) => (
     <div className={`flex items-stretch border-b border-slate-100 shrink-0 box-border ${HEADER_HEIGHT}`}>
@@ -351,7 +343,7 @@ const XReportSchedulerFormPage = () => {
     );
 
     return (
-        <div className="flex flex-col bg-white h-full overflow-hidden">
+        <FormPage>
             {/* Browser autofill defaults to a blue tint — recolor it to match the orange accent. */}
             <style>{`
                 input:-webkit-autofill,
@@ -364,32 +356,23 @@ const XReportSchedulerFormPage = () => {
             `}</style>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto flex flex-col gap-2 lg:gap-2 p-3 sm:p-4 lg:p-4 xl:px-[10%]">
+            {/* Page title row — fixed above the scrolling body */}
+            <FormPageHeader
+                icon={<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+                title={isEdit ? 'Edit Report Scheduler' : 'New Report Scheduler'}
+                subtitle={isEdit ? 'Update your scheduled report configuration' : 'Create and schedule automated report delivery'}
+                actions={<>
+                    <Button variant="secondary" size="sm" onClick={() => navigate('/xalerts/report-scheduler')}>Cancel</Button>
+                    <Button variant="secondary" size="sm" onClick={() => setSummaryOpen(true)}>Preview Summary</Button>
+                    <Button variant="primary" size="sm" onClick={handleSubmit(onSubmit)} disabled={submitting}>
+                        {mode === 'send_now'
+                            ? (submitting ? 'Sending...' : 'Send Now')
+                            : (submitting ? 'Scheduling...' : 'Schedule Report')}
+                    </Button>
+                </>}
+            />
 
-                {/* Page title row */}
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 shrink-0">
-                    <div>
-                        <h1 className="text-base lg:text-lg font-bold text-slate-800">{isEdit ? 'Edit Report Scheduler' : 'New Report Scheduler'}</h1>
-                        <p className="text-xs text-slate-500 mt-0.5">{isEdit ? 'Update your scheduled report configuration' : 'Create and schedule automated report delivery'}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                        <button type="button" onClick={() => navigate('/xalerts/report-scheduler')}
-                            className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-300 text-slate-600 bg-white hover:bg-slate-50 transition-colors">
-                            Cancel
-                        </button>
-                        <button type="button" onClick={() => setSummaryOpen(true)}
-                            className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-300 text-slate-600 bg-white hover:bg-slate-50 transition-colors">
-                            Preview Summary
-                        </button>
-                        <button type="button" onClick={handleSubmit(onSubmit)} disabled={submitting}
-                            className="px-2.5 py-1 rounded-md text-xs font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60"
-                            style={{ background: '#EC7D09' }}>
-                            {mode === 'send_now'
-                                ? (submitting ? 'Sending...' : 'Send Now')
-                                : (submitting ? 'Scheduling...' : 'Schedule Report')}
-                        </button>
-                    </div>
-                </div>
+            <FormPageBody>
 
                 {/* API error */}
                 {apiError && (
@@ -467,12 +450,15 @@ const XReportSchedulerFormPage = () => {
                             {sourceType === 'v1_dashboard' && (tabsLoading || hasTabs) && (
                                 <div>
                                     <label className={labelCls}>Tab</label>
-                                    <select className={inputCls} disabled={tabsLoading} {...register('tab_id')}>
-                                        <option value="">{tabsLoading ? 'Loading tabs…' : 'Select tab'}</option>
-                                        {tabOptions.map((t) => (
-                                            <option key={t.id} value={t.id}>{t.name}</option>
-                                        ))}
-                                    </select>
+                                    <Controller name="tab_id" control={control} render={({ field }) => (
+                                        <Select className={inputCls} disabled={tabsLoading} aria-label="Tab"
+                                            name={field.name} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
+                                            <option value="">{tabsLoading ? 'Loading tabs…' : 'Select tab'}</option>
+                                            {tabOptions.map((t) => (
+                                                <option key={t.id} value={t.id}>{t.name}</option>
+                                            ))}
+                                        </Select>
+                                    )} />
                                     <p className="text-[9px] text-slate-400 mt-0.5">Leave unselected to include all tabs in the report.</p>
                                 </div>
                             )}
@@ -493,22 +479,32 @@ const XReportSchedulerFormPage = () => {
                         <div className="p-2.5 grid grid-cols-2 gap-x-2.5 gap-y-2">
                             <div className={mode !== 'schedule' ? 'invisible' : ''}>
                                 <label className={labelCls}>Frequency {mode === 'schedule' && <span className="text-red-400">*</span>}</label>
-                                <select className={inputCls} tabIndex={mode !== 'schedule' ? -1 : undefined}
-                                    {...register('frequency', { required: mode === 'schedule' ? 'Required' : false })}>
-                                    <option value="">Select</option>
-                                    <option value="hourly">Hourly</option>
-                                    <option value="daily">Daily</option>
-                                    <option value="weekly">Weekly</option>
-                                </select>
+                                {/* Hidden (invisible) when not scheduling, so it's out of the tab order without tabIndex */}
+                                <Controller name="frequency" control={control}
+                                    rules={{ required: mode === 'schedule' ? 'Required' : false }}
+                                    render={({ field }) => (
+                                        <Select className={inputCls} aria-label="Frequency"
+                                            name={field.name} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
+                                            <option value="">Select</option>
+                                            <option value="hourly">Hourly</option>
+                                            <option value="daily">Daily</option>
+                                            <option value="weekly">Weekly</option>
+                                        </Select>
+                                    )} />
                                 {mode === 'schedule' && errors.frequency && <p className={errorCls}>{errors.frequency.message}</p>}
                             </div>
                             <div>
                                 <label className={labelCls}>Output Format <span className="text-red-400">*</span></label>
-                                <select className={inputCls} {...register('output_format', { required: 'Required' })}>
-                                    <option value="">Select</option>
-                                    <option value="pdf">PDF</option>
-                                    <option value="png">PNG</option>
-                                </select>
+                                <Controller name="output_format" control={control}
+                                    rules={{ required: 'Required' }}
+                                    render={({ field }) => (
+                                        <Select className={inputCls} aria-label="Output Format"
+                                            name={field.name} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
+                                            <option value="">Select</option>
+                                            <option value="pdf">PDF</option>
+                                            <option value="png">PNG</option>
+                                        </Select>
+                                    )} />
                                 {errors.output_format && <p className={errorCls}>{errors.output_format.message}</p>}
                             </div>
                             <div className={mode !== 'schedule' ? 'invisible' : ''}>
@@ -527,11 +523,15 @@ const XReportSchedulerFormPage = () => {
                             </div>
                             <div className={mode !== 'schedule' || frequency !== 'weekly' ? 'invisible' : ''}>
                                 <label className={labelCls}>Day of Week {mode === 'schedule' && frequency === 'weekly' && <span className="text-red-400">*</span>}</label>
-                                <select className={inputCls} tabIndex={mode !== 'schedule' || frequency !== 'weekly' ? -1 : undefined}
-                                    {...register('day_of_week', { required: mode === 'schedule' && frequency === 'weekly' ? 'Required' : false })}>
-                                    <option value="">Select day</option>
-                                    {DAYS_OF_WEEK.map((d) => <option key={d} value={d.toLowerCase()}>{d}</option>)}
-                                </select>
+                                <Controller name="day_of_week" control={control}
+                                    rules={{ required: mode === 'schedule' && frequency === 'weekly' ? 'Required' : false }}
+                                    render={({ field }) => (
+                                        <Select className={inputCls} aria-label="Day of Week"
+                                            name={field.name} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}>
+                                            <option value="">Select day</option>
+                                            {DAYS_OF_WEEK.map((d) => <option key={d} value={d.toLowerCase()}>{d}</option>)}
+                                        </Select>
+                                    )} />
                                 {mode === 'schedule' && frequency === 'weekly' && errors.day_of_week && <p className={errorCls}>{errors.day_of_week.message}</p>}
                             </div>
                             <div className={mode !== 'schedule' ? 'invisible' : ''}>
@@ -593,12 +593,12 @@ const XReportSchedulerFormPage = () => {
                         </div>
                         <div className="flex flex-col">
                             <label className={labelCls}>Mail Body</label>
-                            <textarea className="min-h-[60px] w-full border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                            <textarea className="min-h-[60px] w-full border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-accent/40 resize-none"
                                 placeholder="Email body text..." {...register('mail_body')} />
                         </div>
                     </div>
                 </Card>
-            </div>
+            </FormPageBody>
 
             {/* Summary slide-in panel */}
             {summaryOpen && (
@@ -640,7 +640,7 @@ const XReportSchedulerFormPage = () => {
                     </div>
                 </>
             )}
-        </div>
+        </FormPage>
     );
 };
 

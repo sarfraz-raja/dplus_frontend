@@ -1,5 +1,6 @@
 import Api from "../../utils/api";
 import { Urls } from "../../utils/url";
+import { copyNameFor } from "../../components/DashboardBuilder/utils/copyName";
 
 /**
  * Dashboard Builder's own datasource namespace (/dashboard-builder/*) — separate from
@@ -868,10 +869,20 @@ export async function getWidgetDetail(id) {
  * DashboardCanvasEditor.jsx's own "Your Charts" list, and its canvas-tile "Duplicate" button
  * all call this instead of each re-implementing "fetch full detail, then create a new one".
  */
-export async function duplicateWidget(id) {
+// `takenNames` (optional Set): names already in use — pass the same Set when duplicating several
+// widgets in a row (e.g. a tab) so they can't collide; the new name is added to it. Without it, the
+// chart library's current names are fetched. Name = "Name (N)" (utils/copyName.js), not "(Copy)".
+export async function duplicateWidget(id, takenNames) {
   const detail = await getWidgetDetail(id);
+  let taken = takenNames;
+  if (!taken) {
+    try { taken = new Set((await listWidgets({ quiet: true })).map((w) => w.name)); } catch { taken = new Set(); }
+  }
+  const name = copyNameFor(detail.name, taken);
+  taken.add(name);
   return createWidget({
-    name: `${detail.name} (Copy)`,
+    // OLD: name: `${detail.name} (Copy)`,
+    name,
     datasourceId: detail.datasource_id,
     chartType: detail.chart_type,
     mapping: detail.mapping || {},
@@ -1004,6 +1015,42 @@ export async function deleteTheme(id) {
     const serverMsg = res.data?.msg || res.data?.message;
     throw new Error(serverMsg || `Deleting theme ${id} failed with status ${res.status}.`);
   }
+}
+
+// ---- Custom colour palettes (GET/POST /palettes, GET/PATCH/DELETE /palettes/<id>) ----
+// Errors carry the backend's readable `msg` (400 validation / 404 / 409 duplicate name).
+const paletteError = (res, what) => {
+  if (!res) return new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  return new Error(res.data?.msg || res.data?.message || `${what} failed with status ${res.status}.`);
+};
+
+/** Lists custom palettes: [{ id, name, colors, created_by, created_at, updated_at, deleted }]. */
+export async function listPalettes({ quiet = false } = {}) {
+  const res = await Api.get({ url: Urls.dashboardBuilder_palettes, ...(quiet ? { inst: 0 } : {}) });
+  if (!res || res.status !== 200) throw paletteError(res, 'Listing palettes');
+  const list = res.data?.data;
+  if (!Array.isArray(list)) throw new Error("Unexpected response shape from GET /dashboard-builder/palettes.");
+  return list.filter((p) => !p.deleted);
+}
+
+/** Creates a custom palette — name unique (409 on duplicate), 1–24 hex colours. */
+export async function createPalette({ name, colors }) {
+  const res = await Api.post({ url: Urls.dashboardBuilder_palettes, data: { name, colors } });
+  if (!res || res.status !== 201) throw paletteError(res, 'Creating palette');
+  return res.data?.data?.palette;
+}
+
+/** Renames and/or replaces the colours of a palette (send only what changed). */
+export async function updatePalette(id, patch) {
+  const res = await Api.patch({ url: `${Urls.dashboardBuilder_palettes}/${id}`, data: patch });
+  if (!res || res.status !== 200) throw paletteError(res, 'Updating palette');
+  return res.data?.data?.palette;
+}
+
+/** Deletes a custom palette. Themes/charts that used it keep their copied colours. */
+export async function deletePalette(id) {
+  const res = await Api.delete({ url: `${Urls.dashboardBuilder_palettes}/${id}` });
+  if (!res || res.status !== 200) throw paletteError(res, 'Deleting palette');
 }
 
 /** Runs an unsaved widget definition inline (POST /widgets/preview — nothing is created).

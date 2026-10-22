@@ -57,7 +57,7 @@ export default function AdvancedSqlFields({ whereValue, havingValue, onWhereChan
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center justify-between text-xs font-semibold text-[#EC7D09] uppercase tracking-wide"
+        className="flex items-center justify-between text-dbe-h2 font-semibold text-[#EC7D09] uppercase tracking-wide"
       >
         Advanced SQL (optional)
         {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

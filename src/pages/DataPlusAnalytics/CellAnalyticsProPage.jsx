@@ -8,6 +8,7 @@ import SiteAnalyticsCard from '../../components/SiteAnalyticsCard';
 import Button from '../../components/Button';
 import { objectToQueryString } from '../../utils/commonFunnction';
 import moment from 'moment';
+import { PageTitle } from '../../components/FormPage';
 
 const FILTERS = ['All', '5G', '4G', '3G', '2G', 'PM KPI', 'PCI / PSC / BCCH'];
 
@@ -111,20 +112,11 @@ const CellAnalyticsProPage = () => {
         >
             {/* ── Header ── */}
             <div className="flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                        style={{ background: '#0b1830' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                            <line x1="8" y1="21" x2="16" y2="21" />
-                            <line x1="12" y1="17" x2="12" y2="21" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800 leading-tight">Cell Analytics Pro</h1>
-                        <p className="text-xs text-slate-400 font-medium tracking-wide">Pre/post KPI comparison and PCI conflict analysis per cell</p>
-                    </div>
-                </div>
+                <PageTitle
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"> <rect x="2" y="3" width="20" height="14" rx="2" ry="2" /> <line x1="8" y1="21" x2="16" y2="21" /> <line x1="12" y1="17" x2="12" y2="21" /> </svg>}
+                    title="Cell Analytics Pro"
+                    subtitle="Pre/post KPI comparison and PCI conflict analysis per cell"
+                />
 
                 {/* ── Form controls ── */}
                 <div className="flex items-end gap-3">

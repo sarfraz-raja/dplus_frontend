@@ -4,7 +4,8 @@
  * `--mainsec` in src/index.css.
  */
 
-export const BRAND_COLOR = '#EC7D09'; // must match --mainsec in src/index.css
+// export const BRAND_COLOR = '#EC7D09'; // must match --mainsec in src/index.css
+export const BRAND_COLOR = '#EC7D09'; // must match --accent (236 125 9) in src/index.css — OLD: '#F26A1B'
 
 // Curated font-family options for Theme/Dashboard Style `select` fields (dashboard title,
 // widget title, axis text) — plain CSS font stacks, no @font-face loading, so every option
@@ -21,8 +22,10 @@ export const FONT_FAMILY_OPTIONS = [
 ];
 
 export const CHART_TEXT_COLORS = {
-  dark: { text: '#eef1f6', sub: '#8b93a7' },
-  light: { text: '#1a1a18', sub: '#5f5e5a' },
+  // dark: { text: '#eef1f6', sub: '#8b93a7' },
+  dark: { text: '#e8eaf1', sub: '#8a91a8' }, // = --content / --muted (dark) in index.css
+  // light: { text: '#1a1a18', sub: '#5f5e5a' },
+  light: { text: '#151826', sub: '#677089' }, // = --content / --muted (light) in index.css
 };
 
 export const CHART_LINE_COLORS = {

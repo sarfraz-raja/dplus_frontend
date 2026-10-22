@@ -5,6 +5,7 @@ import PaletteEditor from '../themes/PaletteEditor';
 import ColumnMultiSelect from '../ColumnMultiSelect';
 import FieldHintMark from '../FieldHintMark';
 import { ValidateExpressionButton } from './AdvancedSqlFields';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 // One accent per drill-down depth (cycles if a hierarchy ever goes deeper than 5 levels) —
 // purely a visual "which ring is this" cue in the orderedColumns editor below, distinct from
@@ -81,7 +82,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
               <button
                 type="button"
                 onClick={() => toggleGroup(field.key)}
-                className="flex items-center justify-between text-xs font-semibold text-[#EC7D09] uppercase tracking-wide"
+                className="flex items-center justify-between text-dbe-h2 font-semibold text-[#EC7D09] uppercase tracking-wide"
               >
                 {field.label}
                 {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -127,7 +128,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
             // conversation this was reported in: an earlier version hid the real column select
             // behind a second, separately-built dropdown, losing exactly this).
             const columnSelect = (
-              <select
+              <Select
                 value={typeof current === 'string' ? current : ''}
                 onChange={(e) => {
                   if (!e.target.value) { if (!isSql) onChange(field.key, ''); return; }
@@ -147,7 +148,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                 {options.map((c) => (
                   <option key={c.column_name} value={c.column_name}>{c.display_name || c.column_name}</option>
                 ))}
-              </select>
+              </Select>
             );
             return (
               <div key={field.key} className={`flex flex-col gap-1 ${groupChild ? 'w-full' : 'w-48'}`}>
@@ -201,17 +202,19 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
               <FieldLabel field={field} />
-              <select
+              <Select
                 value={current || ''}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 disabled={!options.length}
                 className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
               >
-                <option value="">{columnsLoading ? 'Loading…' : options.length ? 'Select column' : 'No matching columns'}</option>
+                {/* `field.emptyLabel` names what "nothing picked" means for an optional column
+                    (e.g. Big Number's Date column: no date filter at all) instead of "Select column". */}
+                <option value="">{columnsLoading ? 'Loading…' : !options.length ? 'No matching columns' : field.emptyLabel || 'Select column'}</option>
                 {options.map((c) => (
                   <option key={c.column_name} value={c.column_name}>{c.display_name || c.column_name}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           );
         }
@@ -225,6 +228,15 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
               {paletteHeader}
               <PaletteEditor value={styleValue?.[field.key] || []} onChange={(next) => onStyleChange?.(field.key, next)} />
             </div>
+          );
+        }
+        if (field.type === 'note') {
+          // Read-only explanation inside a group (e.g. Big Number's "pick a date column first"),
+          // never a mapping value — CHART_TYPE_FIELDS marks these optional so they don't gate Save.
+          return (
+            <p key={field.key} className="rounded-lg bg-slate-50 px-2.5 py-2 text-[11px] leading-snug text-slate-500">
+              {field.text}
+            </p>
           );
         }
         if (field.type === 'text') {
@@ -262,14 +274,15 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           const selected = options.some((opt) => opt.value === current) ? current : field.default;
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild || field.fullWidth ? 'w-full' : 'w-32'}`}>
-              <FieldLabel field={field} /><FieldHintMark hint={field.hint} />
-              <select
+              {/* flex row so the hint "?" sits at the far right of the label (FieldHintMark ml-auto) */}
+              <span className="flex items-center"><FieldLabel field={field} /><FieldHintMark hint={field.hint} /></span>
+              <Select
                 value={selected}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
               >
                 {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
+              </Select>
             </label>
           );
         }
@@ -332,7 +345,8 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
           };
           return (
             <label key={field.key} className={`text-xs font-medium text-slate-600 ${groupChild ? 'w-full' : 'w-48'}`}>
-              <FieldLabel field={field} /><FieldHintMark hint={field.hint} />
+              {/* flex row so the hint "?" sits at the far right of the label (FieldHintMark ml-auto) */}
+              <span className="flex items-center"><FieldLabel field={field} /><FieldHintMark hint={field.hint} /></span>
               <div className="mt-1 flex gap-1.5">
                 <input
                   type="number"
@@ -343,7 +357,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                   onChange={(e) => commitValue(e.target.value)}
                   className="w-1/2 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
                 />
-                <select
+                <Select
                   value={currentUnit}
                   onChange={(e) => {
                     onChange(field.unitKey, e.target.value);
@@ -356,7 +370,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                   className="w-1/2 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
                 >
                   {field.unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
-                </select>
+                </Select>
               </div>
             </label>
           );
@@ -485,7 +499,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                   })}
                 </div>
               )}
-              <select
+              <Select
                 value=""
                 onChange={(e) => addLevel(e.target.value)}
                 disabled={!topLevelCol || !availableCols.length}
@@ -495,7 +509,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                 {availableCols.map((c) => (
                   <option key={c.column_name} value={c.column_name}>{c.display_name || c.column_name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           );
         }

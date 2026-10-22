@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import FormModal from '../../FormModal';
 import Button from '../../Button';
 import { getDatasourceDetail } from '../../../store/actions/dashboardBuilder-actions';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 /**
  * "Add slicer" modal — pick a datasource + column (same discovered-columns lookup
@@ -56,18 +57,18 @@ export default function AddSlicerModal({ isOpen, setIsOpen, datasourceOptions = 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Datasource</label>
-            <select
+            <Select
               value={datasourceId}
               onChange={(e) => { setDatasourceId(e.target.value); setColumnName(''); }}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
             >
               <option value="">— pick a datasource —</option>
               {datasourceOptions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Column</label>
-            <select
+            <Select
               value={columnName}
               onChange={(e) => setColumnName(e.target.value)}
               disabled={!datasourceId || columnsLoading}
@@ -77,7 +78,7 @@ export default function AddSlicerModal({ isOpen, setIsOpen, datasourceOptions = 
                 {!datasourceId ? '— pick a datasource first —' : columnsLoading ? 'Loading…' : '— pick a column —'}
               </option>
               {columns.map((c) => <option key={c.column_name} value={c.column_name}>{c.column_name}</option>)}
-            </select>
+            </Select>
           </div>
         </div>
         <div>

@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import AdminManagementActions from '../../../store/actions/adminManagement-actions';
 import { ZOOM_CONFIG_DEFAULTS } from '../../../store/reducers/adminManagement-reducer';
 import Button from '../../../components/Button';
+import FormPage, { FormCardHeader, FormPageBody, FormPageHeader } from '../../../components/FormPage';
 
 const SECTOR_MIN = 7;
 const SECTOR_MAX = 14;
@@ -81,38 +82,27 @@ const ZoomSettingsManager = () => {
     const isDirty = sector !== zoomConfig.sectorVisibilityZoom || marker !== zoomConfig.markerHideZoom;
 
     return (
-        <div className="flex flex-col bg-white h-full overflow-hidden">
-            <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-6 xl:px-[10%]">
+        <FormPage>
+            {/* Header — fixed above the scrolling body */}
+            <FormPageHeader
+                icon={<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+                </svg>}
+                title="Zoom Settings"
+                subtitle="Control at which zoom level the map switches between dot markers and sector polygons"
+                actions={<>
+                    <Button variant="secondary" size="sm" onClick={handleReset} disabled={saving}>Reset to Defaults</Button>
+                    <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || !isDirty}>
+                        {saving ? 'Saving…' : 'Save Changes'}
+                    </Button>
+                </>}
+            />
 
-                {/* Header */}
-                <div className="flex items-start justify-between shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#0b1830' }}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                                <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-800">Zoom Settings</h1>
-                            <p className="text-sm text-slate-500 mt-0.5">Control at which zoom level the map switches between dot markers and sector polygons</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button type="button" onClick={handleReset} disabled={saving}
-                            className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-600 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50">
-                            Reset to Defaults
-                        </button>
-                        <button type="button" onClick={handleSave} disabled={saving || !isDirty}
-                            className="px-4 py-2 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-                            style={{ background: '#EC7D09' }}>
-                            {saving ? 'Saving…' : 'Save Changes'}
-                        </button>
-                    </div>
-                </div>
+            <FormPageBody>
 
                 {/* Setting cards */}
-                <div className="flex gap-4 shrink-0">
+                <div className="flex flex-col md:flex-row gap-3 shrink-0">
                     <SettingCard
                         label="Sectors Appear At Zoom"
                         hint="Below this zoom, cells show as dot markers. At this zoom and above, sector polygons become visible."
@@ -158,8 +148,8 @@ const ZoomSettingsManager = () => {
                 <p className="text-xs text-slate-400 leading-relaxed border-t border-slate-100 pt-3 shrink-0">
                     Changes apply immediately to the map after saving.
                 </p>
-            </div>
-        </div>
+            </FormPageBody>
+        </FormPage>
     );
 };
 
@@ -213,16 +203,12 @@ const SettingCard = ({ label, hint, value, min, max, defaultValue, error, accent
     const status = getStatus(value, defaultValue, error);
     return (
         <div className={`flex-1 bg-white rounded-xl border shadow-sm flex flex-col ${error ? 'border-red-300' : 'border-slate-200'}`}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-slate-700">{label}</p>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_COLORS[status.color]}`}>
-                        {status.label}
-                    </span>
-                </div>
-                <span className="text-xs text-slate-400">default: {defaultValue}</span>
-            </div>
-            <div className="p-4 flex flex-col gap-4">
+            <FormCardHeader
+                title={label}
+                badge={<span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_COLORS[status.color]}`}>{status.label}</span>}
+                right={<span className="text-[10px] text-slate-400 shrink-0">default: {defaultValue}</span>}
+            />
+            <div className="p-3 flex flex-col gap-3">
                 <p className="text-xs text-slate-400 leading-relaxed">{hint}</p>
 
                 <ZoomVisual visualType={visualType} accentColor={accentColor} value={value} />

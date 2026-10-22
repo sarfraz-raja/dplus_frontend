@@ -15,15 +15,21 @@ import { createPortal } from 'react-dom';
 // in one pass, without a flicker-inducing measure-then-reposition second render. `nowrap`
 // tooltips stay simply centered on the trigger, same as before — short single-line text is
 // far less likely to run off the viewport edge, so it isn't worth the same clamping.
-const WRAP_WIDTH = 224;
+// OLD: 224 — now the same max width as GlobalTooltip.
+const WRAP_WIDTH = 280;
 const VIEWPORT_MARGIN = 8;
 
 const CustomTooltip = ({ text, children, wrap = false }) => {
   const [rect, setRect] = useState(null);
   const anchorRef = useRef(null);
 
-  const show = () => setRect(anchorRef.current?.getBoundingClientRect() || null);
-  const hide = () => setRect(null);
+  // Same ~350ms delay as GlobalTooltip, so tooltips don't flash while the mouse passes over.
+  const timerRef = useRef(null);
+  const show = () => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setRect(anchorRef.current?.getBoundingClientRect() || null), 350);
+  };
+  const hide = () => { clearTimeout(timerRef.current); setRect(null); };
 
   // Bubble's own left edge, clamped so it never runs past either viewport edge — centered on
   // the trigger by default, same as before, but pulled back in whenever that would push it
@@ -56,16 +62,18 @@ const CustomTooltip = ({ text, children, wrap = false }) => {
             ? { left: bubbleLeft, top: rect.top, width: WRAP_WIDTH, transform: 'translateY(calc(-100% - 8px))' }
             : { left: rect.left + rect.width / 2, top: rect.top, transform: 'translate(-50%, calc(-100% - 8px))' }}
         >
-          <div className={`bg-gray-800 text-white text-[11px] font-medium px-2.5 py-1.5 rounded-md shadow-lg ${wrap ? 'w-full leading-snug' : 'whitespace-nowrap'}`}>
+          {/* OLD: bg-gray-800 text-[11px] font-medium — now the same look as GlobalTooltip (app navy, 12px semibold). */}
+          <div className={`bg-[var(--tooltip-bg)] text-[color:var(--tooltip-fg)] backdrop-blur-sm text-[12px] font-semibold px-2.5 py-1.5 rounded-md shadow-lg ${wrap ? 'w-full leading-snug' : 'whitespace-nowrap'}`}>
             {text}
           </div>
+          {/* OLD: 5px CSS triangle — now the same 8px rotated-square arrow as GlobalTooltip. */}
           <div
-            className="w-0 h-0"
+            className="h-0 w-0"
             style={{
               ...(wrap ? { alignSelf: 'flex-start', marginLeft: arrowOffset - 5 } : {}),
               borderLeft: '5px solid transparent',
               borderRight: '5px solid transparent',
-              borderTop: '5px solid #1f2937',
+              borderTop: '5px solid var(--tooltip-bg)',
             }}
           />
         </div>,

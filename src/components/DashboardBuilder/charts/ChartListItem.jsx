@@ -158,7 +158,7 @@ export default function ChartListItem({
            with it every ancestor up to the side panel) just gets forced wider instead. */
         .chart-list-item-meta-value { flex:1; min-width:0; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .chart-list-item-badge {
-          flex-shrink:0; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.02em;
+          flex-shrink:0; font-size:var(--dbe-fs-h3); font-weight:600; text-transform:uppercase; letter-spacing:.02em;
           color:#16a34a; background:#dcfce7; border-radius:4px; padding:2px 5px;
         }
         .chart-list-item.used { opacity:0.5; cursor:not-allowed; background:#f8fafc; }

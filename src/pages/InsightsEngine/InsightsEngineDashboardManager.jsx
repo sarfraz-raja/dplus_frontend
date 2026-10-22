@@ -10,8 +10,11 @@ import {
 } from 'lucide-react';
 import Button from '../../components/Button';
 import FormModal from '../../components/FormModal';
+import ConfirmModal from '../../components/ConfirmModal';
 import DataTable from '../../components/DataTable';
 import { listDashboards } from '../../store/actions/dashboardBuilder-actions';
+import { PageTitle } from '../../components/FormPage';
+import ActionButton from '../../components/ActionButton';
 
 // Confirmed via a live POST /dashboards/{id}/data response — the field is `is_published`
 // (a plain boolean), not `status`. Same helper as DashboardBuilder.jsx/EmbeddedDashboard.jsx's isPublished.
@@ -505,28 +508,8 @@ const InsightsEngineDashboardManager = () => {
 
         if (col.key === '_actions') return (
             <span className="flex items-center gap-2">
-                <button
-                    onClick={() => openEdit(row)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                    Edit
-                </button>
-                <button
-                    onClick={() => { setDeleteTarget(row); setDeleteModalOpen(true); }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                        <path d="M10 11v6M14 11v6"/>
-                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                    </svg>
-                    Delete
-                </button>
+                <ActionButton kind="edit" onClick={() => openEdit(row)} />
+                <ActionButton kind="delete" onClick={() => { setDeleteTarget(row); setDeleteModalOpen(true); }} />
             </span>
         );
 
@@ -544,22 +527,12 @@ const InsightsEngineDashboardManager = () => {
 
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div
-                            className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                            style={{ background: 'linear-gradient(135deg, #EC7D09 0%, #f59e0b 100%)' }}
-                        >
-                            <BarChart2 size={20} color="white" strokeWidth={1.8} />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-slate-800 leading-tight">
-                                Insights Engine Dashboard Manager
-                            </h1>
-                            <p className="text-xs text-slate-400 font-medium tracking-wide">
-                                Manage and configure all Insights Engine dashboard entries
-                            </p>
-                        </div>
-                    </div>
+                    {/* OLD icon tile: orange→amber gradient (linear-gradient(135deg, #EC7D09 0%, #f59e0b 100%)) — now the shared navy tile */}
+                    <PageTitle
+                        icon={<BarChart2 strokeWidth={1.8} />}
+                        title="Insights Engine Dashboard Manager"
+                        subtitle="Manage and configure all Insights Engine dashboard entries"
+                    />
                     <Button onClick={openAdd} variant="primary">
                         + Add Dashboard
                     </Button>
@@ -588,37 +561,16 @@ const InsightsEngineDashboardManager = () => {
             </FormModal>
 
             {/* ── Delete Confirmation ── */}
-            <FormModal title="Delete Entry" headerColor="#b91c1c" isOpen={deleteModalOpen} setIsOpen={setDeleteModalOpen}>
-                <div className="flex flex-col items-center gap-3 py-4 text-center">
-                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                            <path d="M10 11v6M14 11v6"/>
-                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                        </svg>
-                    </div>
-                    <p className="text-slate-700 text-sm font-medium">
-                        Delete <strong>{deleteTarget?.title}</strong>?
-                    </p>
-                    <p className="text-xs text-red-400">This action cannot be undone.</p>
-                </div>
-                <div className="flex justify-end gap-3 mt-2">
-                    <button
-                        onClick={() => setDeleteModalOpen(false)}
-                        className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={confirmDelete}
-                        className="px-6 py-2 text-sm font-semibold rounded text-white"
-                        style={{ background: '#b91c1c' }}
-                    >
-                        Delete
-                    </button>
-                </div>
-            </FormModal>
+            <ConfirmModal
+                isOpen={deleteModalOpen}
+                tone="danger"
+                title="Delete Entry"
+                message={<>Delete <strong>{deleteTarget?.title}</strong>?</>}
+                detail="This action cannot be undone."
+                confirmLabel="Delete"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteModalOpen(false)}
+            />
         </>
     );
 };

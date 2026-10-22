@@ -7,6 +7,7 @@ import { objectToQueryString } from '../../../../utils/commonFunnction';
 import { useTheme } from '../../../../context/ThemeContext';
 import DashboardCanvasEditor from '../../dashboard/DashboardCanvasEditor';
 import { KPI_DASHBOARD_LAYOUT, KPI_DASHBOARD_WIDGETS } from './kpiDashboardPreset';
+import Select from '../../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 function rand(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
 
@@ -381,27 +382,27 @@ export default function KpiMonitoringDashboard({ embedded = false, showControls 
         }
         .kpi-reset-btn:hover { opacity:0.9; }
         .kpi-filter-bar { display:flex; flex-wrap:wrap; align-items:center; gap:0.4375rem; margin-bottom:0.875rem; }
-        .kpi-filter-bar select,
-        .kpi-filter-meta select {
+        .kpi-filter-bar select, .kpi-filter-bar .dp-select,
+        .kpi-filter-meta select, .kpi-filter-meta .dp-select {
           -webkit-appearance:none; -moz-appearance:none; appearance:none;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%238b93a7' stroke-width='1.5'%3E%3Cpath d='M5 7l5 5 5-5'/%3E%3C/svg%3E");
           background-repeat:no-repeat; background-position:right 0.5rem center; background-size:0.75rem;
           padding-right:1.5rem;
         }
-        .kpi-filter-bar select {
+        .kpi-filter-bar select, .kpi-filter-bar .dp-select {
           font-size:0.875rem; padding-top:0.375rem; padding-bottom:0.375rem; padding-left:0.625rem; border-radius:var(--border-radius-md);
           border:0.5px solid var(--kpi-border); background-color:var(--kpi-card-bg); color:var(--kpi-text); cursor:pointer;
           width:7.5rem; text-overflow:ellipsis; white-space:nowrap; overflow:hidden;
           color-scheme: light;
         }
         .kpi-filter-meta { display:flex; align-items:center; gap:0.625rem; margin-left:auto; font-size:0.8125rem; color:var(--kpi-text-sub); }
-        .kpi-filter-meta select {
+        .kpi-filter-meta select, .kpi-filter-meta .dp-select {
           font-size:0.8125rem; padding-top:0.25rem; padding-bottom:0.25rem; padding-left:0.5rem; border-radius:var(--border-radius-md);
           border:0.5px solid var(--kpi-border); background-color:var(--kpi-card-bg); color:var(--kpi-text); cursor:pointer;
           color-scheme: light;
         }
-        [data-kpi-theme="dark"] .kpi-filter-bar select,
-        [data-kpi-theme="dark"] .kpi-filter-meta select {
+        [data-kpi-theme="dark"] .kpi-filter-bar select, [data-kpi-theme="dark"] .kpi-filter-bar .dp-select,
+        [data-kpi-theme="dark"] .kpi-filter-meta select, [data-kpi-theme="dark"] .kpi-filter-meta .dp-select {
           color-scheme: dark !important;
           background-color:#22273C !important;
           color:#eef1f6 !important;
@@ -538,7 +539,7 @@ export default function KpiMonitoringDashboard({ embedded = false, showControls 
         .kpi-status-tbl tr:last-child td, .kpi-cells-tbl tr:last-child td { border-bottom:none; }
         .kpi-cells-delta.up { color:var(--kpi-up); } .kpi-cells-delta.down { color:var(--kpi-down); }
         @media (max-width: 40rem) {
-          .kpi-filter-bar select { font-size:0.6875rem; padding:0.3125rem 0.5rem; }
+          .kpi-filter-bar select, .kpi-filter-bar .dp-select { font-size:0.6875rem; padding:0.3125rem 0.5rem; }
           .kpi-filter-meta { margin-left:0; flex-basis:100%; justify-content:space-between; }
 
           /* Fixed % column widths + table-layout:fixed choke at narrow widths (wrapped
@@ -656,28 +657,28 @@ export default function KpiMonitoringDashboard({ embedded = false, showControls 
                 </button>
               )}
 
-              <select value={filters.technology} onChange={(e) => setFilter('technology', e.target.value)}>
+              <Select value={filters.technology} onChange={(e) => setFilter('technology', e.target.value)}>
                 <option value="">All Technology</option>
                 {dynamicFilterOptions.technology.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <select value={filters.region} onChange={(e) => setFilter('region', e.target.value)}>
+              </Select>
+              <Select value={filters.region} onChange={(e) => setFilter('region', e.target.value)}>
                 <option value="">All Regions</option>
                 {dynamicFilterOptions.region.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-              <select value={filters.siteName} onChange={(e) => setFilter('siteName', e.target.value)}>
+              </Select>
+              <Select value={filters.siteName} onChange={(e) => setFilter('siteName', e.target.value)}>
                 <option value="">All Sites</option>
                 {dynamicFilterOptions.siteName.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <select value={filters.cellName} onChange={(e) => setFilter('cellName', e.target.value)}>
+              </Select>
+              <Select value={filters.cellName} onChange={(e) => setFilter('cellName', e.target.value)}>
                 <option value="">All Cells</option>
                 {dynamicFilterOptions.cellName.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+              </Select>
 
               <div className="kpi-filter-meta">
                 <span>Refresh:</span>
-                <select value={refreshRate} onChange={(e) => setRefreshRate(Number(e.target.value))}>
+                <Select value={refreshRate} onChange={(e) => setRefreshRate(Number(e.target.value))}>
                   {REFRESH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                </Select>
                 <span>Updated: {formatUpdatedAt(lastUpdated)}</span>
               </div>
             </div>

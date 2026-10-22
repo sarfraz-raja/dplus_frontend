@@ -6,6 +6,7 @@ import { toast } from "react-hot-toast";
 import { Urls } from "../../utils/url";
 import { getApiErrorMessage } from "../../utils/common";
 import { TELECOM_CONSTANTS } from "./ticketConstants";
+import Button from '../../components/Button';
 
 function EnterpriseTagInput({
   options = [],
@@ -559,13 +560,7 @@ export default function CreateTicketModal({ isOpen, onClose, onSuccess, containe
       contained={contained}
       footer={
         <div className="flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
-            disabled={loading}
-          >
-            Cancel
-          </button>
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={loading}>Cancel</Button>
           <button
             onClick={handleSubmit}
             disabled={loading || loadingSites || loadingCells || loadingUsers}

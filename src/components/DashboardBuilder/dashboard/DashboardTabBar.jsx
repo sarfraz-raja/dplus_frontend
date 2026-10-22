@@ -15,7 +15,13 @@ const nextTabId = () => `tab${Date.now()}_${tabUid++}`;
  * library list, slicers' own backend resource is deleted outright, everything else is fully
  * removed. Widgets with no tabId ("All Tabs") are never touched by a tab delete.
  */
-export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onCopy, editable }) {
+// Underline tabs (option A): one full-width rule under the row, the active tab marked by orange text
+// + a 2px orange underline on that rule, the rest plain slate text. Wraps when there are many tabs. `onDarkCanvas`: the dashboard background is dark (DashboardCanvasEditor's canvasIsDark)
+// → light rule / text. OLD look: separate pill buttons, the active one solid orange.
+// OLD: export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onCopy, editable }) {
+// (Folder tabs joined to a bordered panel — "option B" — were tried 2026-10-21 and dropped in favor of
+// these underline tabs.)
+export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, onRename, onDelete, onCopy, editable, onDarkCanvas = false }) {
   const [editingId, setEditingId] = useState(null);
   const [draftName, setDraftName] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
@@ -50,18 +56,23 @@ export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, on
   const pendingDeleteTab = tabs.find((t) => t.id === pendingDeleteId);
 
   return (
-    <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+    // OLD: <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+    // flex-wrap, not overflow-x-auto: a scroll container would clip the active tab's -1px underline.
+    <div className={`flex flex-wrap items-end gap-x-4 mb-3 border-b ${onDarkCanvas ? 'border-white/15' : 'border-slate-200'}`}>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
         const isEditing = editingId === tab.id;
         return (
           <div
             key={tab.id}
-            className={`group flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
-              isActive
-                ? 'bg-pbutton text-white border-pbutton'
-                : 'bg-white dark:bg-[var(--topbar)] text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700'
-            }`}
+            // OLD: rounded-lg border px-2.5 py-1.5 text-xs pill; active bg-pbutton text-white.
+            className={`group -mb-px flex shrink-0 items-center gap-1 whitespace-nowrap border-b-2 px-1 pt-1 pb-2 text-ui-small font-semibold cursor-pointer transition-colors ${
+                isActive
+                  ? 'border-pbutton text-pbutton'
+                  : onDarkCanvas
+                    ? 'border-transparent text-slate-300 hover:text-white hover:border-white/30'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              }`}
             onClick={() => !isEditing && onSelect(tab.id)}
             onDoubleClick={() => editable && startRename(tab)}
           >
@@ -123,16 +134,21 @@ export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, on
           title="Add tab"
           aria-label="Add tab"
           onClick={handleAdd}
-          className="flex items-center justify-center h-7 w-7 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-slate-400 hover:text-pbutton hover:border-pbutton transition-colors"
+          // OLD: h-7 w-7 dashed-border box — now a ghost icon sitting on the tab row's baseline.
+          className={`mb-1.5 flex items-center justify-center h-6 w-6 rounded-md transition-colors ${onDarkCanvas ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-pbutton hover:bg-slate-100'}`}
         >
           <Plus size={13} />
         </button>
       )}
       <ConfirmModal
         isOpen={!!pendingDeleteId}
-        title="Delete tab?"
-        message={`Delete "${pendingDeleteTab?.name || ''}"? Widgets placed on this tab will be removed from the dashboard (chart library widgets stay in Your Widgets and can be re-added). Widgets shown on All Tabs are unaffected.`}
-        confirmLabel="Delete"
+        // The last tab is only a reference — removing it keeps every widget (see deleteTab in
+        // DashboardCanvasEditor). Any other tab takes its own widgets with it.
+        title={tabs.length === 1 ? 'Remove tabs?' : 'Delete tab?'}
+        message={tabs.length === 1
+          ? `"${pendingDeleteTab?.name || ''}" is the only tab. Removing it turns this back into a single-page dashboard — all its widgets are kept.`
+          : `Delete "${pendingDeleteTab?.name || ''}"? Widgets placed on this tab will be removed from the dashboard (chart library widgets stay in Your Widgets and can be re-added). Widgets shown on All Tabs are unaffected.`}
+        confirmLabel={tabs.length === 1 ? 'Remove tab' : 'Delete'}
         onCancel={() => setPendingDeleteId(null)}
         onConfirm={() => {
           onDelete(pendingDeleteId);

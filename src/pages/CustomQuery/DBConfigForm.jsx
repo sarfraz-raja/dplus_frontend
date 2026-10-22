@@ -150,7 +150,8 @@ import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import CustomQueryActions from '../../store/actions/customQuery-actions';
 import GroupManagementActions from '../../store/actions/groupManagement-actions';
-import FormModal from '../../components/FormModal';
+import ConfirmModal from '../../components/ConfirmModal';
+import Button from '../../components/Button';
 
 const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
 const labelCls = "block text-xs text-slate-500 uppercase tracking-wide mb-1";
@@ -439,13 +440,7 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
 
             {/* Action buttons */}
             <div className="flex justify-end gap-3 mt-6">
-                <button
-                    type="button"
-                    onClick={handleSubmit(onTableViewTest)}
-                    className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                    Test Connection
-                </button>
+                <Button variant="secondary" size="sm" onClick={handleSubmit(onTableViewTest)}>Test Connection</Button>
                 <button
                     type="button"
                     onClick={handleSubmit(onTableViewSubmit)}
@@ -456,42 +451,20 @@ const DBConfigForm = ({ setIsOpen, resetting, formValue = {} }) => {
                 </button>
             </div>
 
-            <FormModal
-                title="Password not entered"
-                headerColor="#b91c1c"
+            <ConfirmModal
                 isOpen={!!confirmBlankPassword}
-                setIsOpen={() => setConfirmBlankPassword(null)}
-            >
-                <div className="flex flex-col items-center gap-3 py-4 px-2 text-center">
-                    <p className="text-slate-700 text-sm font-medium">
-                        You haven't entered a password for this connection.
-                    </p>
-                    <p className="text-xs text-slate-400">
-                        Saving without a password may leave this connection unable to authenticate. Continue anyway?
-                    </p>
-                </div>
-                <div className="flex justify-end gap-3 mt-2">
-                    <button
-                        type="button"
-                        onClick={() => setConfirmBlankPassword(null)}
-                        className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            const data = confirmBlankPassword
-                            setConfirmBlankPassword(null)
-                            submitConfig(data)
-                        }}
-                        className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm"
-                        style={{ background: '#b91c1c' }}
-                    >
-                        Save Anyway
-                    </button>
-                </div>
-            </FormModal>
+                tone="danger"
+                title="Password not entered"
+                message="You haven't entered a password for this connection."
+                detail="Saving without a password may leave this connection unable to authenticate. Continue anyway?"
+                confirmLabel="Save Anyway"
+                onConfirm={() => {
+                    const data = confirmBlankPassword
+                    setConfirmBlankPassword(null)
+                    submitConfig(data)
+                }}
+                onCancel={() => setConfirmBlankPassword(null)}
+            />
 
         </>
     )

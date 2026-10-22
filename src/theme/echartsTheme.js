@@ -36,8 +36,9 @@ function buildTheme(isDark) {
     // Mode-matched tooltip (ECharts' default is always a white box, even in dark mode). Same
     // card surface as surfaceBg() in DashboardBuilder/utils/themedStyle.js.
     tooltip: {
-      backgroundColor: isDark ? '#22273C' : '#ffffff',
-      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+      // OLD: backgroundColor: isDark ? '#22273C' : '#ffffff', borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+      backgroundColor: isDark ? '#131929' : '#ffffff', // --surface-2 (dark) / --surface-1 (light)
+      borderColor: isDark ? '#222a3e' : '#e1e4ee',     // --line
       textStyle: { color: text },
     },
     gauge: {

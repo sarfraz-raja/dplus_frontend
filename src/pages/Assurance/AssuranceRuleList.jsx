@@ -7,6 +7,8 @@ import Button from '../../components/Button';
 import FormModal from '../../components/FormModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import AssuranceActions from '../../store/actions/assurance-actions';
+import { PageTitle } from '../../components/FormPage';
+import ActionButton from '../../components/ActionButton';
 
 const COLUMNS = [
     { label: 'Rule Name',   key: 'rule_name' },
@@ -124,31 +126,9 @@ const AssuranceRuleList = () => {
         }
         if (col.key === '_actions') return (
             <span className="flex items-center gap-2">
-                <button onClick={() => navigate(`/assurance/rules/view/${itm.id}`)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                    </svg>
-                    View
-                </button>
-                <button onClick={() => navigate(`/assurance/rules/edit/${itm.id}`)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                    Edit
-                </button>
-                <button onClick={() => setDeleteTarget(itm)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 hover:border-red-300 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                        <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                    </svg>
-                    Delete
-                </button>
+                <ActionButton tone="neutral" icon={<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"> <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /> <circle cx="12" cy="12" r="3" /> </svg>} onClick={() => navigate(`/assurance/rules/view/${itm.id}`)}>View</ActionButton>
+                <ActionButton kind="edit" onClick={() => navigate(`/assurance/rules/edit/${itm.id}`)} />
+                <ActionButton kind="delete" onClick={() => setDeleteTarget(itm)} />
             </span>
         );
         const val = itm[col.key];
@@ -165,20 +145,11 @@ const AssuranceRuleList = () => {
                 style={{ background: '#ffffff' }}>
 
                 <div className="flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                            style={{ background: '#0b1830' }}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                <line x1="12" y1="9" x2="12" y2="13" />
-                                <line x1="12" y1="17" x2="12.01" y2="17" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-slate-800 leading-tight">Assurance Rules</h1>
-                            <p className="text-xs text-slate-400 font-medium tracking-wide">Intelligent Telecom Assurance — Rule Builder</p>
-                        </div>
-                    </div>
+                    <PageTitle
+                        icon={<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"> <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /> <line x1="12" y1="9" x2="12" y2="13" /> <line x1="12" y1="17" x2="12.01" y2="17" /> </svg>}
+                        title="Assurance Rules"
+                        subtitle="Intelligent Telecom Assurance — Rule Builder"
+                    />
 
                     <div className="flex items-center gap-2">
                         {/* Incidents belong to Assurance (they group a rule's alarms per site). Until the
@@ -203,34 +174,18 @@ const AssuranceRuleList = () => {
                 />
             </div>
 
-            <FormModal title="Disable Rule" headerColor="#b91c1c" isOpen={disableModalOpen} setIsOpen={setDisableModalOpen}>
-                <div className="flex flex-col items-center gap-3 py-4 px-2 text-center">
-                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10" />
-                            <line x1="12" y1="8" x2="12" y2="12" />
-                            <line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                    </div>
-                    <p className="text-slate-700 text-sm font-medium">
-                        Disable "{disableTarget?.rule_name}"?
-                    </p>
-                    <p className="text-xs text-red-500">
-                        This also suppresses every currently non-CLEARED alarm on this rule. Re-enabling it does not reverse that — there is no API to un-suppress them.
-                    </p>
-                </div>
-                <div className="flex justify-end gap-3 mt-2">
-                    <button type="button" onClick={() => setDisableModalOpen(false)}
-                        className="px-5 py-2 text-sm font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
-                        Cancel
-                    </button>
-                    <button type="button" onClick={confirmDisable} disabled={toggling}
-                        className="px-6 py-2 text-sm font-semibold rounded text-white hover:opacity-90 transition-opacity shadow-sm disabled:opacity-60"
-                        style={{ background: '#b91c1c' }}>
-                        {toggling ? 'Disabling...' : 'Disable'}
-                    </button>
-                </div>
-            </FormModal>
+            <ConfirmModal
+                isOpen={disableModalOpen}
+                tone="danger"
+                title="Disable Rule"
+                message={<>Disable "{disableTarget?.rule_name}"?</>}
+                detail="This also suppresses every currently non-CLEARED alarm on this rule. Re-enabling it does not reverse that — there is no API to un-suppress them."
+                confirmLabel="Disable"
+                busy={toggling}
+                busyLabel="Disabling…"
+                onConfirm={confirmDisable}
+                onCancel={() => setDisableModalOpen(false)}
+            />
 
             <ConfirmModal
                 isOpen={!!deleteTarget}

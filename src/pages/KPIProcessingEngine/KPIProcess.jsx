@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import DataTable from '../../components/DataTable';
 import Api from '../../utils/api';
 import { Urls } from '../../utils/url';
+import { PageTitle } from '../../components/FormPage';
 
 const COLUMNS = [
     { label: 'ID',             key: 'id'            },
@@ -91,19 +92,12 @@ const KPIProcess = () => {
         <div className="flex flex-col h-[calc(100vh-4rem)] p-5 gap-4" style={{ background: '#ffffff' }}>
 
             {/* ── Header ── */}
-            <div className="flex items-center gap-3 shrink-0">
-                <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                    style={{ background: '#0b1830' }}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-                    </svg>
-                </div>
-                <div>
-                    <h1 className="text-xl font-bold text-slate-800 leading-tight">KPI Process</h1>
-                    <p className="text-xs text-slate-400 font-medium tracking-wide">Monitor KPI processing job history and status</p>
-                </div>
+            <div className="shrink-0">
+                <PageTitle
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
+                    title="KPI Process"
+                    subtitle="Monitor KPI processing job history and status"
+                />
             </div>
 
             {/* ── Body ── */}

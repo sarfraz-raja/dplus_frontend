@@ -1,6 +1,6 @@
 import { FONT_FAMILY_OPTIONS } from '../../../theme/tokens';
 import { POSITION_OPTIONS } from '../../Widgets/titlePositions';
-import { CARD_BORDER_FIELDS, DASHBOARD_ANIMATION_FIELDS } from '../widgetConfig/widgetTypeRegistry';
+import { CARD_BORDER_FIELDS, DASHBOARD_ANIMATION_FIELDS, SHOW_AXIS_TITLES_FIELD } from '../widgetConfig/widgetTypeRegistry';
 
 // Phase 19 — dashboard-level style defaults, rendered via the same generic WidgetStyleFields
 // renderer every widget's own per-instance style already uses (no new mechanism). Shared
@@ -13,6 +13,12 @@ const DASHBOARD_STYLE_FIELDS = [
   // Canvas-level background (the dashboard's own page background) — distinct from `bgColor`
   // below, which is each individual widget card's background.
   { key: 'dashboardBgColor', label: 'Dashboard background color', type: 'color', default: null },
+  // Optional two-stop gradient for the same canvas (135°, like widget cards); wins over the color
+  // above when either stop is set — a missing stop falls back to that color / white.
+  // Style keys only — not the `dashboardBgGradientFrom` local alias in resolveWidgetProps (that one is
+  // the WIDGET gradient's dashboard-level fallback, read from `bgGradientFrom`).
+  { key: 'dashboardBgGradientFrom', label: 'Dashboard background gradient from', type: 'color', default: null },
+  { key: 'dashboardBgGradientTo', label: 'Dashboard background gradient to', type: 'color', default: null },
   { key: 'bgColor', label: 'Widget background color', type: 'color', default: null },
   // Two-stop gradient, mutually exclusive with bgColor above (gradient wins if set) — same
   // key names as each widget type's own bgGradientFrom/bgGradientTo styleFields
@@ -44,8 +50,15 @@ const DASHBOARD_STYLE_FIELDS = [
   { key: 'headerTextColor', label: 'Table header text color', type: 'color', default: null, contrastBg: 'headerBgColor' },
   { key: 'bandColor', label: 'Table band color', type: 'color', default: null, hint: 'Alternating rows only — other rows show the widget background.' },
   { key: 'bandTextColor', label: 'Table band text color', type: 'color', default: null, contrastBg: 'bandColor' },
+  // Table grid — same keys as the TABLE chart's own Grid fields; null = each table's own setting.
+  { key: 'tableFrame', label: 'Table frame', type: 'select', default: null, options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] },
+  { key: 'gridLines', label: 'Table grid lines', type: 'select', default: null, options: [{ value: 'rows', label: 'Rows' }, { value: 'rows-columns', label: 'Rows + columns' }, { value: 'none', label: 'None' }] },
+  { key: 'gridColor', label: 'Table grid line color', type: 'color', default: null },
   // The dashboard's own title heading, rendered above the widget grid — distinct from each
   // widget's own title styled above.
+  // Show / hide the dashboard's own title on the canvas. `default: null` = inherit (Theme → shown), so a
+  // dashboard can follow its Theme or set its own; the switch sits in the Dashboard Title section header.
+  { key: 'showDashboardTitle', label: 'Dashboard title', type: 'select', default: null, options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
   { key: 'dashboardTitleColor', label: 'Dashboard title color', type: 'color', default: null },
   { key: 'dashboardTitleWeight', label: 'Dashboard title weight', type: 'select', default: 'bold', options: [{ value: 'normal', label: 'Normal' }, { value: 'bold', label: 'Bold' }] },
   { key: 'dashboardTitleSize', label: 'Dashboard title size (px)', type: 'number', default: null, min: 12, max: 48 },
@@ -65,6 +78,8 @@ const DASHBOARD_STYLE_FIELDS = [
   { key: 'axisTextWeight', label: 'Axis text weight', type: 'select', default: 'normal', options: [{ value: 'normal', label: 'Normal' }, { value: 'medium', label: 'Medium' }, { value: 'semibold', label: 'Semibold' }, { value: 'bold', label: 'Bold' }] },
   { key: 'axisTextSize', label: 'Axis text size (px)', type: 'number', default: null, min: 8, max: 24 },
   { key: 'axisTextFont', label: 'Axis text font', type: 'select', default: '', options: FONT_FAMILY_OPTIONS },
+  // Hide every chart's axis titles at once — same key as each chart's own Axis titles field.
+  SHOW_AXIS_TITLES_FIELD,
   // Same key as each widget type's own valueDecimals styleField (widgetTypeRegistry.js's
   // VALUE_DECIMALS_FIELD) — rounds every displayed value (KPI Card number, gauge %, tooltip
   // values, bar/pie/funnel/waterfall value labels) to this many decimal places by default.

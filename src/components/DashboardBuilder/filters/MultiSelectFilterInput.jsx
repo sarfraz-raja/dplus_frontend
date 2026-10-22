@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import FloatingPanel from '../../FloatingPanel';
 import { Search, Check, X } from 'lucide-react';
 
 /**
@@ -22,14 +23,8 @@ export default function MultiSelectFilterInput({ options = [], value = [], onCha
   const [search, setSearch] = useState('');
   const ref = useRef(null);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onClickOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, [open]);
+  // OLD: own outside-click listener + an absolute list — clipped inside the Filters popover / any
+  // scrolling panel. The list is now the shared FloatingPanel, which handles outside clicks itself.
 
   useEffect(() => {
     if (!open) setSearch('');
@@ -70,8 +65,7 @@ export default function MultiSelectFilterInput({ options = [], value = [], onCha
         )}
         <Search size={12} className="ml-auto shrink-0 text-slate-400" />
       </div>
-      {open && (
-        <div className="absolute z-20 mt-1 w-56 max-h-64 bg-white border border-slate-200 rounded-lg shadow-lg flex flex-col">
+      <FloatingPanel anchorRef={ref} open={open} onClose={() => setOpen(false)} minWidth={224} maxHeight={256}>
           <div className="p-1.5 border-b border-slate-100 shrink-0">
             <input
               autoFocus
@@ -98,8 +92,7 @@ export default function MultiSelectFilterInput({ options = [], value = [], onCha
               </button>
             ))}
           </div>
-        </div>
-      )}
+      </FloatingPanel>
     </div>
   );
 }

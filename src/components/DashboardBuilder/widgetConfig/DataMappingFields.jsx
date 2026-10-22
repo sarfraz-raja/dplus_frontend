@@ -1,6 +1,7 @@
 import React from 'react';
 import { QUERY_ROLES_BY_DATA_SHAPE } from '../utils/queryRoles';
 import ColumnMultiSelect from '../ColumnMultiSelect';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 /**
  * Generic per-widget data-mapping form — driven entirely by the selected widget's
@@ -60,19 +61,19 @@ export default function DataMappingFields({ dataShape, columns = [], value = {},
           <React.Fragment key={r.key}>
             <label>
               {r.label}{r.optional ? ' (optional)' : ''}
-              <select value={value[r.key] || ''} onChange={(e) => setRole(r.key, e.target.value)}>
+              <Select value={value[r.key] || ''} onChange={(e) => setRole(r.key, e.target.value)}>
                 <option value="">{r.optional ? 'None' : 'Select a column…'}</option>
                 {options.map((c) => (
                   <option key={c.column_name} value={c.column_name}>{c.display_name || c.column_name}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             {r.role === 'measure' && value[r.key] && (
               <label>
                 {r.label} aggregation
-                <select value={value[`${r.key}Aggregation`] || 'SUM'} onChange={(e) => setAggregation(r.key, e.target.value)}>
+                <Select value={value[`${r.key}Aggregation`] || 'SUM'} onChange={(e) => setAggregation(r.key, e.target.value)}>
                   {['SUM', 'AVG', 'COUNT', 'MIN', 'MAX'].map((agg) => <option key={agg} value={agg}>{agg}</option>)}
-                </select>
+                </Select>
               </label>
             )}
           </React.Fragment>
@@ -84,13 +85,13 @@ export default function DataMappingFields({ dataShape, columns = [], value = {},
           <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>Filters</div>
           {filters.map((f, i) => (
             <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
-              <select value={f.column} onChange={(e) => updateFilter(i, { column: e.target.value })} style={{ flex: 1 }}>
+              <Select value={f.column} onChange={(e) => updateFilter(i, { column: e.target.value })} style={{ flex: 1 }}>
                 <option value="">Column…</option>
                 {filterableCols.map((c) => <option key={c.column_name} value={c.column_name}>{c.display_name || c.column_name}</option>)}
-              </select>
-              <select value={f.op} onChange={(e) => updateFilter(i, { op: e.target.value })} style={{ width: 60 }}>
+              </Select>
+              <Select value={f.op} onChange={(e) => updateFilter(i, { op: e.target.value })} style={{ width: 60 }}>
                 {['=', '!=', '>', '<', '>=', '<='].map((op) => <option key={op} value={op}>{op}</option>)}
-              </select>
+              </Select>
               <input type="text" value={f.value} onChange={(e) => updateFilter(i, { value: e.target.value })} placeholder="Value" style={{ flex: 1 }} />
               <button type="button" onClick={() => removeFilter(i)} style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14 }}>×</button>
             </div>

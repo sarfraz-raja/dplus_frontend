@@ -8,6 +8,7 @@ import { buildAxisTitle, gridMarginForVerticalTitle } from './axisTitle';
 import { resolveCustomTickFormatter, toAxisTimeValue, buildCustomTimeTicks, resolveTruncatedBounds } from '../DashboardBuilder/charts/axisTypeUtils';
 import { surfaceBg } from '../DashboardBuilder/utils/themedStyle';
 import { useChartAnimation, useRiseEntrance } from '../DashboardBuilder/utils/chartAnimation';
+import { formatAxisValue, yAxisSplitNumber, gridLineOption } from './chartStyleHelpers';
 
 /**
  * Small single-series line+area chart for a card, e.g. "DL Throughput (Mbps)". Despite the
@@ -18,7 +19,7 @@ import { useChartAnimation, useRiseEntrance } from '../DashboardBuilder/utils/ch
  */
 export default function LineAreaChart({
   title = '', unit = '', data = [], color = '#378ADD', height = 90, isDark: isDarkProp = null,
-  titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, valueTextColor = null, valueTextSize = null,
+  titleColor = null, bgColor = null, bgGradient = null, titleWeight = null, titleSize = null, titleFont = null, titleBgColor = null, valueTextColor = null, valueTextSize = null,
   axisTextColor = null, axisTextSize = null, axisTextWeight = null, axisTextFont = null,
   titlePosition = 'top-left', valuePosition = 'top-right', onPointClick = null, onPointContextMenu = null, categoryAxisLabel = null,
   isTimeAxis = false, valueAxisLabel = null, dateFormat = undefined, tickInterval = undefined,
@@ -26,6 +27,8 @@ export default function LineAreaChart({
   // Optional multi-series grouping (mapping.series) — see BarChart.jsx's identical block for
   // the full rationale; `data`/`color` are ignored in this mode.
   categories = null, series = null, showLegend = true, seriesColors = null, palette = null, showDataPoints = true, seriesOpacity = null,
+  // Style → Axis: grid lines / Y-axis density (chartStyleHelpers.js; unset = the original look).
+  showGridLines = null, yAxisTicks = null,
 }) {
   const { theme } = useTheme();
   // Style → Animation settings (dashboard/Charts-tab provider; none elsewhere = ECharts defaults).
@@ -94,7 +97,8 @@ export default function LineAreaChart({
     yAxis: {
       type: 'value',
       scale: true,
-      splitNumber: 2,
+      splitNumber: yAxisSplitNumber(yAxisTicks),
+      ...gridLineOption(showGridLines),
       // Explicit axis bounds ("Truncate Y Axis" — a Data-tab mapping field, see
       // TRUNCATE_Y_AXIS_FIELD in ChartLibrary.jsx, not a style/cosmetic one) — clips the axis
       // to a fixed range instead of auto-scaling to the data, same as Superset's own Min/Max.
@@ -108,7 +112,7 @@ export default function LineAreaChart({
       axisLabel: {
         fontSize: axisTextSize || 8,
         color: axisTextColor || undefined, fontWeight: FONT_WEIGHT_CSS[axisTextWeight], fontFamily: axisTextFont || undefined,
-        formatter: (v) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : v),
+        formatter: formatAxisValue,
       },
     },
     tooltip: { trigger: 'axis', valueFormatter: (v) => `${v} ${unit}` },
@@ -173,13 +177,18 @@ export default function LineAreaChart({
           already had — vertical position ("top-"/"mid-"/"bottom-") no longer applies since
           this row is always at the top now, so it's dropped, not read from titlePosition. */}
       {title && (
-        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ height: 20 }}>
+        <div className="shrink-0 px-2.5 pt-1.5 pb-0.5" style={{ minHeight: Math.max(20, Math.ceil((titleSize || 12) * 1.35) + 10), background: titleBgColor || undefined }}>
           <span
             className="kpi-spark-title font-bold text-[0.6875rem] block truncate"
             style={{
               color: titleColor || subColor,
               fontWeight: titleWeight === 'bold' ? 700 : titleWeight === 'normal' ? 400 : undefined,
               fontSize: titleSize ? `${titleSize}px` : undefined,
+              // `text-xs` (below) bakes in a fixed 16px line-height — with fontSize overridden
+              // larger, the glyph still rendered inside that 16px line box and got clipped by
+              // the card's own overflow-hidden (the crop was in the line-height, not the row's
+              // own height, which the row-height fix above didn't touch).
+              lineHeight: titleSize ? 1.3 : undefined,
               fontFamily: titleFont || undefined,
               textAlign: POSITION_TEXT_ALIGN[titlePosition] || 'left',
             }}

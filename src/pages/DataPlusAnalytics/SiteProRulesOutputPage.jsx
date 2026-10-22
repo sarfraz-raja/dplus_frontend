@@ -13,6 +13,8 @@ import Modal from '../../components/Modal';
 import DataTable from '../../components/DataTable';
 import ProRulesForm from '../ProRules/ProRulesForm';
 import { GET_PRO_RULES_OUTPUT } from '../../store/reducers/nokiaPrePost-reducer';
+import { PageTitle } from '../../components/FormPage';
+import ActionButton from '../../components/ActionButton';
 
 const FILTERS = ['All', '5G', '4G', '3G', '2G'];
 
@@ -151,16 +153,7 @@ const SiteProRulesOutputPage = () => {
         }
 
         if (col.key === '_actions') return (
-            <button
-                onClick={() => openEdit(row)}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-                Edit
-            </button>
+            <ActionButton kind="edit" onClick={() => openEdit(row)} />
         );
 
         const val = row[col.key];
@@ -175,19 +168,11 @@ const SiteProRulesOutputPage = () => {
             >
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md shrink-0"
-                            style={{ background: '#0b1830' }}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                                <polyline points="9 22 9 12 15 12 15 22"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-slate-800 leading-tight">Site Pro Rules</h1>
-                            <p className="text-xs text-slate-400 font-medium tracking-wide">Real-time rule output per site</p>
-                        </div>
-                    </div>
+                    <PageTitle
+                        icon={<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"> <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/> <polyline points="9 22 9 12 15 12 15 22"/> </svg>}
+                        title="Site Pro Rules"
+                        subtitle="Real-time rule output per site"
+                    />
 
                     {/* ── Form controls ── */}
                     <div className="flex items-end gap-3">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Search } from 'lucide-react';
 import CHART_TYPE_META from './chartTypeMeta';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 /**
  * The search-by-name + filter-by-type row shown above a chart list — paired with
@@ -10,10 +11,14 @@ import CHART_TYPE_META from './chartTypeMeta';
  * (type segment | divider | text input | search icon) rather than two separate boxes sitting
  * next to each other with a gap — reads as a single combined control, not two unrelated ones.
  */
-export default function ChartListSearchBar({ search, onSearchChange, typeFilter, onTypeFilterChange, typeOptions }) {
+// `flat`: no rounded pill border — a full-width strip attached under a header bar (Your Widgets panel).
+export default function ChartListSearchBar({ search, onSearchChange, typeFilter, onTypeFilterChange, typeOptions, flat = false }) {
   return (
-    <div className="flex items-center flex-1 min-w-0 rounded-lg border border-slate-200 bg-white overflow-hidden focus-within:border-slate-300">
-      <select
+    <div className={flat
+      ? 'flex items-center flex-1 min-w-0 bg-white'
+      : 'flex items-center flex-1 min-w-0 rounded-lg border border-slate-200 bg-white overflow-hidden focus-within:border-slate-300'}
+    >
+      <Select
         value={typeFilter}
         onChange={(e) => onTypeFilterChange(e.target.value)}
         className="shrink-0 w-[92px] pl-2.5 pr-1 py-1.5 border-0 border-r border-slate-200 bg-transparent text-xs text-slate-600 focus:outline-none"
@@ -22,7 +27,7 @@ export default function ChartListSearchBar({ search, onSearchChange, typeFilter,
         {typeOptions.map((t) => (
           <option key={t} value={t}>{CHART_TYPE_META[t]?.label || t}</option>
         ))}
-      </select>
+      </Select>
       <input
         type="text"
         value={search}

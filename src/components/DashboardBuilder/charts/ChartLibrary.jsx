@@ -1,6 +1,6 @@
 import React, { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Plus, Play, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, LayoutGrid, Settings2, Palette, AlertTriangle, BarChart3 } from 'lucide-react';
+import { Plus, Play, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, LayoutGrid, Settings2, Palette, AlertTriangle, BarChart3, RotateCcw } from 'lucide-react';
 import MappingFields from './MappingFields';
 import { measureKey } from './renderChartWidget';
 import AdvancedSqlFields from './AdvancedSqlFields';
@@ -14,7 +14,7 @@ import ChartListItem from './ChartListItem';
 import ChartStylePicker from './ChartStylePicker';
 import ChartListSearchBar from './ChartListSearchBar';
 import useChartListFilter from './useChartListFilter';
-import { chartLibraryStyleFieldsFor } from '../widgetConfig/widgetTypeRegistry';
+import { chartLibraryStyleFieldsFor, chartTextSizeDefaults, chartColorDefaults } from '../widgetConfig/widgetTypeRegistry';
 import { exportRowsCSV } from '../utils/exportUtils';
 import ChartLibraryWidgetView from './ChartLibraryWidgetView';
 import { ANIMATION_KEYS, ChartAnimationContext, resolveAnimation, cardEntrance } from '../utils/chartAnimation';
@@ -39,6 +39,7 @@ import { subscribeWidgetsChanged, notifyWidgetsChanged } from '../../../store/ac
 import { sortWidgetsByRecency, withDatasourceOnly } from './sortWidgets';
 import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
 import { DEFAULT_TIME_AXIS_FORMAT, TIME_AXIS_FORMAT_OPTIONS, DEFAULT_TICK_INTERVAL_UNIT, TICK_INTERVAL_UNIT_MAX } from './axisTypeUtils';
+import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
 // Phase A — merges a saved metric into the SAME `columns` array the measure/dimension pickers
 // already read (see loadColumnsFor below), rather than a separate list the picker would need
@@ -330,6 +331,13 @@ function buildAxisFields(xLabel = 'Dimension', yLabel = 'Measure', showTitles = 
   ];
 }
 
+// Big Number steps 2 and 4: shown in place of their settings until step 1 has a Date column.
+const bnNeedsDateNote = (key, what) => ({
+  key, type: 'note', optional: true,
+  text: `Pick a Date column in step 1 to ${what}.`,
+  showIf: (m) => !m.date_filter_column,
+});
+
 const CHART_TYPE_FIELDS = {
   LINE: [...buildAxisFields('Dimension', 'Measure', true, true, true, true), DRILL_DOWN_FIELD],
   BAR: [...buildAxisFields('Dimension', 'Measure', true, true, true, true), DRILL_DOWN_FIELD],
@@ -356,11 +364,21 @@ const CHART_TYPE_FIELDS = {
     { key: 'bn_number_group', label: '1 · What number?', type: 'group', fields: [
       { key: 'y_axis', label: 'Measure', type: 'column', role: 'measure' },
       SINGLE_VALUE_AGG_FIELD,
-      { ...SINGLE_VALUE_DATE_FILTER_GROUP.fields[0], label: 'Date column' },
-      { ...SINGLE_VALUE_DATE_FILTER_GROUP.fields[1], label: 'Period' },
+      { ...SINGLE_VALUE_DATE_FILTER_GROUP.fields[0], label: 'Date column', emptyLabel: 'None (all data)' },
+      // A Period only means something once there's a date column to apply it to — hidden
+      // until then (and cleared when the column is, see onMappingChange).
+      { ...SINGLE_VALUE_DATE_FILTER_GROUP.fields[1], label: 'Period', showIf: (m) => !!m.date_filter_column },
       { key: 'subtitle', label: 'Subtitle (optional)', type: 'text', optional: true, placeholder: 'e.g. All regions, last 24 hours' },
     ] },
-    { ...SINGLE_VALUE_COMPARISON_GROUP, key: 'bn_compare_group', label: '2 · Compare to' },
+    // Steps 2 and 4 need a date column: until one is picked their settings hide and a note says
+    // why (BN_NEEDS_DATE_NOTE), instead of offering options that would silently do nothing.
+    { ...SINGLE_VALUE_COMPARISON_GROUP, key: 'bn_compare_group', label: '2 · Compare to', fields: [
+      bnNeedsDateNote('bn_compare_note', 'compare against a previous period'),
+      ...SINGLE_VALUE_COMPARISON_GROUP.fields.map((f) => ({
+        ...f,
+        showIf: (m, cols) => !!m.date_filter_column && (!f.showIf || f.showIf(m, cols)),
+      })),
+    ] },
     { key: 'bn_goal_group', label: '3 · Is higher better?', type: 'group', fields: [
       {
         key: 'higher_is_better', label: 'Direction', type: 'select', options: ['Higher is better', 'Lower is better'], default: 'Higher is better',
@@ -370,9 +388,13 @@ const CHART_TYPE_FIELDS = {
       { key: 'target_warn', label: 'Warning target (optional)', type: 'number', optional: true, placeholder: 'none', showIf: (m) => m.target_good !== undefined && m.target_good !== null && m.target_good !== '' },
     ] },
     { key: 'bn_trend_group', label: '4 · Show trend', type: 'group', fields: [
+      bnNeedsDateNote('bn_trend_note', 'draw a trend line'),
       {
-        key: 'show_trend', label: 'Trend line', type: 'select', options: ['Off', 'On'], default: 'Off',
-        hint: 'Draws how this number moved over the period, under the number. Needs a Date column in step 1 (and a Period other than Latest).',
+        // Default On — an untouched select isn't saved, so "unset" must mean On everywhere it's
+        // read (wantsBigNumberTrend, renderChartWidget); only an explicit 'Off' turns it off.
+        key: 'show_trend', label: 'Trend line', type: 'select', options: ['On', 'Off'], default: 'On',
+        hint: 'Draws how this number moved over the period, under the number. Not available with Period "Latest" (a single moment).',
+        showIf: (m) => !!m.date_filter_column,
       },
     ] },
   ],
@@ -555,6 +577,10 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     markDirty();
   };
   const [dirty, setDirty] = useState(false); // unsaved changes since last successful save
+  // Style as last loaded/saved — the Style tab's "Edited" badges compare against it. Follows the
+  // chart while it's clean (load / save / new all clear `dirty`), freezes at the first edit.
+  const savedStyleRef = useRef(mapping.style);
+  if (!dirty) savedStyleRef.current = mapping.style;
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -573,6 +599,21 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // Big Number's trend line — [{ x, y }] from a second, LINE-shaped query (see
   // runQueryAndComparison), or null when off/unavailable.
   const [previewTrend, setPreviewTrend] = useState(null);
+  // Keeps Big Number's mapping marker in step with the picked type, whatever path changed
+  // either one — e.g. picking a datasource resets the mapping to {} (onDatasourceChange), which
+  // used to drop the marker while the editor still showed Big Number, so it saved as a plain
+  // KPI Card. Removes a stray marker when the type isn't Big Number.
+  useEffect(() => {
+    const isBigNumber = chartType === 'BIG_NUMBER';
+    if (isBigNumber && mapping.kpi_variant !== BIG_NUMBER_VARIANT) {
+      setMapping((prev) => ({ ...prev, kpi_variant: BIG_NUMBER_VARIANT }));
+    } else if (!isBigNumber && mapping.kpi_variant) {
+      setMapping((prev) => {
+        const { kpi_variant: _drop, ...rest } = prev;
+        return rest;
+      });
+    }
+  }, [chartType, mapping.kpi_variant]);
   // True once a Preview has actually succeeded at least once for the widget currently loaded
   // — gates the auto-refresh effect below so it never fires before the user's first explicit
   // Preview click (a brand-new/unconfigured widget has nothing worth auto-running yet), but
@@ -586,16 +627,27 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // clobbering the newer one.
   const previewRequestIdRef = useRef(0);
 
+  // Resolves to the fetched list (undefined on failure) so it can be handed to other list
+  // holders with notifyWidgetsChanged instead of each refetching it (see widgetEvents.js).
   const refreshList = async () => {
     setListLoading(true);
     setListError(null);
     try {
-      setWidgets(await listWidgets());
+      const list = await listWidgets();
+      setWidgets(list);
+      return list;
     } catch (err) {
       setListError(err.message);
+      return undefined;
     } finally {
       setListLoading(false);
     }
+  };
+  // This component's token for widgetEvents — lets it ignore its own notifications.
+  const widgetEventsSourceRef = useRef(Symbol('ChartLibrary'));
+  const refreshAndNotify = async () => {
+    const list = await refreshList();
+    notifyWidgetsChanged({ source: widgetEventsSourceRef.current, list });
   };
 
   useEffect(() => {
@@ -615,7 +667,10 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // "Your Charts" panel keeps its own separate list cache, live at the same time this one is
   // (mounted-but-hidden, not unmounted). Without this, a widget created/edited/deleted/
   // duplicated from THERE never showed up here until this tab was manually revisited/remounted.
-  useEffect(() => subscribeWidgetsChanged(() => { refreshList(); }), []);
+  useEffect(() => subscribeWidgetsChanged(({ source, list }) => {
+    if (source === widgetEventsSourceRef.current) return; // our own change — already refreshed
+    if (list) setWidgets(list); else refreshList();
+  }), []);
 
   // Drag-to-resize — listeners only attached while a drag is actually in progress (not on
   // every render) so mousemove doesn't fire into a stale closure once the drag ends. Delta is
@@ -801,9 +856,15 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     // Big Number trend line — not awaited, so the number and its comparison never wait on it.
     setPreviewTrend(null);
     if (wantsBigNumberTrend(mappingArg) && datasourceIdArg) {
+      // Too few points shows as a caption on the card itself (BigNumberCard), here and on
+      // dashboards alike; a failed query is only reported here in the editor.
       fetchBigNumberTrend({ datasourceId: datasourceIdArg, mapping: mappingArg, filters, quiet: true })
-        .then((points) => { if (previewRequestIdRef.current === requestId) setPreviewTrend(points); })
-        .catch(() => { /* optional extra — the card just shows no trend line */ });
+        .then((points) => {
+          if (previewRequestIdRef.current === requestId) setPreviewTrend(points);
+        })
+        .catch((err) => {
+          if (previewRequestIdRef.current === requestId) toast.error(`Trend line couldn't load: ${err.message}`);
+        });
     }
 
     const isLatestCustom = mappingArg.compare_to === 'Custom' && mappingArg.date_filter_range === 'Latest';
@@ -1024,6 +1085,15 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       if (key === 'date_filter_range' && val !== 'Latest' && prev.date_filter_range === 'Latest' && next.compare_to === 'Custom') {
         delete next.compare_custom_date;
       }
+      // Big Number hides Period until a Date column is picked — clearing the column clears the
+      // now-hidden Period too, so a stale 'Latest' can't be saved without its column (which the
+      // backend rejects). Plain KPI Cards are left exactly as before.
+      if (prev.kpi_variant === BIG_NUMBER_VARIANT && key === 'date_filter_column' && !val) {
+        delete next.date_filter_range;
+        // Same for the now-hidden Compare to — left behind it would shift the dashboard's own
+        // date filter on the canvas instead of this card's (there's no card period any more).
+        ['compare_to', 'compare_custom_date', 'compare_custom_from', 'compare_custom_to', 'delta_format'].forEach((k) => { delete next[k]; });
+      }
       // Phase B — switching the measure to a Custom SQL expression (see MappingFields.jsx's
       // 'Use custom SQL' toggle): the expression is already a self-contained aggregate (backend:
       // "applied as-is — no extra aggregation is layered on top"), so a leftover
@@ -1092,11 +1162,10 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       setEditingId(widget.id);
     }
     setDirty(false);
-    await refreshList();
     // Covers create, update, AND Preview's own implicit first-save (runPreview always routes
     // through this) in one place — DashboardCanvasEditor.jsx's "Your Charts" panel picks this
-    // up via its own subscribeWidgetsChanged listener.
-    notifyWidgetsChanged();
+    // up via its own subscribeWidgetsChanged listener (using the list fetched here).
+    await refreshAndNotify();
     return widget;
   };
 
@@ -1222,8 +1291,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setDeleteError(null);
     try {
       await deleteWidget(editingId);
-      await refreshList();
-      notifyWidgetsChanged();
+      await refreshAndNotify();
       resetForm();
     } catch (err) {
       setDeleteError(err.message);
@@ -1247,8 +1315,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     run: async () => {
       try {
         await deleteWidget(widget.id);
-        await refreshList();
-        notifyWidgetsChanged();
+        await refreshAndNotify();
         if (editingId === widget.id) resetForm();
       } catch (err) {
         setSaveError(err.message);
@@ -1262,8 +1329,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   const duplicateFromList = async (widget) => {
     try {
       await duplicateWidget(widget.id);
-      await refreshList();
-      notifyWidgetsChanged();
+      await refreshAndNotify();
     } catch (err) {
       setSaveError(err.message);
     }
@@ -1380,6 +1446,10 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           style={{
             ...(resolveStyleForMode(mapping.style, isDark) || {}),
             bgColor: resolveStyleForMode(mapping.style, isDark)?.bgColor || resolvedBgColor,
+            // Same 'normal' default the dashboard applies (TITLE_TEXT_STYLE_FIELDS' titleWeight,
+            // filled by resolveWidgetStyle there) — unset, the chart components' own bold class
+            // won here, so a title read bold in this preview but normal once placed.
+            titleWeight: mapping.style?.titleWeight || 'normal',
             donut: mapping.style?.donut === 'donut',
             showLegend: mapping.style?.showLegend !== 'hide',
             showDataPoints: mapping.style?.showDataPoints !== 'hide',
@@ -1473,44 +1543,14 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {prefill && (
-            <button
-              type="button"
-              onClick={saveForDashboard}
-              disabled={!canSave || running}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 disabled:opacity-50"
-            >
-              {running ? (runStatus || 'Saving…') : 'Save & add to dashboard'}
-            </button>
-          )}
-          {editingId && dirty && !saving && (
-            <span className="text-xs text-amber-600">Unsaved changes</span>
-          )}
-          {onCancel && (
-            <button
-              type="button"
-              onClick={() => guardedRun(onCancel, 'Discard unsaved changes and leave without saving? This can\'t be undone.')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-          )}
+          {/* OLD order: Cancel · Save · Preview · Delete · New widget. Now the same order as the dashboard
+              editor's toolbar: tools first, then Cancel, the primary Save last (far right). */}
           <button
             type="button"
-            onClick={saveOnly}
-            disabled={!canSave || saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#EC7D09] disabled:opacity-50"
+            onClick={handleNewWidgetClick}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#EC7D09] border border-[#EC7D09]/30 bg-white hover:bg-orange-50"
           >
-            {saving ? 'Saving…' : returnToDashboard ? 'Save & return to dashboard' : 'Save'}
-          </button>
-          <button
-            type="button"
-            onClick={() => runPreview(false)}
-            disabled={!canSave || running}
-            title={!canSave ? 'Finish configuring the chart first' : undefined}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
-          >
-            <Play size={12} /> {running ? (runStatus || 'Running…') : 'Preview'}
+            <Plus size={12} /> New widget
           </button>
           {editingId && !confirmingDelete && (
             <button
@@ -1559,10 +1599,42 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           })()}
           <button
             type="button"
-            onClick={handleNewWidgetClick}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#EC7D09] border border-[#EC7D09]/30 bg-white hover:bg-orange-50"
+            onClick={() => runPreview(false)}
+            disabled={!canSave || running}
+            title={!canSave ? 'Finish configuring the chart first' : undefined}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
           >
-            <Plus size={12} /> New widget
+            <Play size={12} /> {running ? (runStatus || 'Running…') : 'Preview'}
+          </button>
+          {editingId && dirty && !saving && (
+            <span className="text-xs text-amber-600">Unsaved changes</span>
+          )}
+          {onCancel && (
+            <button
+              type="button"
+              onClick={() => guardedRun(onCancel, 'Discard unsaved changes and leave without saving? This can\'t be undone.')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+          )}
+          {prefill && (
+            <button
+              type="button"
+              onClick={saveForDashboard}
+              disabled={!canSave || running}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 disabled:opacity-50"
+            >
+              {running ? (runStatus || 'Saving…') : 'Save & add to dashboard'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={saveOnly}
+            disabled={!canSave || saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#EC7D09] disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : returnToDashboard ? 'Save & return to dashboard' : 'Save widget'}
           </button>
         </div>
       </div>
@@ -1659,7 +1731,13 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           type="button"
           onClick={() => setPanelCollapsed((c) => !c)}
           title={panelCollapsed ? 'Expand' : 'Collapse'}
-          className="absolute -left-3 top-0 w-[22px] h-[22px] rounded-md border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-[#EC7D09] hover:border-[#EC7D09] transition-colors z-30 shadow-sm"
+          aria-label={panelCollapsed ? 'Expand panel' : 'Collapse panel'}
+          // OLD: absolute -left-3 top-0 w-[22px] h-[22px] — sat half outside the panel, whose
+          // overflow-x-hidden clipped it. Now inside the panel's 20px left gutter (pl-5), centred
+          // on the Data/Style/Charts tab row.
+          // Same look as the dashboard list's collapse toggle (pages/DashboardBuilder.jsx): a plain chevron,
+          // no circle/border. OLD: rounded-full bordered 18px badge with a bold 12px chevron.
+          className="absolute left-0 top-[19px] w-5 h-5 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/70 transition-colors z-30"
         >
           {panelCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
@@ -1694,7 +1772,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                   key={id}
                   type="button"
                   onClick={() => setActiveTab(id)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-dbe-body font-semibold transition-colors ${
                     activeTab === id ? 'bg-[#0b1830] text-white' : 'text-slate-500 hover:bg-slate-50'
                   }`}
                 >
@@ -1723,14 +1801,14 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                   </label>
                   <label className="text-xs font-medium text-slate-600">
                     Data Source
-                    <select
+                    <Select
                       value={datasourceId}
                       onChange={(e) => onDatasourceChange(e.target.value)}
                       className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-transparent bg-orange-50 text-xs font-medium"
                     >
                       <option value="">Select a datasource</option>
                       {datasources.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
+                    </Select>
                   </label>
                 </div>
 
@@ -1738,7 +1816,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                   <button
                     type="button"
                     onClick={() => setVizTypeCollapsed((c) => !c)}
-                    className="flex items-center justify-between text-xs font-semibold text-[#EC7D09] uppercase tracking-wide"
+                    className="flex items-center justify-between text-dbe-h2 font-semibold text-[#EC7D09] uppercase tracking-wide"
                   >
                     Visualization Type
                     {vizTypeCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -1753,7 +1831,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                           <button
                             type="button"
                             onClick={() => onChartTypeChange(t)}
-                            className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-[0.625rem] leading-tight transition-colors w-full ${
+                            className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-dbe-meta leading-tight transition-colors w-full ${
                               active ? 'border-[#EC7D09] bg-orange-50' : 'border-slate-200 hover:bg-slate-50'
                             }`}
                           >
@@ -1819,66 +1897,77 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
               // per-placement Style edit in the editor still wins over both, same override
               // order used everywhere else in this cascade.
               <div className="overflow-y-auto">
-                {/* Always shown (disabled while there's nothing to reset) so the control doesn't
-                    appear/disappear as style overrides come and go. */}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  fullWidth
-                  className="mb-2.5"
-                  disabled={Object.keys(mapping.style || {}).length === 0}
-                  onClick={() => setPendingConfirm({
-                    title: 'Reset Chart Style',
-                    message: "Reset this chart's default style? This clears all style overrides saved with it.",
-                    run: () => { setMapping((prev) => ({ ...prev, style: {} })); setCopyPreview(null); },
-                  })}
-                >
-                  Reset to Default
-                </Button>
-                {/* Copy style from another chart — merges that chart's style keys (only the ones
-                    this chart type actually has fields for) into this chart's mapping.style. Saving
-                    then updates every dashboard placement that hasn't set its own override. */}
-                <div className="mb-2.5 rounded-xl border border-slate-200 bg-white p-2.5">
-                  <ChartStylePicker
-                    options={widgets.filter((w) => w.id !== editingId)}
-                    currentType={chartType}
-                    value={copyPreview?.sourceId || ''}
-                    disabled={copyingStyle}
-                    loading={copyingStyle}
-                    onSelect={copyStyleFrom}
-                  />
-                  {copyPreview && (
-                    <div className="mt-2 border-t border-dashed border-slate-200 pt-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-[11px] text-slate-500">
-                          Copied from <b className="text-slate-700">{copyPreview.name}</b> · {countCopiedSettings(copyPreview.copied)} settings
-                        </span>
-                        <span className="flex shrink-0 items-center gap-1">
-                          <button type="button" onClick={undoCopyStyle} className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100">Undo</button>
-                        </span>
-                      </div>
-                      <details className="mt-1.5">
-                        <summary className="cursor-pointer text-[10px] text-slate-400 hover:text-slate-600">View copied keys</summary>
-                        <pre className="mt-1 max-h-40 overflow-auto rounded-md bg-slate-50 p-2 text-[10px] leading-snug text-slate-700">{JSON.stringify(copyPreview.copied, null, 2)}</pre>
-                        {copyPreview.cleared?.length > 0 && <p className="mt-1 text-[10px] text-slate-400">Cleared back to default: {copyPreview.cleared.join(', ')}</p>}
-                        {copyPreview.skipped.length > 0 && <p className="mt-1 text-[10px] text-slate-400">Skipped (n/a for this type): {copyPreview.skipped.join(', ')}</p>}
-                      </details>
-                    </div>
-                  )}
+                {/* Chart-style ACTIONS — styled as buttons (tinted, semibold, icon), not like the input
+                    fields below, so they stand out and don't read as editable text.
+                    OLD: full-width "Reset to Default" button + a white input-looking "Copy style" box. */}
+                <div className="mb-2 flex gap-2">
+                  {/* Copy style from another chart — merges that chart's style keys (only the ones
+                      this chart type actually has fields for) into this chart's mapping.style. Saving
+                      then updates every dashboard placement that hasn't set its own override. */}
+                  <div className="dbe-action-btn min-w-0 flex-1 px-2.5">
+                    <ChartStylePicker
+                      options={widgets.filter((w) => w.id !== editingId)}
+                      currentType={chartType}
+                      value={copyPreview?.sourceId || ''}
+                      disabled={copyingStyle}
+                      loading={copyingStyle}
+                      onSelect={copyStyleFrom}
+                    />
+                  </div>
+                  {/* Always shown (disabled while there's nothing to reset) so the control doesn't
+                      appear/disappear as style overrides come and go. */}
+                  <button
+                    type="button"
+                    className="dbe-action-btn shrink-0 gap-1.5 px-2.5"
+                    title="Reset to default — clear every style saved with this chart"
+                    disabled={Object.keys(mapping.style || {}).length === 0}
+                    onClick={() => setPendingConfirm({
+                      title: 'Reset Chart Style',
+                      message: "Reset this chart's default style? This clears all style overrides saved with it.",
+                      run: () => { setMapping((prev) => ({ ...prev, style: {} })); setCopyPreview(null); },
+                    })}
+                  >
+                    <RotateCcw size={12} aria-hidden="true" /> Reset
+                  </button>
                 </div>
+                  {copyPreview && (
+                  <div className="mb-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-dbe-meta text-slate-500">
+                        Copied from <span className="rounded bg-slate-100 px-1.5 py-px font-semibold text-slate-700">{copyPreview.name}</span> · {countCopiedSettings(copyPreview.copied)} settings
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        <button type="button" onClick={undoCopyStyle} className="rounded-md px-2 py-1 text-dbe-body text-slate-500 hover:bg-slate-100">Undo</button>
+                      </span>
+                    </div>
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer text-dbe-meta text-slate-400 hover:text-slate-600">View copied keys</summary>
+                      <pre className="mt-1 max-h-40 overflow-auto rounded-md bg-slate-50 p-2 text-dbe-meta leading-snug text-slate-700">{JSON.stringify(copyPreview.copied, null, 2)}</pre>
+                      {copyPreview.cleared?.length > 0 && <p className="mt-1 text-dbe-meta text-slate-400">Cleared back to default: {copyPreview.cleared.join(', ')}</p>}
+                      {copyPreview.skipped.length > 0 && <p className="mt-1 text-dbe-meta text-slate-400">Skipped (n/a for this type): {copyPreview.skipped.join(', ')}</p>}
+                    </details>
+                  </div>
+                )}
                 {/* Light/Dark switch — color fields below are edited for the selected mode; the
                     preview renders in that mode too. Sizes/fonts/positions are shared. */}
-                <StyleModeSwitch value={styleMode} onChange={setStyleMode} />
+                {/* OLD: <StyleModeSwitch value={styleMode} onChange={setStyleMode} /> — moved onto the colors box header. */}
                 <WidgetStyleFields
+                  colorMode={styleMode}
+                  onColorModeChange={setStyleMode}
                   fields={styleFields}
                   value={styleModeView}
+                  savedValue={resolveStyleForMode(savedStyleRef.current, isDark) || {}}
                   onChange={onStyleFieldChange}
                   resolvedDefaults={{
+                    // Real drawn colors for every color field that's unset (not "auto").
+                    ...chartColorDefaults(chartType, mapping, isDark),
                     bgColor: resolvedBgColor,
                     titleColor: resolvedSubColor,
                     valueTextColor: resolvedTextColor,
                     axisTextColor: resolvedSubColor,
                     ...cardBorderDefaults(isDark),
+                    // What the chart draws while a size is unset — not the slider's midpoint.
+                    ...chartTextSizeDefaults(chartType, mapping),
                   }}
                   columns={2}
                 />
@@ -1897,8 +1986,10 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
             )}
 
             {activeTab === 'charts' && (
-              <div className="flex flex-col gap-2 overflow-y-auto">
-                <div className="flex items-center gap-1.5 mb-1">
+              // OLD: one overflow-y-auto column — the New widget / search row scrolled away with the list.
+              // Now the row is fixed on top and only the chart list below it scrolls.
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                <div className="flex shrink-0 items-center gap-1.5 mb-1">
                   <button
                     type="button"
                     onClick={handleNewWidgetClick}
@@ -1914,6 +2005,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                     typeOptions={sortedChartTypeOptions}
                   />
                 </div>
+                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
                 {listLoading && <div className="text-xs text-slate-400 text-center mt-4">Loading…</div>}
                 {listError && <div className="text-xs text-red-500 px-1">{listError}</div>}
                 {visibleWidgets.map((w) => (
@@ -1936,6 +2028,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                     No charts match{chartSearch.trim() ? ` "${chartSearch.trim()}"` : ''}{chartTypeFilter ? ` in ${CHART_TYPE_META[chartTypeFilter]?.label || chartTypeFilter}` : ''}.
                   </div>
                 )}
+                </div>
               </div>
             )}
           </div>

@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react';
-import Table from './Table';
+import { useState, useMemo, useRef } from 'react';
+import Table, { TableCell, TableEmpty, TableRow, tableFrameCls } from './Table';
+import Select from './Select';
+import FloatingPanel from './FloatingPanel';
 
 /** Case-insensitive value getter — handles PascalCase/camelCase/lowercase API keys */
 const getVal = (row, key) => {
@@ -22,6 +24,9 @@ const getVal = (row, key) => {
  * searchPlaceholder string
  * countLabel       singular noun for footer  e.g. "rule", "alert"
  * rppOptions       number[]  default [15,30,45,100]
+ * rowKey           row field name or (row) => key, for stable row keys (default: row index)
+ *
+ * The look (header, rows, cells, empty state, frame) comes from Table.jsx — style it there.
  *
  * filters          Client-side column filters shown as inline controls:
  *                  [{ label, key, type: 'select'|'text', options?: [{label,value}] }]
@@ -36,7 +41,9 @@ const DataTable = ({
     countLabel = 'record',
     rppOptions = [15, 30, 50, 100, 200],
     filters = [],
+    rowKey,
 }) => {
+    const colToggleRef = useRef(null);
     const [hiddenCols,    setHiddenCols]    = useState([]);
     const [showColToggle, setShowColToggle] = useState(false);
     const [currentPage,   setCurrentPage]   = useState(1);
@@ -113,6 +120,11 @@ const DataTable = ({
 
     const cellRenderer = renderCell || defaultRenderCell;
 
+    const getRowKey = (row, idx) => {
+        const k = typeof rowKey === 'function' ? rowKey(row) : rowKey ? getVal(row, rowKey) : undefined;
+        return k ?? idx;
+    };
+
     const paginationPages = Array.from({ length: totalPages }, (_, i) => i + 1)
         .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
         .reduce((acc, p, i, arr) => {
@@ -133,31 +145,32 @@ const DataTable = ({
                     value={search}
                     onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
                     placeholder={searchPlaceholder}
-                    className="w-64 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 shadow-sm"
+                    className="w-64 px-3 py-1.5 text-ui-body border border-line rounded-lg bg-field text-content placeholder:text-muted focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
                 />
 
                 {/* Column-specific filters */}
                 {filters.map(f => (
                     <div key={f.key} className="flex items-center gap-1">
-                        <span className="text-xs text-slate-400 font-medium">{f.label}:</span>
+                        <span className="text-ui-small text-muted font-medium">{f.label}:</span>
                         {f.type === 'select' ? (
-                            <select
+                            <Select
                                 value={filterValues[f.key] ?? ''}
                                 onChange={(e) => setFilter(f.key, e.target.value)}
-                                className="px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 shadow-sm text-slate-700"
+                                aria-label={f.label}
+                                className="min-w-[96px] px-2 py-1.5 text-ui-small border border-line rounded-lg bg-field text-content focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
                             >
                                 <option value="">All</option>
                                 {(f.options ?? []).map(opt => (
                                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
-                            </select>
+                            </Select>
                         ) : (
                             <input
                                 type="text"
                                 value={filterValues[f.key] ?? ''}
                                 onChange={(e) => setFilter(f.key, e.target.value)}
                                 placeholder={`Filter ${f.label}…`}
-                                className="px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 shadow-sm w-36"
+                                className="px-2 py-1.5 text-ui-small border border-line rounded-lg bg-field text-content placeholder:text-muted focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 w-36"
                             />
                         )}
                     </div>
@@ -167,7 +180,7 @@ const DataTable = ({
                 {activeFilterCount > 0 && (
                     <button
                         onClick={clearAllFilters}
-                        className="px-2 py-1.5 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 shadow-sm transition-colors"
+                        className="px-2 py-1.5 text-ui-small font-medium text-muted border border-line rounded-lg bg-surface-2 hover:border-accent transition-colors"
                     >
                         ✕ Clear
                     </button>
@@ -177,25 +190,29 @@ const DataTable = ({
                 <div className="flex-1" />
 
                 {/* Count */}
-                <span className="text-sm text-slate-500 font-medium">
+                <span className="text-ui-small text-muted font-medium">
                     {total} {countLabel}{total !== 1 ? 's' : ''}
                 </span>
 
                 {/* Column toggle */}
-                <div className="relative">
+                <div>
                     <button
+                        ref={colToggleRef}
+                        type="button"
+                        aria-expanded={showColToggle}
                         onClick={() => setShowColToggle(p => !p)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg bg-white hover:bg-slate-50 text-slate-600 shadow-sm transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-ui-small font-medium border border-line rounded-lg bg-surface-2 hover:border-accent text-content transition-colors"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <rect x="3" y="3" width="7" height="18"/><rect x="14" y="3" width="7" height="18"/>
                         </svg>
                         Columns
                     </button>
-                    {showColToggle && (
-                        <div className="absolute left-0 top-9 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-3 min-w-[160px]">
+                    {/* OLD: absolute top-9 popup — could be clipped by an overflow parent; FloatingPanel can't */}
+                    <FloatingPanel anchorRef={colToggleRef} open={showColToggle} onClose={() => setShowColToggle(false)} minWidth={160} align="end">
+                        <div className="p-3">
                             {columns.map(col => (
-                                <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm text-slate-700">
+                                <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-ui-body text-content">
                                     <input
                                         type="checkbox"
                                         checked={!hiddenCols.includes(col.key)}
@@ -205,39 +222,25 @@ const DataTable = ({
                                 </label>
                             ))}
                         </div>
-                    )}
+                    </FloatingPanel>
                 </div>
             </div>
 
             {/* ── Glass table ── */}
-            <div
-                className="flex-1 overflow-auto rounded-xl min-h-0 backdrop-blur-md border border-white/60 shadow-lg 
-                scrollbar scrollbar-w-2 scrollbar-thumb-[#EC7D09] scrollbar-track-transparent scrollbar-thumb-rounded-none"
-                style={{ background: 'rgba(255,255,255,0.55)' }}
-            >
-                <Table headers={visibleCols.map(col => col.label)} className="w-full min-w-max text-left text-sm">
+            <div className={tableFrameCls}>
+                <Table headers={visibleCols.map(col => col.label)} className="w-full min-w-max">
                     <tbody>
                         {pageRows.length === 0 ? (
-                            <tr>
-                                <td colSpan={visibleCols.length} className="text-center text-slate-400 py-12 text-sm">
-                                    {emptyMessage}
-                                </td>
-                            </tr>
+                            <TableEmpty colSpan={visibleCols.length}>{emptyMessage}</TableEmpty>
                         ) : (
                             pageRows.map((row, idx) => (
-                                <tr
-                                    key={idx}
-                                    className="border-b border-white/40 transition-colors"
-                                    style={{ background: idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.6)'}
-                                    onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'}
-                                >
+                                <TableRow key={getRowKey(row, startIdx + idx)} index={idx}>
                                     {visibleCols.map(col => (
-                                        <td key={col.key} className="px-4 py-3 text-slate-700 font-medium">
+                                        <TableCell key={col.key}>
                                             {cellRenderer(row, col)}
-                                        </td>
+                                        </TableCell>
                                     ))}
-                                </tr>
+                                </TableRow>
                             ))
                         )}
                     </tbody>
@@ -245,7 +248,7 @@ const DataTable = ({
             </div>
 
             {/* ── Pagination footer ── */}
-            <div className="flex items-center justify-between shrink-0 text-xs text-slate-500">
+            <div className="flex items-center justify-between shrink-0 text-ui-small text-muted">
                 <span>
                     {total === 0
                         ? `No ${countLabel}s`
@@ -255,20 +258,21 @@ const DataTable = ({
                 <div className="flex items-center gap-4">
                     <label className="flex items-center gap-1">
                         Rows per page:
-                        <select
+                        <Select
                             value={rpp}
                             onChange={(e) => { setRpp(Number(e.target.value)); setCurrentPage(1); }}
-                            className="ml-1 border border-slate-300 rounded px-1 py-0.5 text-xs"
+                            aria-label="Rows per page"
+                            className="ml-1 w-16 border border-line bg-field text-content rounded px-1.5 py-0.5 text-ui-small"
                         >
                             {rppOptions.map(n => <option key={n} value={n}>{n}</option>)}
-                        </select>
+                        </Select>
                     </label>
 
                     <div className="flex items-center gap-1">
                         <button
                             onClick={() => goToPage(currentPage - 1)}
                             disabled={currentPage === 1}
-                            className="px-2 py-0.5 border border-slate-300 rounded disabled:opacity-40 hover:bg-slate-100"
+                            className="px-2 py-0.5 border border-line text-content rounded disabled:opacity-40 hover:bg-hoverlay"
                         >‹</button>
 
                         {paginationPages.map((p, i) =>
@@ -277,14 +281,14 @@ const DataTable = ({
                                 : <button
                                     key={p}
                                     onClick={() => goToPage(p)}
-                                    className={`px-2 py-0.5 border rounded ${currentPage === p ? 'bg-[#EC7D09] text-white border-[#EC7D09]' : 'border-slate-300 hover:bg-slate-100'}`}
+                                    className={`px-2 py-0.5 border rounded ${currentPage === p ? 'bg-accent text-white border-accent' : 'border-line text-content hover:bg-hoverlay'}`}
                                 >{p}</button>
                         )}
 
                         <button
                             onClick={() => goToPage(currentPage + 1)}
                             disabled={currentPage === totalPages}
-                            className="px-2 py-0.5 border border-slate-300 rounded disabled:opacity-40 hover:bg-slate-100"
+                            className="px-2 py-0.5 border border-line text-content rounded disabled:opacity-40 hover:bg-hoverlay"
                         >›</button>
                     </div>
                 </div>
