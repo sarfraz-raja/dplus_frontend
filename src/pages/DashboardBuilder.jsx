@@ -216,20 +216,22 @@ const realChartWidgetEntries = (widgets) => Object.entries(widgets || {})
 async function attachRealCharts(backendId, widgets, layout, alreadyAttachedIds = []) {
   const realCharts = realChartWidgetEntries(widgets);
   const attached = new Set(alreadyAttachedIds);
-  const newlyAttached = [];
-  for (const [layoutId, w] of realCharts) {
+  // OLD: one awaited attachWidget per chart, in sequence. Now all in parallel — each is an independent
+  // join row, so the save waits for the slowest call instead of the sum.
+  const toAttach = realCharts.filter(([, w]) => !attached.has(w.dataSource.widgetId));
+  const results = await Promise.all(toAttach.map(async ([layoutId, w]) => {
     const widgetId = w.dataSource.widgetId;
-    if (attached.has(widgetId)) continue;
     const layoutEntry = (layout || []).find((l) => l.i === layoutId);
     const position = layoutEntry ? { x: layoutEntry.x, y: layoutEntry.y, w: layoutEntry.w, h: layoutEntry.h } : undefined;
     try {
       await attachWidget(backendId, widgetId, position);
-      newlyAttached.push(widgetId);
+      return widgetId;
     } catch (e) {
       console.error('[DashboardBuilder] attachWidget failed for', widgetId, e);
+      return null;
     }
-  }
-  return newlyAttached;
+  }));
+  return results.filter(Boolean);
 }
 
 // Counterpart to attachRealCharts above — detaches whichever previously-attached widgets
@@ -243,13 +245,10 @@ async function attachRealCharts(backendId, widgets, layout, alreadyAttachedIds =
 async function detachRemovedCharts(backendId, widgets, alreadyAttachedIds = []) {
   const stillAttached = new Set(realChartWidgetEntries(widgets).map(([, w]) => w.dataSource.widgetId));
   const removed = alreadyAttachedIds.filter((id) => !stillAttached.has(id));
-  for (const widgetId of removed) {
-    try {
-      await detachWidget(backendId, widgetId);
-    } catch (e) {
-      console.error('[DashboardBuilder] detachWidget failed for', widgetId, e);
-    }
-  }
+  // OLD: one awaited detachWidget per chart, in sequence — now in parallel (see attachRealCharts).
+  await Promise.all(removed.map((widgetId) => detachWidget(backendId, widgetId).catch((e) => {
+    console.error('[DashboardBuilder] detachWidget failed for', widgetId, e);
+  })));
   return removed;
 }
 
@@ -408,7 +407,8 @@ const DashboardBuilder = () => {
     if (!rec || rec.detailLoaded || rec.detailLoading) return;
     setCustomDashboards((prev) => prev.map((d) => (d.id === id ? { ...d, detailLoading: true } : d)));
     try {
-      const { dashboard, widgets: attachedWidgets } = await getDashboardDetail(rec.backendId);
+      // OLD: getDashboardDetail(rec.backendId) — full-screen loader; the preview panel shows its own "Loading dashboard…".
+      const { dashboard, widgets: attachedWidgets } = await getDashboardDetail(rec.backendId, { quiet: true });
       const updated = buildRecordFromBackend(dashboard, attachedWidgets, rec);
       setCustomDashboards((prev) => prev.map((d) => (d.id === id ? updated : d)));
     } catch (e) {
@@ -824,14 +824,13 @@ const DashboardBuilder = () => {
       console.log('[DashboardBuilder] handleSave dashboard response:', dashboard);
 
       const realCharts = realChartWidgetEntries(widgets);
-      if (realCharts.length > 0) {
-        await attachRealCharts(backendId, widgets, layout, editingExisting?.attachedChartIds || []);
-      }
-      // Only relevant on the update path — a brand-new dashboard (editingExisting null, or
-      // one with no prior attachedChartIds) has nothing to detach yet.
-      if (editingExisting?.attachedChartIds?.length > 0) {
-        await detachRemovedCharts(backendId, widgets, editingExisting.attachedChartIds);
-      }
+      // OLD: attach (awaited), then detach (awaited). They touch different charts, so both run at once.
+      await Promise.all([
+        realCharts.length > 0 ? attachRealCharts(backendId, widgets, layout, editingExisting?.attachedChartIds || []) : null,
+        // Only relevant on the update path — a brand-new dashboard (editingExisting null, or
+        // one with no prior attachedChartIds) has nothing to detach yet.
+        editingExisting?.attachedChartIds?.length > 0 ? detachRemovedCharts(backendId, widgets, editingExisting.attachedChartIds) : null,
+      ]);
 
       // Re-fetch so the local record reflects exactly what the backend now holds, rather
       // than a hand-assembled guess.
@@ -1031,23 +1030,39 @@ const DashboardBuilder = () => {
               <>
                 {/* Builder toolbar (admin actions) — divided from the dashboard below like the widget
                     editor's toolbar. OLD: border-b border-white/40 (invisible on the white panel). */}
-                <div className="shrink-0 flex items-center gap-3 flex-wrap px-4 py-2.5 border-b border-slate-200">
+                {/* bg-slate-50: a slight grey so the header bar reads apart from the white card. OLD: no background. */}
+                <div className="shrink-0 flex items-center gap-3 flex-wrap px-4 py-2.5 border-b border-slate-200 bg-slate-50">
                   <div className="shrink-0 flex items-center gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-semibold text-slate-800">{previewDashboard.name}</div>
-                        {previewDashboard.backendId && (
-                          <span className={`px-1.5 py-0.5 rounded text-[0.625rem] font-semibold uppercase tracking-wide ${
-                            previewDashboard.published ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                          }`}>
-                            {previewDashboard.published ? 'Published' : 'Draft'}
-                          </span>
-                        )}
+                    {/* OLD: name + tinted uppercase PUBLISHED/DRAFT badge (text-[0.625rem]) on line 1, "N widget(s)"
+                        (text-xs) on line 2 — three text styles, read as cluttered. Now: name alone on line 1,
+                        "● Published · N widgets" muted on line 2 — two type-scale styles, same width or less. */}
+                    <div className="min-w-0 leading-tight">
+                      <div className="max-w-[320px] truncate text-ui-body font-semibold text-slate-800" title={previewDashboard.name}>
+                        {previewDashboard.name}
                       </div>
-                      <div className="text-xs text-slate-400">
-                        {previewDashboard.static
-                          ? previewDashboard.description
-                          : `${Object.keys(previewDashboard.widgets || {}).length} widget(s)`}
+                      <div className="mt-0.5 flex items-center gap-1.5 text-ui-small text-slate-400">
+                        {previewDashboard.static ? (
+                          previewDashboard.description
+                        ) : (
+                          <>
+                            {previewDashboard.backendId && (
+                              <>
+                                <span
+                                  aria-hidden="true"
+                                  className={`h-1.5 w-1.5 rounded-full ${previewDashboard.published ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                />
+                                <span className={previewDashboard.published ? 'text-emerald-600' : undefined}>
+                                  {previewDashboard.published ? 'Published' : 'Draft'}
+                                </span>
+                                <span aria-hidden="true">·</span>
+                              </>
+                            )}
+                            {(() => {
+                              const n = Object.keys(previewDashboard.widgets || {}).length;
+                              return `${n} widget${n === 1 ? '' : 's'}`;
+                            })()}
+                          </>
+                        )}
                       </div>
                     </div>
                     {/* Pinned to the extreme left, right next to the dashboard name — not
@@ -1078,8 +1093,12 @@ const DashboardBuilder = () => {
                           onClick={() => setPreviewFullscreen(true)}
                           className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-colors ${
                             previewDashboard.published
-                              ? 'text-slate-500 border-slate-200 bg-white hover:bg-slate-50'
-                              : 'text-slate-300 border-slate-100 bg-slate-50 cursor-not-allowed'
+                              // OLD: 'text-slate-500 border-slate-200 bg-white hover:bg-slate-50' — now the shared Button
+                              // `secondary` look, same as Edit beside it (text-slate-500 → text-content too).
+                              ? 'text-content border-line bg-surface-2 hover:border-accent'
+                              // OLD: 'text-slate-300 border-slate-100 bg-slate-50 cursor-not-allowed' — same border/fill as
+                              // the other buttons now; only the faded icon marks it disabled.
+                              : 'text-slate-300 border-line bg-surface-2 cursor-not-allowed'
                           }`}
                         >
                           <Maximize2 size={14} />
@@ -1101,7 +1120,8 @@ const DashboardBuilder = () => {
                           const existingNames = new Set(allDashboards.map((d) => d.name));
                           setCloneName(nextCopyName(baseDashboardName(previewDashboard.name), existingNames));
                         }}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+                        // OLD: text-slate-500 border-slate-200 bg-white hover:bg-slate-50 — now Button `secondary` colors, like Edit.
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-content border border-line bg-surface-2 hover:border-accent transition-colors"
                       >
                         <Copy size={14} />
                       </button>
@@ -1112,7 +1132,8 @@ const DashboardBuilder = () => {
                           aria-label="Publish dashboard"
                           disabled={publishing}
                           onClick={handlePublish}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
+                          // OLD: text-slate-500 border-slate-200 bg-white hover:bg-slate-50 — now Button `secondary` colors, like Edit.
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-content border border-line bg-surface-2 hover:border-accent transition-colors disabled:opacity-50"
                         >
                           <UploadCloud size={14} />
                         </button>

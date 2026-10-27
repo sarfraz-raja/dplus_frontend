@@ -194,7 +194,7 @@ const Home = () => {
         <div className="flex-1 overflow-y-auto pr-2">
           <div className="space-y-6 pb-6">
             {/* Hero Card - GIS Intelligence */}
-            <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-8 shadow-lg dark:border-orange-500/30 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-2xl">
+            <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-8 shadow-lg dark:border-orange-500/30 dark:bg-slate-900 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-2xl">
               <div className="absolute inset-0 opacity-10">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-orange-500 rounded-full blur-3xl"></div>
               </div>
@@ -226,7 +226,7 @@ const Home = () => {
 
             {/* 2-Column Grid */}
             <div className="grid grid-cols-2 gap-6">
-              <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-700 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
+              <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
                 <p className="text-xs font-bold uppercase tracking-widest text-[#090728] dark:text-blue-400">Analytics</p>
                 <h3 className="mt-3 text-xl font-black text-slate-900 dark:text-white">Insights Engine</h3>
                 <p className="mt-2 text-sm text-slate-500 dark:text-white">Drill into network KPIs with predictive analytics & degradation trends.</p>
@@ -238,7 +238,7 @@ const Home = () => {
                 </button>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-700 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
+              <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-widest text-[#090728] dark:text-blue-400">Query</p>
@@ -265,7 +265,7 @@ const Home = () => {
 
             {/* Feature Cards Row */}
             <div className="grid grid-cols-2 gap-6">
-              <div className="rounded-3xl border border-amber-200 bg-white p-8 shadow-lg dark:border-yellow-600/30 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
+              <div className="rounded-3xl border border-amber-200 bg-white p-8 shadow-lg dark:border-yellow-600/30 dark:bg-slate-900 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
                 <p className="text-xs font-bold uppercase tracking-widest text-[#090728] dark:text-blue-400">Intelligence</p>
                 <h3 className="mt-3 text-xl font-black text-slate-900 dark:text-white">xAlerts</h3>
                 <p className="mt-2 text-sm text-slate-500 dark:text-white">Threshold-based alerts on network KPIs with intelligent escalation.</p>
@@ -279,7 +279,7 @@ const Home = () => {
                 </button>
               </div>
 
-              <div className="rounded-3xl border border-blue-200 bg-white p-8 shadow-lg dark:border-blue-500/30 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
+              <div className="rounded-3xl border border-blue-200 bg-white p-8 shadow-lg dark:border-blue-500/30 dark:bg-slate-900 dark:bg-gradient-to-br dark:from-amber-900/30 dark:to-slate-900 dark:shadow-xl">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <p className="text-xs font-bold uppercase tracking-widest text-[#090728] dark:text-blue-400">Collaboration</p>

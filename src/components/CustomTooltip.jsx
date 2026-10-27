@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getPortalRoot } from '../utils/common';
 
 // `wrap` — opt-in for a longer, multi-sentence tooltip (e.g. a chart type's "best for" blurb):
 // swaps the default single-line `whitespace-nowrap` bubble for a fixed-width, wrapped card
@@ -77,7 +78,8 @@ const CustomTooltip = ({ text, children, wrap = false }) => {
             }}
           />
         </div>,
-        document.body,
+        // OLD: document.body, — invisible while <main> is fullscreen
+        getPortalRoot(),
       )}
     </div>
   );

@@ -450,7 +450,10 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
           page — see the conversation this was reported in. */}
       {/* OLD: a full-screen click-catcher + an absolute popover (clippable by the toolbar's container).
           Now the shared FloatingPanel; it closes on an outside click only while nothing is unsaved. */}
-      <FloatingPanel anchorRef={popAnchorRef} open onClose={() => { if (!isDirty) setExpanded(false); }} minWidth={420} maxHeight={560}>
+      {/* OLD: minWidth={420} — sized for the old horizontal row; the vertical stack needs less width. */}
+      {/* OLD: minWidth={300} — still read as a wide box. Now a narrow, tall column (filters stack downward),
+          right-aligned under the icon button. */}
+      <FloatingPanel anchorRef={popAnchorRef} open onClose={() => { if (!isDirty) setExpanded(false); }} minWidth={224} maxHeight={560} align="end">
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <FilterPanelExpanded
           localValues={localValues} isDirty={isDirty} hasAnyValue={hasAnyValue} applying={applying}
@@ -472,18 +475,21 @@ function FilterPanelExpanded({
   handleApply, handleClearAll, onCollapse, onEditInFilters,
 }) {
   return (
-    <div className="flex flex-col gap-2.5 px-1">
+    <div className="flex flex-col gap-3 px-1">
       {/* Filter inputs on their own row, Apply/Clear/✕ on their own below — the popover has a
           fixed width, so keeping these as two stacked rows (rather than one `justify-between`
           row like the old inline strap) means a filter list that wraps never crowds the
           action buttons. */}
-      <div className="flex items-center gap-2.5 flex-wrap">
-      {/* Label sits to the left of its control, single line — matches the reference
-          (Region / Site Name / Cell Name laid out inline) and keeps the strip from taking
-          extra vertical space the way a label-above-control stack would. */}
+      {/* OLD: <div className="flex items-center gap-2.5 flex-wrap"> — a horizontal, wrapping row
+          with each label to the LEFT of its control. Read as a jumble once filters wrapped (labels
+          and boxes of different widths zig-zagging), so it's now a vertical form: one filter per
+          row, label above, control full width. */}
+      <div className="flex flex-col gap-2.5">
       {localValues.map((f) => (
-        <div key={f.column} className="shrink-0 flex items-center gap-1.5">
-          <label className="text-[0.6875rem] font-semibold text-slate-600 whitespace-nowrap">
+        // OLD: <div key={f.column} className="shrink-0 flex items-center gap-1.5">
+        <div key={f.column} className="flex flex-col gap-1 min-w-0">
+          {/* OLD: className="text-[0.6875rem] font-semibold text-slate-600 whitespace-nowrap" */}
+          <label className="text-ui-small font-semibold text-slate-600 truncate">
             {labelFor(f)}
           </label>
           {/* Date/time ranges (live OR a fixed custom range) are read-only here, not editable —
@@ -500,7 +506,7 @@ function FilterPanelExpanded({
                 type="button"
                 onClick={onEditInFilters}
                 disabled={!onEditInFilters}
-                className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 hover:bg-slate-100 disabled:hover:bg-slate-50 disabled:cursor-default"
+                className="w-full text-left text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 hover:bg-slate-100 disabled:hover:bg-slate-50 disabled:cursor-default"
               >
                 {from} – {to} <span className="text-slate-400 underline">(live, edit in Filters)</span>
               </button>
@@ -512,7 +518,7 @@ function FilterPanelExpanded({
                 type="button"
                 onClick={onEditInFilters}
                 disabled={!onEditInFilters}
-                className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 hover:bg-slate-100 disabled:hover:bg-slate-50 disabled:cursor-default"
+                className="w-full text-left text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 hover:bg-slate-100 disabled:hover:bg-slate-50 disabled:cursor-default"
               >
                 {from || '—'} – {to || '—'} <span className="text-slate-400 underline">edit in Filters</span>
               </button>
@@ -522,7 +528,8 @@ function FilterPanelExpanded({
               type={inputTypeFor(f.column)}
               value={f.value || ''}
               onChange={(e) => updateValue(f.column, e.target.value)}
-              className="w-24 border border-slate-200 rounded-md px-1.5 py-1 text-xs bg-white"
+              // OLD: className="w-24 border border-slate-200 rounded-md px-1.5 py-1 text-xs bg-white"
+              className="w-full h-[38px] border border-slate-200 rounded-lg px-2.5 text-sm bg-white"
             />
           ) : isMultiSelect(f) ? (
             <MultiSelectFilterInput
@@ -530,6 +537,7 @@ function FilterPanelExpanded({
               loading={!!loadingColumns[f.column]}
               value={Array.isArray(f.value) ? f.value : []}
               onChange={(next) => updateValue(f.column, next)}
+              fullWidth
             />
           ) : (
             // Plain single-value filter (e.g. "region") — same searchable-dropdown UI as the
@@ -541,18 +549,23 @@ function FilterPanelExpanded({
               loading={!!loadingColumns[f.column]}
               value={f.value || ''}
               onChange={(next) => updateValue(f.column, next)}
+              fullWidth
             />
           )}
         </div>
       ))}
       </div>
 
-      <div className="flex items-center gap-1.5 shrink-0">
+      {/* OLD: <div className="flex items-center gap-1.5 shrink-0"> */}
+      {/* OLD: one row (Apply · Clear all · | Close) — too wide for the narrow column. Now Apply full width,
+          Clear all / Close on the row under it. */}
+      <div className="flex flex-col gap-1.5 shrink-0 pt-2.5 border-t border-slate-100">
         <button
           type="button"
           onClick={handleApply}
           disabled={applying || !isDirty}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+          // OLD: className={`px-3 py-1.5 rounded-lg …`} (auto width)
+          className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
             isDirty
               ? 'text-white bg-[#EC7D09] hover:opacity-90'
               : 'text-slate-400 bg-slate-100 cursor-not-allowed'
@@ -560,6 +573,7 @@ function FilterPanelExpanded({
         >
           {applying ? 'Applying…' : 'Apply filters'}
         </button>
+        <div className="flex items-center justify-between gap-1.5">
         <button
           type="button"
           onClick={handleClearAll}
@@ -585,6 +599,7 @@ function FilterPanelExpanded({
         >
           Close
         </button>
+        </div>
       </div>
     </div>
   );

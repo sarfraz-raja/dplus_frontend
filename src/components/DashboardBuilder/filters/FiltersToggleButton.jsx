@@ -26,7 +26,8 @@ export default function FiltersToggleButton({ filters, datasourceOptions, onSave
         title="Add and edit filters"
         aria-label="Add and edit filters"
         onClick={() => setOpen(true)}
-        className="h-8 px-3 rounded-lg flex items-center gap-1.5 text-xs font-semibold text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+        // OLD: border-slate-200 bg-white hover:bg-slate-50 — now the shared Button `secondary` colors (matches Edit; text-slate-500 → text-content).
+        className="h-8 px-3 rounded-lg flex items-center gap-1.5 text-xs font-semibold text-content border border-line bg-surface-2 hover:border-accent transition-colors"
       >
         <Settings size={14} /> Filters
         {/* Count badge — FilterPanel's own collapsed row used to duplicate this exact button

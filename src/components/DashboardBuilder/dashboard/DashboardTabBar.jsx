@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Pencil, Copy, X } from 'lucide-react';
+import { Plus, Pencil, Copy, Trash2, MoreVertical } from 'lucide-react'; // OLD: Plus, Pencil, Copy, X
 import ConfirmModal from '../../ConfirmModal';
+import FloatingPanel from '../../FloatingPanel';
 
 let tabUid = 0;
 const nextTabId = () => `tab${Date.now()}_${tabUid++}`;
@@ -26,6 +27,10 @@ export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, on
   const [draftName, setDraftName] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const inputRef = useRef(null);
+  // ⋮ menu: which tab it's open for + the clicked button as its anchor.
+  const [menuTabId, setMenuTabId] = useState(null);
+  const menuAnchorRef = useRef(null);
+  const closeMenu = () => setMenuTabId(null);
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -67,8 +72,9 @@ export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, on
             key={tab.id}
             // OLD: rounded-lg border px-2.5 py-1.5 text-xs pill; active bg-pbutton text-white.
             className={`group -mb-px flex shrink-0 items-center gap-1 whitespace-nowrap border-b-2 px-1 pt-1 pb-2 text-ui-small font-semibold cursor-pointer transition-colors ${
+                // OLD: isActive ? 'border-pbutton text-pbutton' — the active label read as black on a dark canvas.
                 isActive
-                  ? 'border-pbutton text-pbutton'
+                  ? onDarkCanvas ? 'border-pbutton text-white' : 'border-pbutton text-pbutton'
                   : onDarkCanvas
                     ? 'border-transparent text-slate-300 hover:text-white hover:border-white/30'
                     : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
@@ -79,7 +85,12 @@ export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, on
             {isEditing ? (
               <input
                 ref={inputRef}
-                className="bg-transparent border-b border-current outline-none w-24 text-inherit"
+                // OLD: "bg-transparent border-b border-current outline-none w-24 text-inherit" — a broader
+                // input rule painted it white on the dark canvas. Forced transparent, tab's own color, accent underline.
+                // keep-dark-input: opts out of index.css's dark-mode "every input white !important" rule.
+                className={`keep-dark-input w-24 rounded-none border-0 border-b !border-[#EC7D09] px-1 py-0 shadow-none outline-none focus:ring-0 ${
+                  onDarkCanvas ? '!bg-white/[0.06] !text-white caret-white' : '!bg-transparent !text-inherit'
+                }`}
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
                 onBlur={commitRename}
@@ -92,38 +103,23 @@ export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, on
             ) : (
               <span>{tab.name}</span>
             )}
+            {/* OLD: three hover icons (Rename pencil, Copy, Delete ×) — now one ⋮ button opening a menu. */}
             {editable && !isEditing && (
-              <>
-                <button
-                  type="button"
-                  title="Rename tab"
-                  aria-label="Rename tab"
-                  className="opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity"
-                  onClick={(e) => { e.stopPropagation(); startRename(tab); }}
-                >
-                  <Pencil size={11} />
-                </button>
-                {onCopy && (
-                  <button
-                    type="button"
-                    title="Copy tab (widgets become independent copies)"
-                    aria-label="Copy tab"
-                    className="opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity"
-                    onClick={(e) => { e.stopPropagation(); onCopy(tab.id); }}
-                  >
-                    <Copy size={11} />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  title="Delete tab"
-                  aria-label="Delete tab"
-                  className="opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity"
-                  onClick={(e) => { e.stopPropagation(); setPendingDeleteId(tab.id); }}
-                >
-                  <X size={11} />
-                </button>
-              </>
+              <button
+                type="button"
+                title="Tab options"
+                aria-label={`Options for ${tab.name}`}
+                aria-haspopup="menu"
+                aria-expanded={menuTabId === tab.id}
+                className={`-mr-1 rounded p-0.5 transition-opacity hover:!opacity-100 ${menuTabId === tab.id ? 'opacity-100' : isActive ? 'opacity-60' : 'opacity-0 group-hover:opacity-60 focus-visible:opacity-100'} ${onDarkCanvas ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  menuAnchorRef.current = e.currentTarget;
+                  setMenuTabId((cur) => (cur === tab.id ? null : tab.id));
+                }}
+              >
+                <MoreVertical size={12} />
+              </button>
             )}
           </div>
         );
@@ -140,6 +136,27 @@ export default function DashboardTabBar({ tabs, activeTabId, onSelect, onAdd, on
           <Plus size={13} />
         </button>
       )}
+      {/* OLD: minWidth={150} — too wide for three short items. */}
+      <FloatingPanel anchorRef={menuAnchorRef} open={!!menuTabId} onClose={closeMenu} minWidth={112} align="start">
+        <div role="menu" className="flex flex-col py-1">
+          {[
+            { key: 'rename', label: 'Rename', icon: Pencil, run: (t) => startRename(t) },
+            ...(onCopy ? [{ key: 'copy', label: 'Duplicate', icon: Copy, run: (t) => onCopy(t.id), hint: 'Widgets become independent copies' }] : []),
+            { key: 'delete', label: 'Delete', icon: Trash2, run: (t) => setPendingDeleteId(t.id), danger: true },
+          ].map(({ key, label, icon: Icon, run, hint, danger }) => (
+            <button
+              key={key}
+              type="button"
+              role="menuitem"
+              title={hint}
+              onClick={() => { const t = tabs.find((x) => x.id === menuTabId); closeMenu(); if (t) run(t); }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 text-left text-dbe-body ${danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-[#EC7D09]/[0.08]'}`}
+            >
+              <Icon size={12} aria-hidden="true" /> {label}
+            </button>
+          ))}
+        </div>
+      </FloatingPanel>
       <ConfirmModal
         isOpen={!!pendingDeleteId}
         // The last tab is only a reference — removing it keeps every widget (see deleteTab in

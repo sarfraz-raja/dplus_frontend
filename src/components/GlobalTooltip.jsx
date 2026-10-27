@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getPortalRoot } from '../utils/common';
 
 // App-wide styled tooltip, mounted once in App.jsx. Takes over every native `title="…"` tooltip
 // (the browser's plain box) without touching any page: on hover/focus the element's `title` is
@@ -148,6 +149,7 @@ export default function GlobalTooltip() {
         />
       )}
     </div>,
-    document.body,
+    // OLD: document.body, — invisible while <main> is fullscreen
+    getPortalRoot(),
   );
 }

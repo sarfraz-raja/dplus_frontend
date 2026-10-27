@@ -451,7 +451,7 @@ const handleMicrosoftSSO = async () => {
         dangerouslySetInnerHTML={{
           __html: isDark
             ? `
-              .login-shell input { color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; caret-color: #ffffff; font-family: inherit; }
+              .login-shell input { color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; caret-color: #ffffff; font-family: inherit; color-scheme: dark; }
               .login-shell input::placeholder { color: #64748b !important; -webkit-text-fill-color: #64748b !important; opacity: 1; }
               .login-shell input:-webkit-autofill, .login-shell input:-webkit-autofill:hover, .login-shell input:-webkit-autofill:focus, .login-shell input:-webkit-autofill:active { -webkit-text-fill-color: #ffffff !important; caret-color: #ffffff; border: 1px solid rgba(255,255,255,0.05) !important; -webkit-box-shadow: 0 0 0 1000px rgba(3,6,18,0.98) inset !important; box-shadow: 0 0 0 1000px rgba(3,6,18,0.98) inset !important; transition: background-color 999999s ease-in-out 0s; background-clip: content-box !important; }
             `
@@ -565,7 +565,7 @@ const handleMicrosoftSSO = async () => {
                   autoComplete="username"
                   className={`w-full rounded-2xl border px-4 py-3 text-md outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
                     isDark
-                      ? 'border-white/5 bg-[rgba(3,6,18,0.98)] focus:bg-[rgba(3,6,18,0.95)]'
+                      ? 'keep-dark-input border-white/5 bg-[rgba(3,6,18,0.98)] focus:bg-[rgba(3,6,18,0.95)]'
                       : 'border-gray-200 bg-gray-50 focus:bg-white'
                   }`}
                 />
@@ -584,7 +584,7 @@ const handleMicrosoftSSO = async () => {
                     autoComplete="current-password"
                     className={`w-full rounded-2xl border px-4 py-3 pr-12 text-sm outline-none transition-all duration-200 focus:border-[#F26522]/45 ${
                       isDark
-                        ? 'border-white/5 bg-[rgba(3,6,18,0.98)] focus:bg-[rgba(3,6,18,0.95)]'
+                        ? 'keep-dark-input border-white/5 bg-[rgba(3,6,18,0.98)] focus:bg-[rgba(3,6,18,0.95)]'
                         : 'border-gray-200 bg-gray-50 focus:bg-white'
                     }`}
                   />

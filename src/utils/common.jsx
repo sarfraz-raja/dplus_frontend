@@ -12,6 +12,11 @@ export const cn = (...inputs) => {
     return twMerge(clsx(inputs))
   }
 
+// Where portaled popups (FloatingPanel, tooltips, menus) mount. In fullscreen (App.jsx's navbar button
+// fullscreens <main>; TelecomMap fullscreens its own map) the browser only paints the fullscreen
+// element's subtree, so a portal on <body> opens invisibly — mount inside that element instead.
+export const getPortalRoot = () => document.fullscreenElement || document.body
+
 // Assurance API doc §14: 404/409/422 carry an actionable `msg` to show as-is, but a 500 should
 // only ever show a generic message. `res` is what Api.* resolves with (it never rejects on an
 // HTTP error status — see utils/api.js).

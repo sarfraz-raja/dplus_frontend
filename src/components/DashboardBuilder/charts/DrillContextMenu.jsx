@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { getPortalRoot } from '../../../utils/common';
 import { ChevronsDown, ChevronsUp, Filter } from 'lucide-react';
 
 /**
@@ -87,6 +88,7 @@ export default function DrillContextMenu({
         </button>
       )}
     </div>,
-    document.body,
+    // OLD: document.body, — invisible while <main> is fullscreen
+    getPortalRoot(),
   );
 }

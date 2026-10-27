@@ -19,7 +19,7 @@ import { exportRowsCSV } from '../utils/exportUtils';
 import ChartLibraryWidgetView from './ChartLibraryWidgetView';
 import { ANIMATION_KEYS, ChartAnimationContext, resolveAnimation, cardEntrance } from '../utils/chartAnimation';
 import CHART_TYPE_META, { CHART_TYPES, BIG_NUMBER_VARIANT, toBackendChartType, displayChartType } from './chartTypeMeta';
-import { wantsBigNumberTrend, fetchBigNumberTrend } from '../utils/bigNumberTrend';
+import { wantsBigNumberTrend, fetchBigNumberTrend, isBigNumberTrendOn, TREND_WINDOW_OPTIONS, TREND_WINDOW_SAME } from '../utils/bigNumberTrend';
 import { useTheme } from '../../../context/ThemeContext';
 import { chartTokens } from '../../../theme/tokens';
 import { resolveStyleForMode, setModeColor, copyStyleFields, countCopiedSettings, surfaceBg, resolveCardBorder, cardBorderDefaults, CARD_BORDERED_CLASS } from '../utils/themedStyle';
@@ -393,8 +393,15 @@ const CHART_TYPE_FIELDS = {
         // Default On — an untouched select isn't saved, so "unset" must mean On everywhere it's
         // read (wantsBigNumberTrend, renderChartWidget); only an explicit 'Off' turns it off.
         key: 'show_trend', label: 'Trend line', type: 'select', options: ['On', 'Off'], default: 'On',
-        hint: 'Draws how this number moved over the period, under the number. Not available with Period "Latest" (a single moment).',
+        // OLD hint: 'Draws how this number moved over the period, under the number. Not available with Period "Latest" (a single moment).'
+        hint: 'Draws how this number moved over time, under the number.',
         showIf: (m) => !!m.date_filter_column,
+      },
+      {
+        // Read by bigNumberTrend.js (bigNumberTrendRange) — unset counts as "Same as Period".
+        key: 'trend_window', label: 'Trend window', type: 'select', options: TREND_WINDOW_OPTIONS, default: TREND_WINDOW_SAME,
+        hint: '"Same as Period" draws over the number\'s own Period (the last 24 hours when Period is "Latest"). Any other window is counted back from the newest data point, so the line still shows when the data has stopped updating.',
+        showIf: (m) => !!m.date_filter_column && isBigNumberTrendOn(m),
       },
     ] },
   ],
@@ -1165,7 +1172,9 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     // Covers create, update, AND Preview's own implicit first-save (runPreview always routes
     // through this) in one place — DashboardCanvasEditor.jsx's "Your Charts" panel picks this
     // up via its own subscribeWidgetsChanged listener (using the list fetched here).
-    await refreshAndNotify();
+    // OLD: await refreshAndNotify(); — the save (and "Save & return to dashboard") waited for the whole
+    // chart list to reload. The list isn't needed to return, so it refreshes in the background.
+    refreshAndNotify().catch(() => {});
     return widget;
   };
 
@@ -1665,7 +1674,10 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
           box, matching DashboardCanvasEditor.jsx's own `.dbe-canvas-wrap` treatment exactly
           (border:1px dashed, rounded, padded) — the side panel deliberately has no border of
           its own (see below), same pairing as that editor's canvas/"Your Widgets" panel. */}
-      <div className="flex-1 min-h-0 mt-3 flex flex-col border border-dashed border-slate-300 rounded-lg p-2 bg-white/40">
+      {/* OLD: no `relative` — added for the loading bar pinned to the frame's top edge. */}
+      <div className="relative flex-1 min-h-0 mt-3 flex flex-col border border-dashed border-slate-300 rounded-lg p-2 bg-white/40">
+        {/* Query running (Preview / auto-refresh / save-then-run): thin bar instead of the app-wide loader. */}
+        {running && <div className="dbe-load-bar !absolute inset-x-0 top-0 rounded-t-lg" role="progressbar" aria-label="Running query" />}
         {previewData ? (
           <div className="flex-1 min-h-0">{renderPreview()}</div>
         ) : (

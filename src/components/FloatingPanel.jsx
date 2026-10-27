@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getPortalRoot } from '../utils/common';
 
 // Shared floating panel for every dropdown / popover / picker list. Rendered in a portal on
 // <body> with fixed positioning, so NO ancestor's overflow (a scrolling side panel, a card with
@@ -73,6 +74,7 @@ export default function FloatingPanel({
     >
       {children}
     </div>,
-    document.body,
+    // OLD: document.body, — invisible while <main> is fullscreen
+    getPortalRoot(),
   );
 }

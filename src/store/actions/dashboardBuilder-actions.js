@@ -1,4 +1,19 @@
-import Api from "../../utils/api";
+// OLD: import Api from "../../utils/api"; — each call showed the app-wide loader unless it passed inst: 0.
+import BaseApi from "../../utils/api";
+
+// The Dashboard Builder never shows the app-wide (full-screen) loader: every screen has its own busy state
+// (Saving… / Running query… / Loading… buttons and lists, the canvas load bar, the preview panel's
+// "Loading dashboard…"), so blocking the whole app only made it feel stuck. get/post/put/patch/delete always
+// use the no-loader instance (inst: 0 — same token, base URL and 401 handling). upload/blobFile unchanged.
+const noLoader = (fn) => (opts) => fn({ ...opts, inst: 0 });
+const Api = {
+  ...BaseApi,
+  get: noLoader(BaseApi.get),
+  post: noLoader(BaseApi.post),
+  put: noLoader(BaseApi.put),
+  patch: noLoader(BaseApi.patch),
+  delete: noLoader(BaseApi.delete),
+};
 import { Urls } from "../../utils/url";
 import { copyNameFor } from "../../components/DashboardBuilder/utils/copyName";
 
@@ -463,8 +478,9 @@ export async function listDashboards() {
 }
 
 /** Full detail for one dashboard, including its currently-attached widgets. */
-export async function getDashboardDetail(id) {
-  const res = await Api.get({ url: `${Urls.dashboardBuilder_dashboards}/${id}` });
+// `quiet` skips the app-wide loading overlay (the caller shows its own loading state).
+export async function getDashboardDetail(id, { quiet = false } = {}) {
+  const res = await Api.get({ url: `${Urls.dashboardBuilder_dashboards}/${id}`, inst: quiet ? 0 : 1 });
   if (!res) {
     throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
   }

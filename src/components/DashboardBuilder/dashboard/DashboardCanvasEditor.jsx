@@ -50,6 +50,8 @@ import FilterEditorModal from '../filters/FilterEditorModal';
 import AddSlicerModal from '../filters/AddSlicerModal';
 import { ChartAnimationContext, resolveAnimation, cardEntrance } from '../utils/chartAnimation';
 import { getCachedDashboardData, updateCachedDashboardData, seedChartLibraryData } from './dashboardDataCache';
+// A whole-dashboard load younger than this is reused by a newly mounted instance (e.g. the preview after Save).
+const BATCH_FRESH_MS = 60 * 1000;
 import { sortWidgetsByRecency, withDatasourceOnly } from '../charts/sortWidgets';
 import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
 
@@ -1141,7 +1143,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // stay invisible in "Your Charts" until the whole app was reloaded.
     addRealChart: (widgetId) => {
       addWidget('chartLibrary', undefined, widgetId);
-      listChartLibraryWidgets().then(setChartLibraryList).catch(() => {});
+      listChartLibraryWidgets({ quiet: true }).then(setChartLibraryList).catch(() => {});
     },
     // Called by DashboardBuilder.jsx after a chart already placed on this dashboard was
     // edited (and saved) in the Charts tab and the user is routed back here. Every placed
@@ -1153,11 +1155,16 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     refreshChartDefinition: (widget) => {
       if (!widget?.id) return;
       let changed = false;
+      // Did the edit change what the query returns, or only how it looks? mapping.style (and the name)
+      // are display-only; anything else (measure, columns, aggregation, chart type…) needs fresh rows.
+      const dataKey = (chartType, mapping) => JSON.stringify({ chartType, mapping: { ...(mapping || {}), style: undefined } });
+      let dataChanged = false;
       setWidgets((prev) => {
         const next = { ...prev };
         Object.entries(prev).forEach(([id, w]) => {
           if (w.dataSource?.type === 'chartLibrary' && w.dataSource.widgetId === widget.id) {
             changed = true;
+            if (dataKey(w.dataSource.chartType, w.dataSource.mapping) !== dataKey(widget.chart_type, widget.mapping)) dataChanged = true;
             // Keep the tile's own title in sync with the chart's name too, but only when the
             // placement hasn't been given its own custom title (SelectedWidgetDetails' own
             // `renamed = title !== chartName` check) — a dashboard that deliberately renamed
@@ -1172,7 +1179,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         });
         return changed ? next : prev;
       });
-      if (changed) {
+      // OLD: if (changed) — every save refetched the chart. A style-only edit keeps its rows (instant).
+      if (changed && dataChanged) {
         // The edited chart's rows (and any cache key guarding a refetch of them) are keyed off
         // its mapping/chart_type but were fetched BEFORE this edit — without clearing them, the
         // per-widget "already have data, skip" guards above (and the KPI date-filter / own-filter
@@ -1190,7 +1198,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           if (cacheKey.startsWith(`${widget.id}:`)) widgetFilterKeyRef.current.delete(placementId);
         });
       }
-      listChartLibraryWidgets().then(setChartLibraryList).catch(() => {});
+      listChartLibraryWidgets({ quiet: true }).then(setChartLibraryList).catch(() => {});
     },
     // Lets a parent render its own <FilterPanel/> elsewhere (e.g. DashboardBuilder.jsx's
     // read-only preview header, next to the dashboard name) instead of the strip this
@@ -1624,11 +1632,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // the already-fetched data cache below.
   useEffect(() => {
     if (!editable) return;
-    listChartLibraryWidgets({ quiet: loadedFromCache }).then(setChartLibraryList).catch(() => {});
+    listChartLibraryWidgets({ quiet: true }) /* OLD: { quiet: loadedFromCache } */.then(setChartLibraryList).catch(() => {});
   }, [editable]);
 
   // Resolves to the fetched list (undefined on failure) — see refreshAndNotifyChartList.
-  const refreshChartLibraryList = () => listChartLibraryWidgets()
+  const refreshChartLibraryList = () => listChartLibraryWidgets({ quiet: true })
     .then((list) => { setChartLibraryList(list); return list; })
     .catch(() => undefined);
   // This editor's token for widgetEvents (ignore our own notifications) + a refresh that hands
@@ -1746,12 +1754,25 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // surfacing the backend's attachment-check wording as if it were a real query error (that
   // error banner, meant for actual query failures, was showing "Widget is not attached to
   // this dashboard" over freshly duplicated/added tiles until the next dashboard save).
-  const fetchWidgetData = (widgetId, opts) => {
-    if (!backendId) return getStandaloneWidgetData(widgetId, opts);
-    return getWidgetData(backendId, widgetId, opts).catch((err) => {
-      if (err?.message === 'Widget is not attached to this dashboard') return getStandaloneWidgetData(widgetId, opts);
+  // No app-wide loader in the Dashboard Builder: every data call is quiet. Charts that already have data
+  // keep showing it, a chart with none shows its own "Loading…", and the thin bar at the top of the
+  // canvas (.dbe-load-bar) runs while any request is in flight. `track` counts those requests.
+  const [pendingLoads, setPendingLoads] = useState(0);
+  const track = (promise) => {
+    setPendingLoads((n) => n + 1);
+    return Promise.resolve(promise).finally(() => setPendingLoads((n) => Math.max(0, n - 1)));
+  };
+  // OLD: getDashboardData(…) called directly, full-screen loader unless `quiet` was passed.
+  const loadDashboardData = (id, opts = {}) => track(getDashboardData(id, { ...opts, quiet: true }));
+
+  const fetchWidgetData = (widgetId, opts = {}) => {
+    // OLD: opts passed through as-is (full-screen loader unless quiet).
+    const quietOpts = { ...opts, quiet: true };
+    if (!backendId) return track(getStandaloneWidgetData(widgetId, quietOpts));
+    return track(getWidgetData(backendId, widgetId, quietOpts).catch((err) => {
+      if (err?.message === 'Widget is not attached to this dashboard') return getStandaloneWidgetData(widgetId, quietOpts);
       throw err;
-    });
+    }));
   };
 
   // KPI_CARD's own date filter (mapping.date_filter_column/range) — refetches this widget's
@@ -1918,11 +1939,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const datasourceId = w.dataSource.datasourceId;
       if (!widgetId || !datasourceId) return;
       const filters = resolveFiltersForQuery(kpiEffectiveFilters(mapping));
+      // The dashboard's filters minus anything on the card's date column — what a trend with its
+      // own window (Trend window / Period 'Latest') runs under instead of `filters`.
+      const otherFilters = resolveFiltersForQuery(dashboardFilters.filter((f) => f.column !== mapping.date_filter_column));
       // OLD: const cacheKey = `${widgetId}:${JSON.stringify([mapping.y_axis, mapping.aggregation, mapping.date_filter_column, filters])}`;
-      const cacheKey = `${widgetId}:${JSON.stringify([mapping.y_axis, mapping.aggregation, mapping.date_filter_column, filters])}:r${refreshTick}`;
+      // OLD: const cacheKey = `${widgetId}:${JSON.stringify([mapping.y_axis, mapping.aggregation, mapping.date_filter_column, filters])}:r${refreshTick}`;
+      const cacheKey = `${widgetId}:${JSON.stringify([mapping.y_axis, mapping.aggregation, mapping.date_filter_column, mapping.trend_window, filters, otherFilters])}:r${refreshTick}`;
       if (bigNumberTrendKeyRef.current.get(widgetId) === cacheKey) return;
       bigNumberTrendKeyRef.current.set(widgetId, cacheKey);
-      fetchBigNumberTrend({ datasourceId, mapping, filters, quiet: true })
+      fetchBigNumberTrend({ datasourceId, mapping, filters, otherFilters, quiet: true })
         .then((points) => {
           if (bigNumberTrendKeyRef.current.get(widgetId) !== cacheKey) return; // superseded
           setBigNumberTrendData((prev) => ({ ...prev, [widgetId]: points }));
@@ -1965,11 +1990,20 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // range or a cleared filter no longer costs a second whole-dashboard fetch (see below).
     // Unknown/empty → omit them and let the backend apply what's saved, as before.
     const knownFilters = !hasOverride && initialGlobalFilters?.length ? initialGlobalFilters : null;
+    // Fresh shared data (another instance — e.g. the editor just before Save — loaded the whole dashboard
+    // under a minute ago): reuse it instead of re-running every chart. Style/theme/filters come from the
+    // initial props; charts missing from the cache are filled in per chart once initialBatchDone is set.
+    const cachedBatchAt = getCachedDashboardData(backendId)?.batchFetchedAt;
+    if (!hasOverride && loadedFromCache && cachedBatchAt && Date.now() - cachedBatchAt < BATCH_FRESH_MS) {
+      if (initialGlobalFilters?.length) setDashboardFilters(initialGlobalFilters);
+      setInitialBatchDone(true);
+      return undefined;
+    }
     let firstCall = {};
     if (hasOverride) firstCall = { filters: deepLinkFilters };
     else if (knownFilters) firstCall = { filters: resolveFiltersForQuery(knownFilters) };
     // Quiet (no app-wide loader) when the charts are already showing from the shared cache.
-    getDashboardData(backendId, { ...firstCall, quiet: loadedFromCache })
+    loadDashboardData(backendId, { ...firstCall, quiet: loadedFromCache })
       .then(({ dashboard, widgets: widgetResults }) => {
         if (cancelled) return;
         const savedFilters = dashboard.global_filters || [];
@@ -1985,6 +2019,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         setBoundThemeId(dashboard.theme_id || null);
         applyWidgetResults(widgetResults);
         setInitialBatchDone(true);
+        updateCachedDashboardData(backendId, { batchFetchedAt: Date.now() });
 
         // The backend's "omit filters, auto-apply dashboard.global_filters" fast path (above)
         // only works for filters it can interpret as-is — two cases it can't:
@@ -2012,7 +2047,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             || resolveFiltersForQuery(savedFilters).length !== savedFilters.length
           ));
         if (needsResolution) {
-          getDashboardData(backendId, { filters: resolveFiltersForQuery(savedFilters), quiet: loadedFromCache })
+          loadDashboardData(backendId, { filters: resolveFiltersForQuery(savedFilters), quiet: loadedFromCache })
             .then(({ widgets: resolvedWidgetResults }) => { if (!cancelled) applyWidgetResults(resolvedWidgetResults); })
             .catch(() => {});
         }
@@ -2133,7 +2168,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       // Sends the resolved concrete dates for the query, but persists `rows` (the raw
       // relative/thisPeriod spec, if any) below — never the resolved dates — so "Last 7 days"
       // stays live on every future load instead of freezing to today's resolved window.
-      getDashboardData(backendId, { filters: resolveFiltersForQuery(rows) }),
+      loadDashboardData(backendId, { filters: resolveFiltersForQuery(rows) }),
       persist ? updateDashboard(backendId, { global_filters: rows }) : null,
     ]);
     setChartLibraryData((prev) => {
@@ -2157,7 +2192,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // filter cards render) is left untouched.
   const clearFilterValues = async () => {
     if (!backendId) return;
-    const dataResult = await getDashboardData(backendId, { filters: [] });
+    const dataResult = await loadDashboardData(backendId, { filters: [] });
     setChartLibraryData((prev) => {
       const next = { ...prev };
       Object.entries(dataResult.widgets).forEach(([widgetId, result]) => {
@@ -2186,7 +2221,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // `filters` override is needed here — just re-request with whatever's already saved.
   const refreshDashboardData = async () => {
     if (!backendId) return;
-    const dataResult = await getDashboardData(backendId, { filters: resolveFiltersForQuery(dashboardFilters) });
+    const dataResult = await loadDashboardData(backendId, { filters: resolveFiltersForQuery(dashboardFilters) });
     setChartLibraryData((prev) => {
       const next = { ...prev };
       Object.entries(dataResult.widgets).forEach(([widgetId, result]) => {
@@ -2206,8 +2241,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   useEffect(() => {
     if (!backendId) return;
     if (!tabMountedRef.current) { tabMountedRef.current = true; return; }
+    // The batched load already returned every tab's widgets (the backend doesn't scope by tab), so a
+    // switch only changes the data when a slicer is scoped to a tab. Otherwise: no fetch — instant.
+    if (!slicers.some((sl) => sl.tab_id ?? sl.tabId)) return;
     let cancelled = false;
-    getDashboardData(backendId, { filters: resolveFiltersForQuery(dashboardFilters), tabId: activeTabId })
+    // OLD: getDashboardData(backendId, { filters: …, tabId: activeTabId }) — full-screen loader on every
+    // tab switch. Now quiet: the charts already on screen stay visible while the tab's data refreshes.
+    loadDashboardData(backendId, { filters: resolveFiltersForQuery(dashboardFilters), tabId: activeTabId, quiet: true })
       .then(({ widgets: widgetResults }) => {
         if (cancelled) return;
         setChartLibraryData((prev) => {
@@ -2290,7 +2330,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const applyCrossFilterTo = async (targetIds, crossFilterRow) => {
     if (!backendId || targetIds.length === 0) return;
     const filters = crossFilterRow ? [...dashboardFilters, crossFilterRow] : dashboardFilters;
-    const dataResult = await getDashboardData(backendId, { filters: resolveFiltersForQuery(filters) });
+    const dataResult = await loadDashboardData(backendId, { filters: resolveFiltersForQuery(filters) });
     setChartLibraryData((prev) => {
       const next = { ...prev };
       targetIds.forEach((id) => {
@@ -2428,9 +2468,9 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .map(([id, e]) => [id, e.drillDown.path]);
       const drilledIds = new Set(drilled.map(([id]) => String(id)));
       const [batch, crossBatch] = await Promise.all([
-        getDashboardData(backendId, { filters: baseFilters, ...tabOpt, quiet: true }),
+        loadDashboardData(backendId, { filters: baseFilters, ...tabOpt, quiet: true }),
         activeCrossFilter && crossIds.size > 0
-          ? getDashboardData(backendId, {
+          ? loadDashboardData(backendId, {
             filters: resolveFiltersForQuery([...dashboardFilters, { column: activeCrossFilter.column, operator: '=', value: activeCrossFilter.value }]),
             ...tabOpt,
             quiet: true,
@@ -3111,6 +3151,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-canvas-wrap { scrollbar-width: none; }
         /* Editor only: the editing area framed as a canvas (same dashed box as the widget editor's
            preview area and the Dashboard Builder preview). */
+        /* Thin loading bar across the top of the canvas while chart data loads (replaces the app-wide
+           loader in the builder). Sticky so it stays visible when the canvas is scrolled; the margins
+           cancel the canvas padding so it adds no height. */
+        /* Look of .dbe-load-bar is in index.css (shared with the Charts-tab preview); here only its place. */
+        .dbe-canvas-wrap > .dbe-load-bar { position:sticky; top:-14px; margin:-14px -16px 12px; }
         .dbe-canvas-wrap--framed { margin-top:10px; border:1px dashed rgb(203 213 225); border-radius:8px; }
         html .dbe-canvas-wrap::-webkit-scrollbar { width: 0; height: 0; }
         .dbe-widget { height:100%; width:100%; background:#fff; border:1px solid rgb(226 232 240); border-radius:10px; padding:10px; overflow:hidden; position:relative; cursor:pointer; }
@@ -3155,6 +3200,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
            transparent ancestor) can't accidentally get this background peeking through
            behind them. */
           [data-theme="dark"] .dbe-widget { background:#22273C; border-color:rgba(255,255,255,0.1); }
+          /* The rule above is more specific than .dbe-widget-shape, so in dark mode a Shape tile got the dark
+             card behind it. A shape has no card of its own in either mode: transparent, showing the dashboard
+             background (white by default), same as light mode. */
+          [data-theme="dark"] .dbe-widget.dbe-widget-shape { background:transparent; border:none; }
         /* Cross-filtering active-target indicator (Power BI-style) — a colored left edge on
            whichever widget(s) the current click narrowed, so it's clear at a glance which
            charts are affected. Accent color, not the app's brand orange, to read as
@@ -3925,6 +3974,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             // OLD: style={effectiveDashboardStyle.dashboardBgColor ? { background: effectiveDashboardStyle.dashboardBgColor } : undefined}
             style={dashboardCanvasBg ? { background: dashboardCanvasBg } : undefined}
           >
+          {pendingLoads > 0 && <div className="dbe-load-bar" role="progressbar" aria-label="Loading chart data" />}
           {/* The dashboard's own styled title — rendered here (inside the one shared canvas
               element) so it shows consistently in every context this component is used in
               (editor, DashboardBuilder.jsx's preview, EmbeddedDashboard.jsx) with no separate
