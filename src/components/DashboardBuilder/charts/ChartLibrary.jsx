@@ -20,6 +20,7 @@ import ChartLibraryWidgetView from './ChartLibraryWidgetView';
 import { ANIMATION_KEYS, ChartAnimationContext, resolveAnimation, cardEntrance } from '../utils/chartAnimation';
 import CHART_TYPE_META, { CHART_TYPES, BIG_NUMBER_VARIANT, toBackendChartType, displayChartType } from './chartTypeMeta';
 import { wantsBigNumberTrend, fetchBigNumberTrend, isBigNumberTrendOn, TREND_WINDOW_OPTIONS, TREND_WINDOW_SAME } from '../utils/bigNumberTrend';
+import { isLatestShiftComparison, buildLatestShiftComparisonFilters } from '../utils/latestComparison';
 import { useTheme } from '../../../context/ThemeContext';
 import { chartTokens } from '../../../theme/tokens';
 import { resolveStyleForMode, setModeColor, copyStyleFields, countCopiedSettings, surfaceBg, resolveCardBorder, cardBorderDefaults, CARD_BORDERED_CLASS } from '../utils/themedStyle';
@@ -37,7 +38,7 @@ import {
 import { subscribeDatasourcesChanged } from '../../../store/actions/datasourceEvents';
 import { subscribeWidgetsChanged, notifyWidgetsChanged } from '../../../store/actions/widgetEvents';
 import { sortWidgetsByRecency, withDatasourceOnly } from './sortWidgets';
-import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset } from '../utils/resolveTimeRange';
+import { resolveFiltersForQuery, buildComparisonFilters, buildCustomComparisonFilters, buildDateFilterFromPreset, COMPARE_TO_LABELS } from '../utils/resolveTimeRange';
 import { DEFAULT_TIME_AXIS_FORMAT, TIME_AXIS_FORMAT_OPTIONS, DEFAULT_TICK_INTERVAL_UNIT, TICK_INTERVAL_UNIT_MAX } from './axisTypeUtils';
 import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
 
@@ -227,7 +228,12 @@ const SINGLE_VALUE_DATE_FILTER_GROUP = { key: 'date_filter_group', label: 'Date 
 const SINGLE_VALUE_COMPARISON_GROUP = { key: 'comparison_group', label: 'Comparison', type: 'group', fields: [
   {
     key: 'compare_to', label: 'Compare to', type: 'select', default: 'None',
-    options: (m) => (m.date_filter_range === 'Latest' ? ['None', 'Custom'] : ['None', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom']),
+    // OLD: options: (m) => (m.date_filter_range === 'Latest' ? ['None', 'Custom'] : ['None', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom']),
+    // Under 'Latest' the shifts compare against the latest reading at or before (newest data
+    // point − the shift) — see latestComparison.js.
+    // OLD: options: ['None', '1 hour ago', '1 day ago', '7 days ago', '30 days ago', 'Custom'],
+    // Same saved values, shown in the Period list's wording (COMPARE_TO_LABELS).
+    options: ['None', ...Object.entries(COMPARE_TO_LABELS).map(([value, label]) => ({ value, label })), 'Custom'],
   },
   // Range 'Latest' has no "current window" to shift — its own Custom is a single cutoff
   // instant ("the latest reading at or before this date"), so one date/time picker is the
@@ -875,16 +881,27 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     }
 
     const isLatestCustom = mappingArg.compare_to === 'Custom' && mappingArg.date_filter_range === 'Latest';
-    if ((chartTypeArg === 'KPI_CARD' || chartTypeArg === 'GAUGE') && mappingArg.compare_to && mappingArg.compare_to !== 'None' && (dateFilter || isLatestCustom)) {
-      const compareFilters = mappingArg.compare_to === 'Custom'
-        ? buildCustomComparisonFilters({
-          filters: dateFilter ? [dateFilter] : [],
-          customDate: mappingArg.compare_custom_date,
-          customFrom: mappingArg.compare_custom_from,
-          customTo: mappingArg.compare_custom_to,
-          latestByColumn: isLatestCustom ? mappingArg.date_filter_column : null,
-        })
-        : buildComparisonFilters([dateFilter], mappingArg.compare_to);
+    const isLatestShift = isLatestShiftComparison(mappingArg);
+    // OLD: if ((chartTypeArg === 'KPI_CARD' || chartTypeArg === 'GAUGE') && mappingArg.compare_to && mappingArg.compare_to !== 'None' && (dateFilter || isLatestCustom)) {
+    if ((chartTypeArg === 'KPI_CARD' || chartTypeArg === 'GAUGE') && mappingArg.compare_to && mappingArg.compare_to !== 'None' && (dateFilter || isLatestCustom || isLatestShift)) {
+      let compareFilters;
+      try {
+        compareFilters = isLatestShift
+          ? await buildLatestShiftComparisonFilters({ datasourceId: datasourceIdArg, mapping: mappingArg })
+          : mappingArg.compare_to === 'Custom'
+            ? buildCustomComparisonFilters({
+              filters: dateFilter ? [dateFilter] : [],
+              customDate: mappingArg.compare_custom_date,
+              customFrom: mappingArg.compare_custom_from,
+              customTo: mappingArg.compare_custom_to,
+              latestByColumn: isLatestCustom ? mappingArg.date_filter_column : null,
+            })
+            : buildComparisonFilters([dateFilter], mappingArg.compare_to);
+      } catch {
+        if (previewRequestIdRef.current === requestId) setPreviewComparison(null);
+        return;
+      }
+      if (previewRequestIdRef.current !== requestId) return;
       if (compareFilters) {
         try {
           const compareData = await getStandaloneWidgetData(widgetId, { filters: compareFilters });
@@ -1080,10 +1097,12 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       // column 'Latest' needs, it just stops being a filter range and starts being "which
       // column to find the most recent value of".
       if (key === 'date_filter_range' && val === 'Latest') {
-        if (next.compare_to && next.compare_to !== 'None' && next.compare_to !== 'Custom') {
-          delete next.compare_to;
-          delete next.compare_custom_date;
-        }
+        // OLD: the shifted presets had no meaning under 'Latest' and were cleared here — they
+        // now compare against the newest data point minus the shift (latestComparison.js).
+        // if (next.compare_to && next.compare_to !== 'None' && next.compare_to !== 'Custom') {
+        //   delete next.compare_to;
+        //   delete next.compare_custom_date;
+        // }
         if (next.compare_to === 'Custom') {
           delete next.compare_custom_from;
           delete next.compare_custom_to;

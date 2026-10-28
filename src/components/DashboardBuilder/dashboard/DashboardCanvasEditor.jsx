@@ -24,6 +24,7 @@ import toast from 'react-hot-toast';
 import { copyNameFor } from '../utils/copyName';
 import ThemePicker from './ThemePicker';
 import { wantsBigNumberTrend, fetchBigNumberTrend } from '../utils/bigNumberTrend';
+import { isLatestShiftComparison, buildLatestShiftComparisonFilters } from '../utils/latestComparison';
 import SelectedWidgetDetails from './SelectedWidgetDetails';
 import StyleModeTint from '../widgetConfig/StyleModeTint';
 import { exportWidgetCSV, exportWidgetPNG, exportDashboardCSV, exportDashboardPNG, exportDashboardPDF, exportDashboardPDFMultiPage, compositeDashboardCanvas, exportRowsCSV } from '../utils/exportUtils';
@@ -1862,6 +1863,28 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const entry = chartLibraryData[widgetId];
       const yAxis = measureKey(mapping.y_axis);
       if (!entry?.rows || !yAxis) return;
+      // Period 'Latest' + a shifted preset: the cutoff depends on the newest data point, found by
+      // its own query (latestComparison.js) — so the filters are only known once that resolves,
+      // and the cache key is built from what they're derived from instead.
+      if (isLatestShiftComparison(mapping)) {
+        const baseFilters = resolveFiltersForQuery(kpiEffectiveFilters(mapping));
+        const cacheKey = `${widgetId}:${compareTo}:latest:${JSON.stringify([mapping.y_axis, mapping.aggregation, mapping.date_filter_column, baseFilters])}:r${refreshTick}`;
+        if (comparisonKeyRef.current.get(widgetId) === cacheKey) return;
+        comparisonKeyRef.current.set(widgetId, cacheKey);
+        const quiet = loadedFromCache || refreshTick > 0;
+        buildLatestShiftComparisonFilters({ datasourceId: w.dataSource.datasourceId, mapping, filters: baseFilters })
+          .then((filters) => (filters ? fetchWidgetData(widgetId, { filters, quiet }) : null))
+          .then((data) => {
+            if (comparisonKeyRef.current.get(widgetId) !== cacheKey) return; // superseded
+            setComparisonRawData((prev) => ({ ...prev, [widgetId]: data ? { rows: data.rows } : null }));
+          })
+          .catch(() => {
+            if (comparisonKeyRef.current.get(widgetId) === cacheKey) {
+              setComparisonRawData((prev) => ({ ...prev, [widgetId]: null }));
+            }
+          });
+        return;
+      }
       // 'Custom' has no "current window" to shift when date_filter_range is 'Latest' (there's
       // no BETWEEN filter — see kpiEffectiveFilters/buildDateFilterFromPreset), so it takes a
       // fixed cutoff date instead — see buildCustomComparisonFilters's own doc comment for the

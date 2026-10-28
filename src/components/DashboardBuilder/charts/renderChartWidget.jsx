@@ -16,6 +16,7 @@ import HeatStripChart from '../../Widgets/HeatStripChart';
 import VirtualizedTable from './VirtualizedTable';
 import { isTimeAxis, isTimeValue, formatDateLabel, DEFAULT_TIME_AXIS_FORMAT, resolveTickInterval } from './axisTypeUtils';
 import { formatCompactNumber } from '../utils/formatNumber';
+import { COMPARE_TO_LABELS } from '../utils/resolveTimeRange';
 import { resolveStyleForMode, guardStyleColors } from '../utils/themedStyle';
 import { isDarkColor } from '../utils/contrast';
 
@@ -38,7 +39,8 @@ export function measureKey(value) {
 
 function describeCompareTo(mapping) {
   if (!mapping.compare_to || mapping.compare_to === 'None') return '';
-  if (mapping.compare_to !== 'Custom') return `vs ${mapping.compare_to}`;
+  // OLD: if (mapping.compare_to !== 'Custom') return `vs ${mapping.compare_to}`;
+  if (mapping.compare_to !== 'Custom') return `vs ${(COMPARE_TO_LABELS[mapping.compare_to] || mapping.compare_to).toLowerCase()}`;
   if (mapping.date_filter_range === 'Latest') return `vs ${mapping.compare_custom_date || 'custom date'}`;
   return mapping.compare_custom_from && mapping.compare_custom_to
     ? `vs ${mapping.compare_custom_from} – ${mapping.compare_custom_to}`

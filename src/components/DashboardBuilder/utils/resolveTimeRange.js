@@ -240,12 +240,54 @@ function shiftDateByMs(str, ms) {
 
 const MS_PER_HOUR = 3600000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
-const COMPARISON_PRESET_SHIFT_MS = {
+export const COMPARISON_PRESET_SHIFT_MS = {
   '1 hour ago': MS_PER_HOUR,
   '1 day ago': MS_PER_DAY,
   '7 days ago': 7 * MS_PER_DAY,
   '30 days ago': 30 * MS_PER_DAY,
 };
+// What each saved compare_to preset is SHOWN as — worded like the Period list (date_filter_range)
+// so every time picker reads the same. The saved values above stay as they are (existing charts
+// keep working); only the label changes, in the Compare to dropdown and the card's "vs …" text.
+export const COMPARE_TO_LABELS = {
+  '1 hour ago': 'Last hour',
+  '1 day ago': 'Last 24 hours',
+  '7 days ago': 'Last 7 days',
+  '30 days ago': 'Last 30 days',
+  previous_month: 'Last month',
+  previous_quarter: 'Last quarter',
+  previous_year: 'Last year',
+};
+// Calendar shifts — a month isn't a fixed number of ms, so these move the date by whole months
+// instead (shiftDateByMonths). Saved under the backend's own compare_to values.
+export const COMPARISON_PRESET_SHIFT_MONTHS = {
+  previous_month: 1,
+  previous_quarter: 3,
+  previous_year: 12,
+};
+
+// Moves an epoch-ms instant back `months` calendar months in UTC, clamping the day to the target
+// month's length (Mar 31 − 1 month → Feb 28/29, not Mar 3).
+export function shiftMsByMonths(ms, months) {
+  const d = new Date(ms);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() - months);
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, lastDay));
+  return d.getTime();
+}
+
+// Same contract as shiftDateByMs, for a whole-month shift.
+function shiftDateByMonths(str, months) {
+  if (!str) return str;
+  const isDateTime = str.length > 10;
+  const iso = isDateTime ? `${str.replace(' ', 'T')}Z` : `${str}T00:00:00Z`;
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return str;
+  const shifted = new Date(shiftMsByMonths(ms, months));
+  return isDateTime ? shifted.toISOString().slice(0, 19).replace('T', ' ') : shifted.toISOString().slice(0, 10);
+}
 
 // KPI_CARD's "Compare to" (see CHART_TYPE_FIELDS's KPI_CARD entry in ChartLibrary.jsx) needs
 // a second query against a shifted date window — the backend has no comparison-period concept
@@ -265,6 +307,11 @@ export function buildComparisonFilters(filters, preset) {
     const fromMs = Date.parse(from.length > 10 ? from.replace(' ', 'T') : `${from}T00:00:00`);
     const toMs = Date.parse(to.length > 10 ? to.replace(' ', 'T') : `${to}T00:00:00`);
     if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return f;
+    const shiftMonths = COMPARISON_PRESET_SHIFT_MONTHS[preset];
+    if (shiftMonths) {
+      shiftedAny = true;
+      return { ...f, value: [shiftDateByMonths(from, shiftMonths), shiftDateByMonths(to, shiftMonths)] };
+    }
     const shiftMs = COMPARISON_PRESET_SHIFT_MS[preset];
     if (!shiftMs) return f;
     shiftedAny = true;
