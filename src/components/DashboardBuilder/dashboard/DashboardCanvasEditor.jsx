@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ResponsiveGridLayout } from 'react-grid-layout';
-import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, Pencil, Palette, Filter, Maximize2, RotateCcw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+// OLD: import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, Pencil, Palette, Filter, Maximize2, RotateCcw } from 'lucide-react';
+// OLD: import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, Pencil, Palette, Filter, Maximize2, RotateCcw, ArrowRight, ExternalLink } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Download, Pencil, Palette, Filter, Maximize2, RotateCcw, ArrowRight, ExternalLink, MapPin } from 'lucide-react';
 import 'react-grid-layout/css/styles.css';
 import Button from '../../Button';
 import ConfirmModal from '../../ConfirmModal';
 import DashboardTabBar from './DashboardTabBar';
-import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields, BIG_NUMBER_STYLE_FIELDS, chartTextSizeDefaults, chartColorDefaults, dashboardColorDefaults } from '../widgetConfig/widgetTypeRegistry';
+// OLD: import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields, BIG_NUMBER_STYLE_FIELDS, chartTextSizeDefaults, chartColorDefaults, dashboardColorDefaults } from '../widgetConfig/widgetTypeRegistry';
+import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields, BIG_NUMBER_STYLE_FIELDS, MAP_STYLE_FIELDS, chartTextSizeDefaults, chartColorDefaults, dashboardColorDefaults } from '../widgetConfig/widgetTypeRegistry';
 import MOCK_DATA_SOURCES from '../legacy/mock/mockDataSources';
 import { measureKey } from '../charts/renderChartWidget';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
@@ -26,6 +30,9 @@ import ThemePicker from './ThemePicker';
 import { wantsBigNumberTrend, fetchBigNumberTrend } from '../utils/bigNumberTrend';
 import { isLatestShiftComparison, buildLatestShiftComparisonFilters } from '../utils/latestComparison';
 import SelectedWidgetDetails from './SelectedWidgetDetails';
+import SelectedWidgetInteractions, { INTERACTION_STYLE_KEYS } from './SelectedWidgetInteractions';
+import { DOUBLE_CLICK_MS, resolveWidgetLink, dashboardLinkUrl } from '../utils/widgetLink';
+import { buildMapRows, mapLinkUrl, mapChartFieldDefaults, MAX_VALUES_PER_FIELD } from '../utils/mapLink';
 import StyleModeTint from '../widgetConfig/StyleModeTint';
 import { exportWidgetCSV, exportWidgetPNG, exportDashboardCSV, exportDashboardPNG, exportDashboardPDF, exportDashboardPDFMultiPage, compositeDashboardCanvas, exportRowsCSV } from '../utils/exportUtils';
 import { loadDatasources } from '../datasource/dashboardDatasources';
@@ -39,7 +46,8 @@ import {
   createSlicer, listSlicers, updateSlicer, refreshSlicerValues, deleteSlicer,
 } from '../../../store/actions/dashboardBuilder-actions';
 import { subscribeWidgetsChanged, notifyWidgetsChanged } from '../../../store/actions/widgetEvents';
-import CHART_TYPE_META, { CHART_TYPES, CHART_TYPE_TO_MOCK_TYPE, MOCK_TYPE_TO_CHART_TYPE } from '../charts/chartTypeMeta';
+import CHART_TYPE_META, { CHART_TYPES, CHART_TYPE_TO_MOCK_TYPE, MOCK_TYPE_TO_CHART_TYPE, MAP_VARIANT } from '../charts/chartTypeMeta';
+import { MAX_LIVE_MAPS } from '../charts/mapSlots';
 import ChartListItem from '../charts/ChartListItem';
 import ChartListSearchBar from '../charts/ChartListSearchBar';
 import useChartListFilter from '../charts/useChartListFilter';
@@ -218,6 +226,14 @@ function resolveWidgetProps(widget, ctx) {
     tableFrame: dashboardTableFrame, gridLines: dashboardGridLines, gridColor: dashboardGridColor,
     widgetId, onPointClick: onWidgetPointClick, onDrillUp: onWidgetDrillUp,
     onPointCrossFilter: onWidgetPointCrossFilter, editable, onTextChange: onWidgetTextChange,
+    // Has a live double-click "Link to" target in a read-only view (utils/widgetLink.js).
+    linked = false,
+    // Same link for the point right-click menu: its label ("Go to X" / "Open X ↗"), whether it passes
+    // the clicked value on, and the stable follow callback (DashboardCanvasEditor's stableOnFollowLink).
+    linkLabel = null, linkCarriesValue = false, onFollowLink: onWidgetFollowLink,
+    // "Open on map" (utils/mapLink.js) for the point right-click menu: label, whether it passes the
+    // clicked value, and the stable open callback (DashboardCanvasEditor's stableOnOpenMap).
+    mapLabel = null, mapCarriesValue = false, onOpenMap: onWidgetOpenMap,
   } = ctx || {};
   // For a real (chartLibrary) widget, its own definition — edited via the Charts tab,
   // stored in dataSource.mapping.style — is the base default for EVERY placement of that
@@ -456,8 +472,12 @@ function resolveWidgetProps(widget, ctx) {
       // exposes actually takes effect on the multi-series render below, not just the panel's
       // own UI.
       const hasSeriesGrouping = ['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR'].includes(resolved.chartType) && !!resolved.mapping?.series;
+      // Map (TABLE + chart_variant 'map') swaps TABLE's own fields for MAP_STYLE_FIELDS — mirrors
+      // chartLibraryStyleFieldsFor.
+      const isMapChart = resolved.chartType === 'TABLE' && resolved.mapping?.chart_variant === 'map';
       const extraFields = [
-        ...(hasSeriesGrouping ? seriesExtraStyleFields(resolved.chartType) : (CHART_TYPE_EXTRA_STYLE_FIELDS[resolved.chartType] || [])),
+        // OLD: ...(hasSeriesGrouping ? seriesExtraStyleFields(resolved.chartType) : (CHART_TYPE_EXTRA_STYLE_FIELDS[resolved.chartType] || [])),
+        ...(isMapChart ? MAP_STYLE_FIELDS : hasSeriesGrouping ? seriesExtraStyleFields(resolved.chartType) : (CHART_TYPE_EXTRA_STYLE_FIELDS[resolved.chartType] || [])),
         // Big Number's comparison-line fields — mirrors chartLibraryStyleFieldsFor.
         ...(resolved.mapping?.kpi_variant === 'big_number' ? BIG_NUMBER_STYLE_FIELDS : []),
       ];
@@ -499,7 +519,9 @@ function resolveWidgetProps(widget, ctx) {
         // which checks drill_down first). `onWidgetPointClick` is a single stable callback
         // from DashboardCanvasEditor (see its own ref-backed useCallback), never recreated
         // here, so this doesn't defeat WidgetContent's memoization.
-        onPointClick: (extraStyle.crossFilterSource === 'on' || resolved.drillDown?.enabled) && onWidgetPointClick
+        // OLD: (extraStyle.crossFilterSource === 'on' || resolved.drillDown?.enabled) && onWidgetPointClick
+        // `linked`: a double-click link needs the point clicks too (two clicks = follow the link).
+        onPointClick: (extraStyle.crossFilterSource === 'on' || resolved.drillDown?.enabled || linked) && onWidgetPointClick
           ? (point) => onWidgetPointClick(widgetId, point)
           : undefined,
         // Whether THIS placement also has cross-filter configured, regardless of the
@@ -509,6 +531,14 @@ function resolveWidgetProps(widget, ctx) {
         // handleWidgetPointCrossFilterRef in this file, which bypasses the drill-first check
         // handleWidgetPointClickRef applies to left-click).
         crossFilterEnabled: extraStyle.crossFilterSource === 'on',
+        // Right-click → "Go to <tab>" / "Open <dashboard>" on a linked widget (read-only views).
+        linkLabel: linked ? linkLabel : null,
+        linkCarriesValue,
+        onPointLink: linked && onWidgetFollowLink ? (point) => onWidgetFollowLink(widgetId, point) : undefined,
+        // Right-click → "Open on map" (read-only views, when the placement has a mapLink).
+        mapLabel,
+        mapCarriesValue,
+        onPointMap: mapLabel && onWidgetOpenMap ? (point) => onWidgetOpenMap(widgetId, point) : undefined,
         onPointCrossFilter: extraStyle.crossFilterSource === 'on' && onWidgetPointCrossFilter
           ? (point) => onWidgetPointCrossFilter(widgetId, point)
           : undefined,
@@ -529,6 +559,12 @@ function resolveWidgetProps(widget, ctx) {
           // directly) but not on the canvas until added here.
           ringWidth: extraStyle.ringWidth,
           gaugeMax: extraStyle.gaugeMax,
+          // Map only (MAP_STYLE_FIELDS) — undefined for every other chart.
+          mapBasemap: extraStyle.mapBasemap,
+          mapOpacity: extraStyle.mapOpacity,
+          mapSectorScale: extraStyle.mapSectorScale,
+          mapMinCellPx: extraStyle.mapMinCellPx,
+          mapPointSize: extraStyle.mapPointSize,
           // Big Number only (BIG_NUMBER_STYLE_FIELDS) — undefined for every other chart.
           // Axis titles: chart/placement → dashboard/theme → shown. `baseStyle` first — the field's
           // non-null default ('show') is always filled into `style` and would hide a dashboard 'hide'.
@@ -700,7 +736,8 @@ const WidgetContent = React.memo(function WidgetContent({
   tableFrame, gridLines, gridColor,
   mockDataCache, datasources, chartLibraryEntry, comparisonEntry, trendEntry,
   widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable,
-  slicer, onSlicerChange, onSlicerRefresh, slicerBusy, onTextChange,
+  slicer, onSlicerChange, onSlicerRefresh, slicerBusy, onTextChange, linked,
+  linkLabel, linkCarriesValue, onFollowLink, mapLabel, mapCarriesValue, onOpenMap,
 }) {
   const Comp = WIDGET_TYPE_REGISTRY[widget.type]?.component;
   if (!Comp) return null;
@@ -725,7 +762,8 @@ const WidgetContent = React.memo(function WidgetContent({
     chartLibraryData: widget.dataSource?.widgetId && chartLibraryEntry
       ? { [widget.dataSource.widgetId]: { ...chartLibraryEntry, comparison: comparisonEntry, trend: trendEntry } }
       : {},
-    widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable, onTextChange,
+    widgetId, onPointClick, onDrillUp, onPointCrossFilter, editable, onTextChange, linked,
+    linkLabel, linkCarriesValue, onFollowLink, mapLabel, mapCarriesValue, onOpenMap,
   });
   return <Comp {...props} />;
 });
@@ -762,6 +800,12 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // only when read-only (view / fullscreen / embedded), never while editing. `onRefreshState`
   // reports { refreshing, lastRefreshedAt } to a parent that draws its own Refresh button.
   initialRefreshInterval = 0, autoRefreshSeconds = 0, onRefreshState,
+  // Deep link (?tab=, EmbeddedDashboard's syncTabToUrl): `requestedTabId` picks the open tab — at
+  // mount and whenever it changes (browser Back/Forward); ignored when no such tab exists.
+  // `onActiveTabChange(tabId)` reports every tab switch so the parent can write it back to the URL.
+  requestedTabId = null, onActiveTabChange,
+  // [{ id, name, published }] — other dashboards a widget's double-click link can open (edit mode).
+  linkDashboardOptions = [],
   // Controls drawn at the right end of the dashboard title row (EmbeddedDashboard: filters, refresh,
   // auto-refresh, export) — same line as the title, no extra toolbar row. Left out of PNG/PDF exports.
   titleBarActions = null,
@@ -810,7 +854,14 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const [tabs, setTabs] = useState(initialTabs);
   // Saved default auto-refresh (seconds) — part of the dashboard, so it's in the unsaved-changes snapshot.
   const [refreshInterval, setRefreshInterval] = useState(initialRefreshInterval || 0);
-  const [activeTabId, setActiveTabId] = useState(initialTabs[0]?.id || null);
+  // OLD: useState(initialTabs[0]?.id || null)
+  const [activeTabId, setActiveTabId] = useState(
+    (requestedTabId && initialTabs.some((t) => t.id === requestedTabId) ? requestedTabId : initialTabs[0]?.id) || null,
+  );
+  useEffect(() => {
+    if (requestedTabId && tabs.some((t) => t.id === requestedTabId)) setActiveTabId(requestedTabId);
+  }, [requestedTabId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onActiveTabChange?.(activeTabId); }, [activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Normalizes any widget missing a tabId onto the first tab, once, on mount — covers a
   // dashboard that already has tabs (this editor opened with initialTabs.length > 0) but also
   // has a widget attached with no tabId (e.g. attached before tabs existed on this dashboard,
@@ -842,7 +893,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // Selected Widget → Size → Copy: remembered here so it can be pasted onto another widget.
   const [copiedSize, setCopiedSize] = useState(null);
   // Selected Widget's two sub-sections (Details / Style) collapse independently; both start open.
-  const [selSubOpen, setSelSubOpen] = useState({ details: true, style: true });
+  // OLD: useState({ details: true, style: true }) — Interactions sub-section added between them.
+  const [selSubOpen, setSelSubOpen] = useState({ details: true, interactions: true, style: true });
   const toggleSelSub = (k) => setSelSubOpen((prev) => ({ ...prev, [k]: !prev[k] }));
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   // Superset-style "choose dataset, then chart type" flow for adding a new mock widget
@@ -917,6 +969,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const [widgetFilterData, setWidgetFilterData] = useState({});
   const widgetFilterKeyRef = useRef(new Map());
   const [widgetFilterModalId, setWidgetFilterModalId] = useState(null);
+  // Read-only views: a viewer's own values for a placement's filters ({ [l.i]: rows }) — their
+  // screen only, never saved, gone on reopen (same as dashboard filter values). The saved
+  // `widgets[id].filters` is never touched. `placementFilters` is what every reader uses.
+  const [viewerWidgetFilters, setViewerWidgetFilters] = useState({});
+  const placementFilters = (id, w) => (!editable && viewerWidgetFilters[id]) || w?.filters || [];
   // Lifted out of FiltersToggleButton (now controllable — see its own updated comment) so
   // FilterPanel's own "Edit in Filters" link (for a date-range filter, which can only really
   // be edited in the full editor, not this compact strip) can open the SAME modal instead of
@@ -974,6 +1031,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const [isExportingAcrossTabs, setIsExportingAcrossTabs] = useState(false);
   // Phase 18 — dashboard-level global_filters, only meaningful when backendId is set.
   const [dashboardFilters, setDashboardFilters] = useState(initialGlobalFilters);
+  // The dashboard's SAVED filter values — what Reset goes back to in read-only views, where a
+  // viewer's own value changes are never saved (persistAndApplyFilters' `persist`).
+  const savedGlobalFiltersRef = useRef(initialGlobalFilters || []);
+  // "Clear all" blanks the values for the query only (dashboardFilters is left as is — see
+  // clearFilterValues), so it's tracked separately to count as "changed from saved".
+  const [filterValuesCleared, setFilterValuesCleared] = useState(false);
+  const filtersChangedFromSaved = !editable && (filterValuesCleared || JSON.stringify(dashboardFilters) !== JSON.stringify(savedGlobalFiltersRef.current));
+  // A fresh copy, so FilterPanel re-seeds its inputs even when the rows are unchanged (after Clear all).
+  const resetFiltersToSaved = () => persistAndApplyFilters(savedGlobalFiltersRef.current.map((f) => ({ ...f })), { persist: false });
   const [filterDatasourceOptions, setFilterDatasourceOptions] = useState([]);
   // Fallback value source for FilterPanel's value dropdowns — derived directly from rows
   // already loaded for this dashboard's own widgets, rather than a fresh query. Exists because
@@ -1210,6 +1276,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // Filter setup (add/edit/remove filters) — always saved to the dashboard.
     saveFilters: (rows) => persistAndApplyFilters(rows, { persist: true }),
     clearFilterValues,
+    // Read-only views: back to the values saved with the dashboard (never saves anything).
+    resetFilters: () => resetFiltersToSaved(),
   }));
 
   // Tracks which ResponsiveGridLayout breakpoint is currently active, so drop/layout-change
@@ -1243,7 +1311,18 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const dashboardStyleEdited = isStyleEdited(dashboardStyle, savedDashboardStyle);
   const themeLinkEdited = String(boundThemeId ?? '') !== String(savedSnapshot.themeId ?? '');
   const savedSelectedStyle = savedSnapshot.widgets?.[selectedId]?.style || {};
-  const selectedStyleEdited = !!selectedId && isStyleEdited(widgets[selectedId]?.style, savedSelectedStyle);
+  // OLD: isStyleEdited(widgets[selectedId]?.style, savedSelectedStyle) — the cross-filter keys now live in
+  // the Interactions sub-section, which has its own "edited" badge (link + those keys).
+  const withoutInteractionKeys = (st) => Object.fromEntries(Object.entries(st || {}).filter(([k]) => !INTERACTION_STYLE_KEYS.has(k)));
+  const onlyInteractionKeys = (st) => Object.fromEntries(Object.entries(st || {}).filter(([k]) => INTERACTION_STYLE_KEYS.has(k)));
+  const selectedStyleEdited = !!selectedId && isStyleEdited(withoutInteractionKeys(widgets[selectedId]?.style), withoutInteractionKeys(savedSelectedStyle));
+  const selectedInteractionsEdited = !!selectedId && (
+    JSON.stringify(widgets[selectedId]?.link || null) !== JSON.stringify(savedSnapshot.widgets?.[selectedId]?.link || null)
+    || JSON.stringify(widgets[selectedId]?.mapLink || null) !== JSON.stringify(savedSnapshot.widgets?.[selectedId]?.mapLink || null)
+    || JSON.stringify(onlyInteractionKeys(widgets[selectedId]?.style)) !== JSON.stringify(onlyInteractionKeys(savedSelectedStyle))
+  );
+  // Held open while it has unsaved edits, like Style.
+  const selInteractionsShown = selSubOpen.interactions || selectedInteractionsEdited;
   // A section holding unsaved edits is held open until saved (same rule as WidgetStyleFields' groups).
   const themeSectionShown = themeSectionOpen || themeLinkEdited;
   const overridesSectionShown = overridesSectionOpen || dashboardStyleEdited;
@@ -1264,6 +1343,17 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // placeholder + separate picker step. Falls back to an empty placeholder if omitted
   // (kept for robustness; not exercised by any current UI path since chartLibrary's own
   // palette icon is hidden — see widgetTypeRegistry.js).
+  // Map charts past MAX_LIVE_MAPS are still placed — they just wait for a free map slot while the
+  // first ones are on screen (charts/mapSlots.js) — so adding one only warns, never blocks.
+  const isMapWidget = (w) => w?.dataSource?.chartType === 'TABLE' && w.dataSource.mapping?.chart_variant === MAP_VARIANT;
+  const warnIfManyMaps = (existing, added) => {
+    if (!isMapWidget(added)) return;
+    const count = Object.values(existing).filter(isMapWidget).length + 1;
+    if (count > MAX_LIVE_MAPS) {
+      toast(`${count} maps on this dashboard: only ${MAX_LIVE_MAPS} draw at once; others load as you scroll.`, { id: 'dbe-many-maps', icon: '🗺️' });
+    }
+  };
+
   const addWidget = (type, posOverride, chartId, mockSourceKey) => {
     const def = WIDGET_TYPE_REGISTRY[type];
     const id = nextId();
@@ -1332,6 +1422,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             // The chart's own style (Charts tab, mapping.style) arrives with `mapping` and wins
             // over the dashboard's at render; a per-placement edit made afterward in this
             // editor's own Style panel still wins over both.
+            warnIfManyMaps(widgets, { dataSource: { chartType: detail.chart_type, mapping: detail.mapping } });
             updateWidget(id, {
               title: picked?.name || detail.name,
               dataSource: {
@@ -1604,6 +1695,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     setLayout((prev) => [...prev, { i: newId, x, y, w: srcLayout.w, h: srcLayout.h, ...(srcLayout.tabId ? { tabId: srcLayout.tabId } : {}) }]);
     setWidgets((prev) => ({ ...prev, [newId]: clone }));
     setSelectedId(newId);
+    warnIfManyMaps(widgets, clone);
   };
 
   // Ctrl/Cmd+C copies the selected widget's id; Ctrl/Cmd+V duplicates whatever was last
@@ -1817,10 +1909,12 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   useEffect(() => {
     layout.forEach((l) => {
       const w = widgets[l.i];
-      if (!w || w.dataSource?.type !== 'chartLibrary' || !w.filters?.length) return;
+      // OLD: if (!w || w.dataSource?.type !== 'chartLibrary' || !w.filters?.length) return;
+      if (!w || w.dataSource?.type !== 'chartLibrary' || !placementFilters(l.i, w).length) return;
       const widgetId = w.dataSource.widgetId;
       if (!widgetId) return;
-      const filters = resolveFiltersForQuery([...dashboardFilters, ...w.filters]);
+      // OLD: const filters = resolveFiltersForQuery([...dashboardFilters, ...w.filters]);
+      const filters = resolveFiltersForQuery([...dashboardFilters, ...placementFilters(l.i, w)]);
       // OLD: const cacheKey = `${widgetId}:${JSON.stringify(filters)}`;
       const cacheKey = `${widgetId}:${JSON.stringify(filters)}:r${refreshTick}`;
       if (widgetFilterKeyRef.current.get(l.i) === cacheKey) return;
@@ -1838,7 +1932,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           }
         });
     });
-  }, [layout, widgets, dashboardFilters, backendId, refreshTick]);
+  // OLD: }, [layout, widgets, dashboardFilters, backendId, refreshTick]);
+  }, [layout, widgets, dashboardFilters, backendId, refreshTick, viewerWidgetFilters, editable]);
 
   // KPI_CARD "Compare to" — a second, independent fetch against a date-shifted filter set
   // (see buildComparisonFilters's own doc comment for why this can't just be a backend
@@ -2023,13 +2118,17 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       return undefined;
     }
     let firstCall = {};
-    if (hasOverride) firstCall = { filters: deepLinkFilters };
+    // OLD: if (hasOverride) firstCall = { filters: deepLinkFilters };
+    // Resolved like every other apply path: a widget link can carry (or merge in) a relative date
+    // range or a blank row, which the backend can't evaluate as-is. Plain rows pass through unchanged.
+    if (hasOverride) firstCall = { filters: resolveFiltersForQuery(deepLinkFilters) };
     else if (knownFilters) firstCall = { filters: resolveFiltersForQuery(knownFilters) };
     // Quiet (no app-wide loader) when the charts are already showing from the shared cache.
     loadDashboardData(backendId, { ...firstCall, quiet: loadedFromCache })
       .then(({ dashboard, widgets: widgetResults }) => {
         if (cancelled) return;
         const savedFilters = dashboard.global_filters || [];
+        savedGlobalFiltersRef.current = savedFilters;
         setDashboardFilters(hasOverride ? deepLinkFilters : savedFilters);
         // `theme` is a proper JSONB column (confirmed with the backend dev — it used to be
         // VARCHAR(64), which hard-crashed with a 500 on save for any real style object past
@@ -2165,8 +2264,14 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // this component renders internally when editable — e.g. DashboardBuilder.jsx's read-only
   // preview header, which sits outside this component entirely.
   useEffect(() => {
-    onFiltersState?.({ filters: dashboardFilters, datasourceOptions: filterDatasourceOptions });
-  }, [dashboardFilters, filterDatasourceOptions]);
+    // OLD: onFiltersState?.({ filters: dashboardFilters, datasourceOptions: filterDatasourceOptions });
+    // `changedFromSaved` enables Reset in a parent's read-only FilterPanel.
+    onFiltersState?.({
+      filters: dashboardFilters,
+      datasourceOptions: filterDatasourceOptions,
+      changedFromSaved: filtersChangedFromSaved,
+    });
+  }, [dashboardFilters, filterDatasourceOptions, filtersChangedFromSaved]);
 
   // Phase 19c — mirrors the currently-staged dashboard style/theme binding out to
   // DashboardBuilder.jsx, so a brand-new (not-yet-saved) dashboard's first createDashboard
@@ -2185,6 +2290,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // the `saveFilters` ref method.
   // OLD: const persistAndApplyFilters = async (rows) => { … updateDashboard(…) always … }
   const persistAndApplyFilters = async (rows, { persist = editable } = {}) => {
+    if (persist) savedGlobalFiltersRef.current = rows;
+    setFilterValuesCleared(false);
     setDashboardFilters(rows);
     if (!backendId) return;
     const [dataResult] = await Promise.all([
@@ -2215,6 +2322,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // filter cards render) is left untouched.
   const clearFilterValues = async () => {
     if (!backendId) return;
+    setFilterValuesCleared(true);
     const dataResult = await loadDashboardData(backendId, { filters: [] });
     setChartLibraryData((prev) => {
       const next = { ...prev };
@@ -2438,8 +2546,118 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     setActiveCrossFilter({ clickId, sourceWidgetId, column, value, label: String(value), targetIds });
   };
 
+  // Double-click "Link to" (utils/widgetLink.js). On a LINKED widget (read-only views) a point
+  // click waits DOUBLE_CLICK_MS: a second click on the same widget in that window cancels it and
+  // follows the link instead. Unlinked widgets run their single-click action straight away.
+  const pendingPointClickRef = useRef(null); // { widgetId, point, timer }
+  const linkFollowedAtRef = useRef(0); // lets the tile's own onDoubleClick skip a point double-click
+  useEffect(() => () => clearTimeout(pendingPointClickRef.current?.timer), []);
+
+  const navigate = useNavigate();
+  const followWidgetLinkRef = useRef(() => {});
+  followWidgetLinkRef.current = async (sourceWidgetId, point) => {
+    const sourceWidget = widgets[sourceWidgetId];
+    const link = resolveWidgetLink(sourceWidget, tabs);
+    if (!link) return;
+    linkFollowedAtRef.current = Date.now();
+    // Another dashboard → its deep link (pages/DashboardBuilder.jsx opens it fullscreen). Opened
+    // before any await, so the browser still counts it as the user's click (no popup blocking).
+    if (link.kind === 'dashboard') {
+      // OLD: dashboardLinkUrl(link, { dashboardFilters, point }) — same window now also says where it came from (Back button).
+      const url = dashboardLinkUrl(link, { dashboardFilters, point, fromDashboardId: link.newWindow === false ? backendId : null });
+      if (link.newWindow === false) navigate(url);
+      else window.open(url, '_blank', 'noopener');
+      return;
+    }
+    setFocusedWidgetId(null);
+    setActiveTabId(link.tabId);
+    if (link.carry !== 'value' || !point?.column) return;
+    // Clicked value → the active cross-filter on the target tab's widgets that can take it: same
+    // datasource + the column in their mapping (cross-filter's own match rule). Unlike a cross-filter
+    // source click this ignores the targets' "Cross-filter target" flag — the link asked for it.
+    const { column, value } = point;
+    const dsId = sourceWidget.dataSource?.datasourceId;
+    const targetIds = layout
+      .filter((l) => l.i !== sourceWidgetId && (!l.tabId || l.tabId === link.tabId))
+      .map((l) => l.i)
+      .filter((id) => {
+        const w = widgets[id];
+        return w?.dataSource?.type === 'chartLibrary'
+          && w.dataSource.datasourceId === dsId
+          && Object.values(w.dataSource.mapping || {}).includes(column);
+      });
+    if (targetIds.length === 0) {
+      toast(`Nothing on ${link.tabName} can be filtered by ${column}.`);
+      return;
+    }
+    // A previous cross-filter's widgets that aren't re-filtered now go back to unfiltered data.
+    const stale = (activeCrossFilter?.targetIds || []).filter((id) => !targetIds.includes(id));
+    if (stale.length) applyCrossFilterTo(stale, null);
+    await applyCrossFilterTo(targetIds, { column, operator: '=', value });
+    setActiveCrossFilter({ clickId: `link:${sourceWidgetId}:${column}:${value}`, sourceWidgetId, column, value, label: String(value), targetIds });
+  };
+
+  // "Open on map" (utils/mapLink.js): the GIS Engine filtered to this widget — the clicked point
+  // (header button: none) and/or every filter it's showing: the dashboard's, the chart's own
+  // (Charts tab), this placement's, and an active cross-filter on it — later ones win per field.
+  // Opened before any await, like the dashboard link, so popups aren't blocked.
+  const openWidgetMapRef = useRef(() => {});
+  openWidgetMapRef.current = (widgetId, point) => {
+    const w = widgets[widgetId];
+    if (!w?.mapLink) return;
+    const crossFilter = activeCrossFilter?.targetIds?.includes(widgetId)
+      ? [{ column: activeCrossFilter.column, operator: '=', value: activeCrossFilter.value }]
+      : [];
+    const filters = [
+      ...(dashboardFilters || []),
+      ...(w.dataSource?.mapping?.filters || []),
+      // OLD: ...(w.filters || []),
+      ...placementFilters(widgetId, w),
+      ...crossFilter,
+    ];
+    const { rows, truncated } = buildMapRows(w.mapLink, { filters, point, defaults: mapChartFieldDefaults(w.dataSource?.mapping) });
+    if (!rows.length) toast('Nothing on this widget matches a map field — opening the full map.', { id: 'dbe-map-link' });
+    else if (truncated) toast(`Only the first ${MAX_VALUES_PER_FIELD} values per field are passed to the map.`, { id: 'dbe-map-link' });
+    const url = mapLinkUrl(rows, { from: name });
+    if (w.mapLink.newWindow === false) navigate(url);
+    else window.open(url, '_blank', 'noopener');
+  };
+  const stableOnOpenMap = useCallback((widgetId, point) => openWidgetMapRef.current(widgetId, point), []);
+
+  // Explicit follow (right-click menu entry, the touch-friendly link button) — no double-click needed.
+  // Stable, same reason as stableOnPointClick below (WidgetContent memoization).
+  const stableOnFollowLink = useCallback((widgetId, point) => followWidgetLinkRef.current(widgetId, point), []);
+
   const handleWidgetPointClickRef = useRef(() => {});
-  handleWidgetPointClickRef.current = async (sourceWidgetId, { column, value }) => {
+  handleWidgetPointClickRef.current = (sourceWidgetId, point) => {
+    if (editable || !resolveWidgetLink(widgets[sourceWidgetId], tabs)) {
+      handleWidgetSingleClickRef.current(sourceWidgetId, point);
+      return;
+    }
+    const pending = pendingPointClickRef.current;
+    if (pending?.widgetId === sourceWidgetId) {
+      clearTimeout(pending.timer);
+      pendingPointClickRef.current = null;
+      followWidgetLinkRef.current(sourceWidgetId, point);
+      return;
+    }
+    // A click on another widget can't be its double-click — run that one's waiting action now.
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingPointClickRef.current = null;
+      handleWidgetSingleClickRef.current(pending.widgetId, pending.point);
+    }
+    const timer = setTimeout(() => {
+      pendingPointClickRef.current = null;
+      handleWidgetSingleClickRef.current(sourceWidgetId, point);
+    }, DOUBLE_CLICK_MS);
+    pendingPointClickRef.current = { widgetId: sourceWidgetId, point, timer };
+  };
+
+  // The single-click action itself: drill, else cross-filter.
+  // OLD: this body was handleWidgetPointClickRef itself (no double-click check in front of it).
+  const handleWidgetSingleClickRef = useRef(() => {});
+  handleWidgetSingleClickRef.current = async (sourceWidgetId, { column, value }) => {
     const sourceWidget = widgets[sourceWidgetId];
     if (!sourceWidget?.dataSource) return;
     // Left-click's default action: drilling wins when this widget can still drill further —
@@ -2454,6 +2672,11 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       await fetchDrilledWidget(backendWidgetId, [...(entry.drillDown.path || []), value]);
       return;
     }
+    // A widget that only gets point clicks because it has a link (not a cross-filter source) has
+    // no single-click action — same chart → placement cascade as resolveWidgetProps' gating.
+    const sourceStyle = { ...(sourceWidget.dataSource.mapping?.style || {}), ...(sourceWidget.style || {}) };
+    const sourceFields = CHART_TYPE_EXTRA_STYLE_FIELDS[sourceWidget.dataSource.chartType] || [];
+    if (resolveWidgetStyle(sourceWidget.type, sourceStyle, sourceFields).crossFilterSource !== 'on') return;
     await doCrossFilterForPoint(sourceWidgetId, { column, value });
   };
   // The actual prop passed down — stable across every render (empty dep array), so it never
@@ -2705,6 +2928,15 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const renderWidget = (l, pixelHeightOverride) => {
     const w = widgets[l.i];
     if (!w) return <div key={l.i} />;
+    // Double-click "Link to" — read-only views only; null when unset or its target tab is gone.
+    const widgetLink = !editable && w.type === 'chartLibrary' ? resolveWidgetLink(w, tabs) : null;
+    // "Open on map" — header 📍 button + right-click entry, read-only views only (like the link).
+    const widgetMapLink = !editable && w.type === 'chartLibrary' ? w.mapLink || null : null;
+    const widgetMapLabel = widgetMapLink ? `Open on map${widgetMapLink.newWindow !== false ? ' ↗' : ''}` : null;
+    const linkOpensNewTab = widgetLink?.kind === 'dashboard' && widgetLink.newWindow !== false;
+    const widgetLinkLabel = widgetLink
+      ? `${widgetLink.kind === 'dashboard' ? 'Open' : 'Go to'} ${widgetLink.targetName}${linkOpensNewTab ? ' ↗' : ''}`
+      : null;
     const pixelHeight = pixelHeightOverride ?? (l.h * GRID_CONFIG.rowHeight + (l.h - 1) * GRID_CONFIG.margin[1]);
     // Style values (color/titleColor/rowTextColor/etc.) now flow directly into each
     // widget's own props via resolveWidgetProps — this wrapper only needs an explicit
@@ -2723,7 +2955,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // two placements of the SAME underlying chart could have different own-filters and must
     // not stomp each other's fetched rows under one shared widgetId key.
     const chartLibraryEntry = w.dataSource?.widgetId
-      ? (w.filters?.length ? widgetFilterData[l.i] : chartLibraryData[w.dataSource.widgetId])
+      // OLD: ? (w.filters?.length ? widgetFilterData[l.i] : chartLibraryData[w.dataSource.widgetId])
+      ? (placementFilters(l.i, w).length ? widgetFilterData[l.i] : chartLibraryData[w.dataSource.widgetId])
       : undefined;
     const comparisonEntry = w.dataSource?.widgetId ? comparisonData[w.dataSource.widgetId] : undefined;
     const trendEntry = w.dataSource?.widgetId ? bigNumberTrendData[w.dataSource.widgetId] : undefined;
@@ -2795,11 +3028,21 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     return (
       <div
         key={l.i}
-        className={`dbe-widget dbe-widget-${w.type}${selectedId === l.i ? ' selected' : ''}${isCrossFilterTarget ? ' dbe-cross-filtered' : ''}${cardBorder ? ` ${CARD_BORDERED_CLASS}` : ''}`}
+        className={`dbe-widget dbe-widget-${w.type}${selectedId === l.i ? ' selected' : ''}${isCrossFilterTarget ? ' dbe-cross-filtered' : ''}${cardBorder ? ` ${CARD_BORDERED_CLASS}` : ''}${widgetLink ? ' cursor-pointer' : ''}`}
         style={cardBorder || undefined}
         // Clicking anywhere on a widget selects it and swaps the side panel to its
         // fields — not just its title bar, which was too small a target to notice.
         onClick={editable && showChrome ? () => setSelectedId(l.i) : undefined}
+        // OLD: `Double-click to open ${widgetLink.tabName} →`
+        title={widgetLink ? `Double-click to open ${widgetLink.targetName} ${widgetLink.kind === 'dashboard' && widgetLink.newWindow !== false ? '↗' : '→'}` : undefined}
+        // Tile-wide double-click (KPI, Table, a chart's empty area). A double-click on a chart
+        // point is already followed by the point handler, which marks it so this doesn't repeat.
+        onDoubleClick={widgetLink ? (e) => {
+          // Not from the drill ↑/↓ buttons, nor right after a point double-click already followed it.
+          if (e.target instanceof Element && e.target.closest('button, .dbe-widget-actions')) return;
+          if (Date.now() - linkFollowedAtRef.current < 500) return;
+          followWidgetLinkRef.current(l.i, null);
+        } : undefined}
       >
         {resizeBadge?.id === l.i && (() => {
           // Same colWidth math react-grid-layout itself uses internally (containerWidth minus
@@ -2836,9 +3079,36 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             ? chartLibraryEntry.rows.reduce((best, r) => (best == null || Number(r[yAxis]) > Number(best[yAxis]) ? r : best), null)
             : null;
           const canDrillDown = !!topRow;
-          if (!drillable && !showChrome) return null;
+          // OLD: if (!drillable && !showChrome) return null;
+          // OLD: if (!drillable && !showChrome && !widgetLink) return null;
+          if (!drillable && !showChrome && !widgetLink && !widgetMapLink) return null;
           return (
-            <div className={`dbe-widget-actions${exportMenuOpen || drillable ? ' dbe-force-visible' : ''}`}>
+            // OLD: className={`dbe-widget-actions${exportMenuOpen || drillable ? ' dbe-force-visible' : ''}`}
+            // dbe-has-link: always shown on touch screens (no hover, no double-click / right-click there).
+            // OLD: <div className={`dbe-widget-actions${exportMenuOpen || drillable ? ' dbe-force-visible' : ''}${widgetLink ? ' dbe-has-link' : ''}`}>
+            <div className={`dbe-widget-actions${exportMenuOpen || drillable ? ' dbe-force-visible' : ''}${widgetLink || widgetMapLink ? ' dbe-has-link' : ''}`}>
+              {widgetMapLink && (
+                <button
+                  type="button"
+                  className="dbe-widget-action"
+                  title={`${widgetMapLabel} — filtered to this widget`}
+                  aria-label={widgetMapLabel}
+                  onClick={(e) => { e.stopPropagation(); stableOnOpenMap(l.i, null); }}
+                >
+                  <MapPin size={13} />
+                </button>
+              )}
+              {widgetLink && (
+                <button
+                  type="button"
+                  className="dbe-widget-action"
+                  title={widgetLinkLabel}
+                  aria-label={widgetLinkLabel}
+                  onClick={(e) => { e.stopPropagation(); stableOnFollowLink(l.i, null); }}
+                >
+                  {linkOpensNewTab ? <ExternalLink size={13} /> : <ArrowRight size={13} />}
+                </button>
+              )}
               {drillable && (
                 <>
                   <button
@@ -2859,7 +3129,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                       e.stopPropagation();
                       if (!canDrillDown) return;
                       const label = String(topRow[xAxis]);
-                      stableOnPointClick(l.i, { column: xAxis, value: label === 'null' ? null : label });
+                      // OLD: stableOnPointClick(…) — that path now waits for a possible double-click on linked widgets.
+                      handleWidgetSingleClickRef.current(l.i, { column: xAxis, value: label === 'null' ? null : label });
                     }}
                   >
                     <ChevronDown size={13} />
@@ -2949,6 +3220,37 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                       {w.filters?.length > 0 && <span className="dbe-widget-filter-dot" />}
                     </button>
                   )}
+                  {!editable && w.dataSource?.type === 'chartLibrary' && w.filters?.length > 0 && (
+                    // Read-only views: see / change this placement's filter values (their screen
+                    // only — viewerWidgetFilters). Setup stays edit-only. The popover is a portal,
+                    // so its clicks are stopped here before they reach the tile (select / link).
+                    <span className="contents" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                      <FilterPanel
+                        filters={placementFilters(l.i, w)}
+                        datasourceOptions={filterDatasourceOptions}
+                        columnValueHints={filterColumnValueHints}
+                        respectLocks
+                        dense
+                        title="Widget filters"
+                        onApply={(rows) => setViewerWidgetFilters((prev) => ({ ...prev, [l.i]: rows }))}
+                        onClear={(rows) => setViewerWidgetFilters((prev) => ({ ...prev, [l.i]: rows }))}
+                        onReset={() => setViewerWidgetFilters((prev) => { const next = { ...prev }; delete next[l.i]; return next; })}
+                        canReset={!!viewerWidgetFilters[l.i]}
+                        renderTrigger={({ open, activeCount, title }) => (
+                          <button
+                            type="button"
+                            className="dbe-widget-action"
+                            title={title}
+                            aria-label={title}
+                            onClick={(e) => { e.stopPropagation(); open(); }}
+                          >
+                            <Filter size={13} />
+                            {activeCount > 0 && <span className="dbe-widget-filter-dot" />}
+                          </button>
+                        )}
+                      />
+                    </span>
+                  )}
                   {editable && (
                     <>
                       <button type="button" className="dbe-widget-action" title="Duplicate" onClick={(e) => { e.stopPropagation(); duplicateWidget(l.i); }}><Copy size={13} /></button>
@@ -3009,6 +3311,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
             onPointCrossFilter={stableOnPointCrossFilter}
             editable={editable}
             onTextChange={stableOnTextChange}
+            linked={!!widgetLink}
+            linkLabel={widgetLinkLabel}
+            linkCarriesValue={!!widgetLink && (widgetLink.carry === 'value' || widgetLink.carry === 'value+filters')}
+            onFollowLink={stableOnFollowLink}
+            mapLabel={widgetMapLabel}
+            mapCarriesValue={!!widgetMapLink && widgetMapLink.carry !== 'filters'}
+            onOpenMap={stableOnOpenMap}
             slicer={w.type === 'slicer' ? slicers.find((s) => s.id === w.dataSource?.slicerId) : undefined}
             onSlicerChange={changeSlicerValues}
             onSlicerRefresh={refreshSlicer}
@@ -3260,6 +3569,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-widget-action:disabled:hover { filter:none; }
         .dbe-widget-action.dbe-widget-remove { color:#ef4444; }
         .dbe-widget-actions.dbe-force-visible { opacity:1; }
+        @media (hover: none) { .dbe-widget-actions.dbe-has-link { opacity:1; } }
         .dbe-widget-filter-dot {
           position:absolute; top:2px; right:2px; width:6px; height:6px; border-radius:50%;
           background:#EC7D09; border:1px solid #fff;
@@ -3316,7 +3626,9 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         .dbe-side-panel-title { font-size:var(--dbe-fs-h1); font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:#475569; margin-bottom:8px; }
         [data-theme="dark"] .dbe-side-panel-title { color:#cbd5e1; }
         .dbe-side-panel label { display:block; margin-bottom:10px; color:#334155; font-weight:400; }
-        [data-theme="dark"] .dbe-side-panel label { color:#e2e8f0; }
+        /* OLD: [data-theme="dark"] .dbe-side-panel label { color:#e2e8f0; } — the side panel stays light in
+           dark mode, so every <label> in it went near-white (invisible). Only the Dark colors box is dark. */
+        [data-mode="dark"] .dbe-side-panel label, .dbe-side-panel [data-mode="dark"] label { color:#e2e8f0; }
         .dbe-side-panel select, .dbe-side-panel .dp-select, .dbe-side-panel input[type="text"], .dbe-side-panel input[type="number"] {
           width:100%; margin-top:4px; padding:5px 6px; border-radius:6px; border:1px solid rgb(203 213 225);
           font-weight:400; font-size:var(--dbe-fs-body); box-sizing:border-box; background:#fff; color:#1e293b;
@@ -3463,7 +3775,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                   conversation this was diagnosed in (a live network capture proved the fetch
                   and its response were both correct in isolation, yet the dropdown stayed
                   empty once revisited after viewing any other dashboard first). */}
-              <FilterPanel key={backendId} compact filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} columnValueHints={filterColumnValueHints} />
+              <FilterPanel key={backendId} compact dense filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} columnValueHints={filterColumnValueHints} onReset={editable ? undefined : resetFiltersToSaved} canReset={filtersChangedFromSaved} />
             </div>
           )}
           </div>
@@ -3781,6 +4093,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                     ? (chartLibraryData[selected.dataSource.widgetId]?.error ? 'error' : chartLibraryData[selected.dataSource.widgetId]?.rows ? 'loaded' : 'loading')
                     : null}
                   onEditFilters={selected.type === 'chartLibrary' ? () => setWidgetFilterModalId(selectedId) : null}
+                  // OLD: linkDashboardOptions / onLinkChange — the double-click link moved to the Interactions sub-section below.
                   onCopySize={(size) => { setCopiedSize(size); toast.success(`Size ${size.w} × ${size.h} copied — select another widget to paste it`); }}
                 >
                 {selected.type === 'chartLibrary' ? (
@@ -3812,6 +4125,34 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                 )}
                 </SelectedWidgetDetails>
                 </div>
+                {/* Interactions — what a click on this widget does: cross-filtering (moved out of Style) and the
+                    double-click link (moved out of Details). Chart widgets only; renders nothing otherwise. */}
+                <SelectedWidgetInteractions
+                  widget={selected}
+                  layoutEntry={layout.find((l) => l.i === selectedId)}
+                  tabs={tabs}
+                  linkDashboardOptions={linkDashboardOptions}
+                  // Double-click "Link to" — null clears it (key dropped, so the saved layout entry has none).
+                  onLinkChange={selected.type === 'chartLibrary' ? (link) => setWidgets((prev) => {
+                    const { link: _old, ...rest } = prev[selectedId] || {};
+                    return { ...prev, [selectedId]: link ? { ...rest, link } : rest };
+                  }) : null}
+                  // "Open on map" — null turns it off (key dropped from the saved layout entry).
+                  onMapLinkChange={selected.type === 'chartLibrary' ? (mapLink) => setWidgets((prev) => {
+                    const { mapLink: _old, ...rest } = prev[selectedId] || {};
+                    return { ...prev, [selectedId]: mapLink ? { ...rest, mapLink } : rest };
+                  }) : null}
+                  crossFilterKeys={selectedStyleFields.filter((f) => INTERACTION_STYLE_KEYS.has(f.key)).map((f) => f.key)}
+                  chartStyle={selected.dataSource?.mapping?.style || {}}
+                  // Same placement style object the Style fields write; undefined drops the key (follow the chart).
+                  onStyleKeyChange={(key, val) => setWidgets((prev) => {
+                    const { [key]: _old, ...rest } = prev[selectedId]?.style || {};
+                    return { ...prev, [selectedId]: { ...prev[selectedId], style: val === undefined ? rest : { ...rest, [key]: val } } };
+                  })}
+                  open={selInteractionsShown}
+                  onToggle={() => { if (!selectedInteractionsEdited) toggleSelSub('interactions'); }}
+                  edited={selectedInteractionsEdited}
+                />
                 {/* OLD: a separate <details> "Selected Widget Style" section followed here. Merged into this one:
                     widget details card on top, then its Style (with Reset) underneath — one place for the widget. */}
                 {/* OLD: <div className="dbe-selected-style-head"><span>Style</span> … — now the same collapsible
@@ -3821,7 +4162,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                     Style
                     {selectedStyleEdited && <EditedBadge className="ml-1.5" />}
                   </button>
-                  {Object.keys(selected.style || {}).length > 0 && (
+                  {/* OLD: Object.keys(selected.style || {}).length > 0 — the cross-filter keys belong to Interactions now. */}
+                  {Object.keys(withoutInteractionKeys(selected.style)).length > 0 && (
                       // OLD: <Button variant="secondary" size="sm" …> — now the shared action-button style.
                       <button
                         type="button"
@@ -3833,7 +4175,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                           setPendingConfirm({
                             title: 'Reset Widget Style',
                             message: 'Reset this widget to inherit the dashboard theme? This clears all widget-specific style overrides.',
-                            run: () => updateWidget(selectedId, { style: {} }),
+                            // OLD: run: () => updateWidget(selectedId, { style: {} }), — kept the Interactions keys out of Reset.
+                            run: () => updateWidget(selectedId, { style: onlyInteractionKeys(selected.style) }),
                           });
                         }}
                       >
@@ -3851,8 +4194,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                     {/* OLD: rounded-b-lg border-x border-b border-slate-200 p-2 (body of the old separate section) */}
                     {/* OLD: className={selSubOpen.style ? '' : 'hidden'} */}
                     <div className={selStyleShown ? '' : 'hidden'}>
+                    {/* OLD: note className ${styleModeIsDark ? 'text-slate-300' : 'text-slate-500'} — it sits on the white panel
+                        (not inside the Dark colors box), so Dark mode made it near-invisible. Always dark text now. */}
                     {(boundThemeId || Object.keys(dashboardStyle || {}).length > 0) && (
-                      <div className={`mb-2 text-dbe-meta ${styleModeIsDark ? 'text-slate-300' : 'text-slate-500'}`}>
+                      <div className="mb-2 text-dbe-meta text-slate-600">
                         {boundThemeId
                           // OLD: "Inherits from the dashboard's Theme (X) and overrides" / "Inherits from the dashboard overrides" + " — any field set here overrides it."
                           ? `Follows this dashboard's style (base theme: ${themeOptions.find((t) => String(t.id) === String(boundThemeId))?.name || '…'})`
@@ -3864,7 +4209,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
                       collapsedByDefault
                       colorMode={styleMode}
                       onColorModeChange={setStyleMode}
-                      fields={selectedStyleFields}
+                      // OLD: fields={selectedStyleFields} — cross-filter toggles moved to the Interactions sub-section.
+                      fields={selectedStyleFields.filter((f) => !INTERACTION_STYLE_KEYS.has(f.key))}
                       value={resolveStyleForMode(selected.style, styleModeIsDark)}
                       savedValue={resolveStyleForMode(savedSelectedStyle, styleModeIsDark)}
                       // OLD: updateWidget(selectedId, { style: …selected.style… }) — built from the style
@@ -3975,7 +4321,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               even with nothing inside it otherwise. */}
           {backendId && showFiltersInline && dashboardFilters.length > 0 && !(editable && showChrome) && (
             <div className="dbe-filter-strap">
-              <FilterPanel key={backendId} compact filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} columnValueHints={filterColumnValueHints} />
+              <FilterPanel key={backendId} compact dense filters={dashboardFilters} onApply={persistAndApplyFilters} onClear={clearFilterValues} datasourceOptions={filterDatasourceOptions} onEditInFilters={editable ? () => setFilterEditorOpen(true) : undefined} columnValueHints={filterColumnValueHints} onReset={editable ? undefined : resetFiltersToSaved} canReset={filtersChangedFromSaved} />
             </div>
           )}
           {/* Cross-filter clear chip — shown in both editable and read-only/embedded views,
@@ -4223,6 +4569,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         initialFilters={widgets[widgetFilterModalId]?.filters || []}
         datasourceOptions={filterDatasourceOptions}
         defaultDatasourceId={widgets[widgetFilterModalId]?.dataSource?.datasourceId || ''}
+        showViewerLock
         onSave={(rows) => {
           updateWidget(widgetFilterModalId, { filters: rows });
           setWidgetFilterModalId(null);

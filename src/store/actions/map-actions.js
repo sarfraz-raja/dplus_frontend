@@ -866,6 +866,7 @@ import Api from "../../utils/api"
 import { Urls } from "../../utils/url"
 import { SET_COMMON_CONFIG } from "../reducers/auth-reducer"
 import { ALERTS } from "../reducers/component-reducer"
+import { toGisFilters } from "../../components/MapsUsingDeckgl/Utils/dashboardMapFilter";
 import { deepCopyRanges, KPI_RANGE_DEFAULTS, generatePaletteColors, COLOR_SCHEMES, FIXED_COLORS } from "../../components/MapsUsingDeckgl/Utils/colorEngine";
 import { 
     // OLD TELECOM REDUCER IMPORTS
@@ -923,6 +924,8 @@ import {
     SET_NEIGHBOUR_RELATIONS,
     SET_NEIGHBORS_PLAN_DATA,
     SET_PLAN_NEIGHBOUR_LINES,
+    SET_DASHBOARD_FILTER,
+    REQUEST_MAP_FIT,
 
 } from "../reducers/map-reducer"
 
@@ -1287,7 +1290,12 @@ const MapActions = {
     },
 
     // Per user map configurations 
-    getUserMapSetup: () => async (dispatch, getState) => {
+    // `dashboardLink`: a Dashboard Builder "Open on map" hand-off (Utils/dashboardMapFilter.js's
+    // readDashboardMapLink) — its filters replace the saved ones for this visit only (nothing is saved),
+    // cells are shown, and the view fits to them once loaded. `fit`: fit to the loaded cells anyway
+    // (e.g. back from dashboard filters to the saved ones — DashboardFilterBanner's "Show all").
+    // OLD: getUserMapSetup: () => async (dispatch, getState) => {
+    getUserMapSetup: (dashboardLink = null, { fit = false } = {}) => async (dispatch, getState) => {
         try {
             const [setupRes, techRes, filterRes] = await Promise.all([
                 Api.get({ url: Urls.setupConf, inst: 0 }),
@@ -1325,7 +1333,19 @@ const MapActions = {
             // to zoom 6 (hiding individual cells/sectors that need zoom ≥ 10/12).
 
             /* ---------------- PARSE FILTERS ---------------- */
-            const filters = data.saveMapFilters ? JSON.parse(data.saveMapFilters) : {};
+            // OLD: const filters = data.saveMapFilters ? JSON.parse(data.saveMapFilters) : {};
+            const savedFilters = data.saveMapFilters ? JSON.parse(data.saveMapFilters) : {};
+            // Dashboard filters win for this visit; checked against the filter lists first.
+            const fromDashboard = dashboardLink
+                ? toGisFilters(dashboardLink.filters, filterRes?.status === 200 ? filterRes.data.data?.d1 : [])
+                : null;
+            const filters = fromDashboard ? fromDashboard.gisFilters : savedFilters;
+            dispatch(SET_DASHBOARD_FILTER(fromDashboard ? {
+                gisFilters: fromDashboard.gisFilters,
+                labels: fromDashboard.labels,
+                skipped: [...(dashboardLink.dropped || []), ...fromDashboard.skipped],
+                from: dashboardLink.from,
+            } : null));
 
             /* ---------------- PARSE THEMATICS ---------------- */
             const thematics = data.saveThematics
@@ -1391,7 +1411,9 @@ const MapActions = {
                 : null;
 
             // cellsOn: saved preference for returning users; true by default for new users
-            const cellsOn = layerVisibility ? Boolean(layerVisibility.CELLS) : true;
+            // OLD: const cellsOn = layerVisibility ? Boolean(layerVisibility.CELLS) : true;
+            // Opened from a dashboard: always show cells — they're what the link asked to see.
+            const cellsOn = fromDashboard ? true : (layerVisibility ? Boolean(layerVisibility.CELLS) : true);
 
             if (layerVisibility) {
                 dispatch(SET_LAYER_VISIBILITY({ layer: "CELLS", value: layerVisibility.CELLS }));
@@ -1412,7 +1434,11 @@ const MapActions = {
             // single place that fetches cells, using saved filters for returning users or
             // empty filters (all cells) for new users.
             if (cellsOn) {
-                dispatch(MapActions.getGisCells(filters));
+                // OLD: dispatch(MapActions.getGisCells(filters));
+                const cellsLoaded = dispatch(MapActions.getGisCells(filters));
+                // Dashboard filters: show the cells layer (this visit only) and fit to the filtered cells.
+                if (fromDashboard) dispatch(SET_LAYER_VISIBILITY({ layer: "CELLS", value: true }));
+                if (fromDashboard || fit) cellsLoaded.then(() => dispatch(REQUEST_MAP_FIT()));
             }
 
             /* ---------------- BOUNDARIES ---------------- */

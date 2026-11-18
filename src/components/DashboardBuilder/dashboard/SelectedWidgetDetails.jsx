@@ -31,6 +31,7 @@ export default function SelectedWidgetDetails({
   dataStatus = null,
   // Opens this widget's own filter editor (the "…" on the Filters pill).
   onEditFilters = null,
+  // OLD: onLinkChange, linkDashboardOptions — the double-click link moved to SelectedWidgetInteractions.jsx.
 }) {
   const isChart = widget.type === 'chartLibrary';
   const chartType = widget.dataSource?.chartType;
@@ -44,6 +45,8 @@ export default function SelectedWidgetDetails({
   const renamed = isChart && chartName && widget.title !== chartName;
   const widgetId = widget.dataSource?.widgetId;
   const ownFilterCount = widget.filters?.length || 0;
+  // OLD: the double-click link's state (link / dashLink / linkTabs / …) was computed here — moved with
+  // its controls to SelectedWidgetInteractions.jsx (the Selected Widget → Interactions sub-section).
 
   const copyId = async () => {
     if (await copyToClipboard(widgetId)) toast.success('Chart ID copied');
@@ -217,6 +220,8 @@ export default function SelectedWidgetDetails({
               </span>
             </>
           )}
+          {/* OLD: the Double-click / Dashboard / Its tab / Pass on / Open in rows were here — moved to
+              SelectedWidgetInteractions.jsx (Interactions sub-section), so they stand apart from the details. */}
         </div>
 
         {isChart && widgetId && (

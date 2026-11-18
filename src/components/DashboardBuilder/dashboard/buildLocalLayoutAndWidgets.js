@@ -72,8 +72,19 @@ export function buildLocalLayoutAndWidgets(attachedWidgets, dashboardLayout, das
       // Identical copies of the chart's/dashboard's own values (seeded in on placement before
       // that stopped) are dropped so later chart/theme edits reach this placement again.
       style: stripInheritedStyle(fromDashboardLayout?.style || {}, w.mapping?.style, dashboardStyle),
+      // Double-click "Link to" target (utils/widgetLink.js) — per placement, rides along like title.
+      ...(fromDashboardLayout?.link ? { link: fromDashboardLayout.link } : {}),
+      // "Open on map" (utils/mapLink.js) — per placement too, saved next to the link.
+      ...(fromDashboardLayout?.mapLink ? { mapLink: fromDashboardLayout.mapLink } : {}),
+      // This placement's own filters (the widget's Filter action) — per placement, saved next to link.
+      ...(Array.isArray(fromDashboardLayout?.filters) && fromDashboardLayout.filters.length ? { filters: fromDashboardLayout.filters } : {}),
     };
-    const pos = fromDashboardLayout || w.position || {};
+    // dashboard.layout is the only source of truth for placement. dashboard_widget.position is
+    // written once at attach time and never updated, so falling back to it restored stale
+    // positions (e.g. after a duplicate-widgets clone) — a widget with no layout entry now gets
+    // the default grid slot below instead. The backend column is left in place, just unread.
+    // OLD: const pos = fromDashboardLayout || w.position || {};
+    const pos = fromDashboardLayout || {};
     layout.push({
       i: localId,
       x: pos.x ?? (idx % 3) * 12,

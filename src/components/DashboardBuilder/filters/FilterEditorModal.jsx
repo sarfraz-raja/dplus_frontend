@@ -96,6 +96,9 @@ function toEditableRow(filter) {
     operator: filter.operator || '=',
     value: filter.value ?? defaultValueForOperator(filter.operator),
     datasourceId: filter.datasource_id || '',
+    // Read-only views let viewers change a filter's value (their screen only) unless the author
+    // locked it — only offered where the parent passes `showViewerLock` (widget filters).
+    viewerEditable: filter.viewerEditable !== false,
   };
 }
 
@@ -109,6 +112,8 @@ function toSavedFilter(row) {
     // field (still showing the column name as its placeholder-like default) doesn't need its
     // own redundant copy stored.
     name: row.label && row.label !== row.column ? row.label : undefined,
+    // Only saved when locked, so an unlocked filter's saved shape is unchanged.
+    viewerEditable: row.viewerEditable === false ? false : undefined,
   };
 }
 
@@ -117,7 +122,10 @@ function toSavedFilter(row) {
  * dashboard's filters, a right-side form for whichever row is selected. Saving writes the
  * whole edited array back via onSave (parent persists it as dashboard.global_filters).
  */
-export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = [], datasourceOptions = [], defaultDatasourceId = '', onSave }) {
+// `showViewerLock`: shows the per-filter "Viewers can change this value" checkbox (saved as
+// `viewerEditable: false` when unticked). Passed for widget (placement) filters only.
+// OLD: export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = [], datasourceOptions = [], defaultDatasourceId = '', onSave }) {
+export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = [], datasourceOptions = [], defaultDatasourceId = '', onSave, showViewerLock = false }) {
   const [rows, setRows] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [columns, setColumns] = useState([]);
@@ -202,7 +210,8 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
     // datasourceOptions[0], which is only correct by coincidence once a dashboard has more
     // than one datasource. Falls back to datasourceOptions[0] for the dashboard-wide "Filters"
     // button (FiltersToggleButton), which has no single "owning" widget to default to.
-    const row = { id: nextLocalId(), label: '', column: '', operator: '=', value: '', datasourceId: defaultDatasourceId || datasourceOptions[0]?.id || '' };
+    // OLD: const row = { id: nextLocalId(), label: '', column: '', operator: '=', value: '', datasourceId: defaultDatasourceId || datasourceOptions[0]?.id || '' };
+    const row = { id: nextLocalId(), label: '', column: '', operator: '=', value: '', datasourceId: defaultDatasourceId || datasourceOptions[0]?.id || '', viewerEditable: true };
     setRows((prev) => [...prev, row]);
     setSelectedId(row.id);
   };
@@ -550,6 +559,21 @@ export default function FilterEditorModal({ isOpen, setIsOpen, initialFilters = 
                     {valueSuggestions.map((v) => <option key={v} value={v} />)}
                   </datalist>
                 </div>
+              )}
+
+              {showViewerLock && (
+                <label className="flex items-start gap-2 text-sm text-slate-600" title="Unticked: viewers see this filter but can't change its value">
+                  <input
+                    type="checkbox"
+                    checked={selected.viewerEditable !== false}
+                    onChange={(e) => updateSelected({ viewerEditable: e.target.checked })}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <span>
+                    Viewers can change this value
+                    <span className="block text-xs text-slate-400">Only on their own screen; it resets when the dashboard is reopened.</span>
+                  </span>
+                </label>
               )}
             </div>
           )}

@@ -15,6 +15,10 @@
 | [docs/DASHBOARD_BUILDER_STYLE_MATRIX.md](docs/DASHBOARD_BUILDER_STYLE_MATRIX.md) | Which Style control works for each chart type and level | adding, removing or wiring any Dashboard Builder style field (and update it) |
 | [docs/HOUSEKEEPING.md](docs/HOUSEKEEPING.md) | Known gaps, parked and unrouted pages, leftover files, routing via the backend menu | touching CX/IX, ProRules, NokiaTool, routing, or "is this file used?" |
 | [docs/MICROSOFT_SSO.md](docs/MICROSOFT_SSO.md) | Azure SSO setup | SSO work |
+| [docs/GIS_SECTOR_GEOMETRY.md](docs/GIS_SECTOR_GEOMETRY.md) | How cell sectors are drawn (GIS Engine + Map chart): columns used, the formula, why the real beamwidth is ignored, problems with the "correct" parameters | changing sector geometry, `sectorGeometry.js`, or the GIS / Map chart sector layer |
+| [docs/GIS_CELL_DATA.md](docs/GIS_CELL_DATA.md) | Where GIS cell data comes from (`kpi_cell_gids` → `cell_gis` view → `arc_setting_demo` join), traps that hide or mislabel cells, the `length`/`orderring` ladder, data fixes applied and still open, check queries | GIS cell data questions, missing cells, `/map/gisCells`, `arc_setting_demo` |
+| [docs/DASHBOARD_LAYOUT_FORMAT.md](docs/DASHBOARD_LAYOUT_FORMAT.md) | What a saved Dashboard Builder dashboard holds: where each part lives, every `dashboard.layout` entry kind (chart `w_<id>`, text box, shape, slicer, `__dbe_tabs__`, `__dbe_settings__`), IDs a copy must remap, known gaps | changing `handleSave` / `buildLocalLayoutAndWidgets`, or clone, export, import |
+| [docs/DASHBOARD_IMPORT_EXPORT.md](docs/DASHBOARD_IMPORT_EXPORT.md) | Dashboard export / import file: bundle shape, `ref` rules, what's not carried, versions and migrations, validation errors vs warnings, task status | export, import, `dashboardBundle.js`, bumping `BUNDLE_VERSION` |
 
 ## Structure
 

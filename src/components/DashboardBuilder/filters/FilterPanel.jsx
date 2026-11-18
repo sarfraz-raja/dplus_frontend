@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import FloatingPanel from '../../FloatingPanel';
-import { SlidersHorizontal, X } from 'lucide-react';
+// OLD: import { SlidersHorizontal, X } from 'lucide-react';
+import { SlidersHorizontal, X, Check } from 'lucide-react';
 import { getDatasourceDetail, getColumnDistinctValues } from '../../../store/actions/dashboardBuilder-actions';
 import MultiSelectFilterInput from './MultiSelectFilterInput';
 import SingleSelectFilterInput from './SingleSelectFilterInput';
@@ -141,7 +142,15 @@ async function resolveColumnType(column, datasourceId, datasourceOptions) {
 // tooltip — for tight toolbars (a dashboard's title row in published/embedded views). Clicking it
 // opens the same value popover. Default = the original "Active: tag ×" row.
 // OLD: export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters, columnValueHints = {} }) {
-export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters, columnValueHints = {}, compact = false }) {
+// Widget (placement) filters in read-only views also use this — see DashboardCanvasEditor.jsx:
+//   `renderTrigger({ open, activeCount, total, title })` replaces the collapsed row with the caller's
+//   own button (the widget toolbar's 20px icon); `open()` opens the value popover.
+//   `respectLocks`: a filter saved with `viewerEditable: false` shows read-only and Clear skips it.
+//   `onReset` (+ `canReset`): a "Reset to saved" action in the popover.
+//   `dense`: a smaller popover (28px inputs, tighter spacing, capped height — the filter list
+//   scrolls and the buttons stay pinned at the bottom), sized for a widget tile.
+// OLD: export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters, columnValueHints = {}, compact = false }) {
+export default function FilterPanel({ filters = [], onApply, onClear, datasourceOptions = [], onEditInFilters, columnValueHints = {}, compact = false, renderTrigger, respectLocks = false, onReset, canReset = false, dense = false, title = 'Filters' }) {
   const popAnchorRef = useRef(null); // anchors the floating editor popover
   const [localValues, setLocalValues] = useState(filters);
   const [applying, setApplying] = useState(false);
@@ -273,8 +282,10 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
     if (Array.isArray(f.value)) return f.value.length > 0;
     return !!f.value;
   };
+  const isLocked = (f) => respectLocks && f.viewerEditable === false;
   const isDirty = JSON.stringify(localValues) !== JSON.stringify(filters);
-  const hasAnyValue = localValues.some(hasValue);
+  // OLD: const hasAnyValue = localValues.some(hasValue);
+  const hasAnyValue = localValues.some((f) => !isLocked(f) && hasValue(f));
   const activeFilters = localValues.filter(hasValue);
   // One short readable fragment per active filter, for the collapsed chip — mirrors exactly
   // what each filter type's own expanded control shows (isLiveTimeRange's resolved from/to,
@@ -327,14 +338,18 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
     // Same uniform blanking as clearOne — including a live/relative range, reset to a plain
     // `['', '']` rather than left untouched, so the "Active" chip actually reflects nothing
     // being set any more instead of staying stuck showing the live range regardless.
-    const cleared = localValues.map((f) => ({
+    // OLD: const cleared = localValues.map((f) => ({ ...f, value: … }));
+    const cleared = localValues.map((f) => (isLocked(f) ? f : {
       ...f,
       value: isMultiSelect(f) ? [] : isDateRange(f) ? ['', ''] : '',
     }));
     setLocalValues(cleared);
     setApplying(true);
     try {
-      await onClear?.();
+      // OLD: await onClear?.();
+      // `cleared` is passed for callers that keep the values themselves (widget filters); the
+      // dashboard's clearFilterValues ignores it.
+      await onClear?.(cleared);
     } finally {
       setApplying(false);
     }
@@ -347,7 +362,8 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
   // fields, leaving isLiveTimeRange true forever and the "Active" chip stuck showing it as set
   // no matter what — see hasValue's own updated comment for why that was the actual bug).
   const clearOne = async (column) => {
-    const next = localValues.map((f) => (f.column !== column ? f : {
+    // OLD: const next = localValues.map((f) => (f.column !== column ? f : {
+    const next = localValues.map((f) => (f.column !== column || isLocked(f) ? f : {
       ...f,
       value: isMultiSelect(f) ? [] : isDateRange(f) ? ['', ''] : '',
     }));
@@ -410,6 +426,9 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
     </div>
   );
 
+  const triggerTitle = activeFilters.length
+    ? `Filters — ${activeFilters.map(summaryText).join(' · ')}`
+    : `${localValues.length} filter${localValues.length === 1 ? '' : 's'} configured — click to set values`;
   const compactButton = (
     <button
       type="button"
@@ -430,7 +449,10 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
       </span>
     </button>
   );
-  const collapsedRow = compact ? compactButton : tagsRow;
+  // OLD: const collapsedRow = compact ? compactButton : tagsRow;
+  const collapsedRow = renderTrigger
+    ? renderTrigger({ open: () => setExpanded(true), activeCount: activeFilters.length, total: localValues.length, title: triggerTitle })
+    : compact ? compactButton : tagsRow;
 
   if (!showExpanded) {
     // OLD: return tagsRow;
@@ -453,13 +475,19 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
       {/* OLD: minWidth={420} — sized for the old horizontal row; the vertical stack needs less width. */}
       {/* OLD: minWidth={300} — still read as a wide box. Now a narrow, tall column (filters stack downward),
           right-aligned under the icon button. */}
-      <FloatingPanel anchorRef={popAnchorRef} open onClose={() => { if (!isDirty) setExpanded(false); }} minWidth={224} maxHeight={560} align="end">
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <FilterPanelExpanded
+      {/* OLD: <FloatingPanel … minWidth={224} maxHeight={560} align="end"> */}
+      {/* OLD: onClose={() => { if (!isDirty) setExpanded(false); }} — stayed open while edits were unapplied
+          (a Close button then did nothing). Now outside click / Esc discards them and closes. */}
+      <FloatingPanel anchorRef={popAnchorRef} open onClose={() => { setLocalValues(filters); setExpanded(false); }} minWidth={dense ? 192 : 224} maxHeight={dense ? 280 : 560} align="end">
+      {/* OLD: <div className="min-h-0 flex-1 overflow-y-auto p-3"> */}
+      <div className={dense ? 'min-h-0 flex-1 flex flex-col' : 'min-h-0 flex-1 overflow-y-auto p-3'}>
+        <FilterPanelExpanded dense={dense}
           localValues={localValues} isDirty={isDirty} hasAnyValue={hasAnyValue} applying={applying}
           inputTypeFor={inputTypeFor} updateValue={updateValue} optionsByColumn={optionsByColumn} loadingColumns={loadingColumns}
-          handleApply={handleApply} handleClearAll={handleClearAll} onCollapse={() => setExpanded(false)}
-          onEditInFilters={onEditInFilters}
+          // OLD: onCollapse={() => setExpanded(false)} — a no-op while edits were unapplied (isDirty keeps it open).
+          handleApply={handleApply} handleClearAll={handleClearAll} onCollapse={() => { setLocalValues(filters); setExpanded(false); }} title={title}
+          onEditInFilters={onEditInFilters} isLocked={isLocked}
+          onReset={onReset ? async () => { await onReset(); setExpanded(false); } : undefined} canReset={canReset}
         />
       </div>
       </FloatingPanel>
@@ -472,10 +500,22 @@ export default function FilterPanel({ filters = [], onApply, onClear, datasource
 // (localValues, isDirty…) is still owned by FilterPanel itself and passed straight through.
 function FilterPanelExpanded({
   localValues, isDirty, hasAnyValue, applying, inputTypeFor, updateValue, optionsByColumn, loadingColumns,
-  handleApply, handleClearAll, onCollapse, onEditInFilters,
+  handleApply, handleClearAll, onCollapse, onEditInFilters, isLocked = () => false, onReset, canReset = false, dense = false, title = 'Filters',
 }) {
+  // How many values a filter currently holds, for the "N applied" hint beside its label.
+  const appliedCount = (f) => {
+    if (isLiveTimeRange(f)) return 1;
+    if (isDateRange(f)) { const [from, to] = editableRangeOf(f.value); return from || to ? 1 : 0; }
+    if (Array.isArray(f.value)) return f.value.length;
+    return f.value ? 1 : 0;
+  };
+  // `dense` (widget popover): the list scrolls on its own and the actions sit pinned below it.
+  const boxCls = dense
+    ? 'w-full text-left text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1'
+    : 'w-full text-left text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2';
   return (
-    <div className="flex flex-col gap-3 px-1">
+    // OLD: <div className="flex flex-col gap-3 px-1">
+    <div className={dense ? 'flex flex-col min-h-0 flex-1' : 'flex flex-col gap-3 px-1'}>
       {/* Filter inputs on their own row, Apply/Clear/✕ on their own below — the popover has a
           fixed width, so keeping these as two stacked rows (rather than one `justify-between`
           row like the old inline strap) means a filter list that wraps never crowds the
@@ -484,14 +524,36 @@ function FilterPanelExpanded({
           with each label to the LEFT of its control. Read as a jumble once filters wrapped (labels
           and boxes of different widths zig-zagging), so it's now a vertical form: one filter per
           row, label above, control full width. */}
-      <div className="flex flex-col gap-2.5">
+      {/* Header: title + × (closes, discarding unapplied edits — same as outside click / Esc). */}
+      {/* Same tint as the footer, so header and footer read as matching bars. */}
+      <div className={`flex items-center justify-between gap-2 shrink-0 border-b border-slate-100 bg-slate-50/70 ${dense ? 'px-2.5 py-2' : 'pb-2.5'}`}>
+        <span className="text-ui-body font-semibold text-slate-700 truncate">{title}</span>
+        <button
+          type="button"
+          onClick={onCollapse}
+          title="Close"
+          aria-label="Close filters"
+          className="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+        >
+          <X size={13} />
+        </button>
+      </div>
+      {/* OLD: <div className="flex flex-col gap-2.5"> */}
+      <div className={dense ? 'flex flex-col gap-2 min-h-0 flex-1 overflow-y-auto p-2.5' : 'flex flex-col gap-2.5'}>
       {localValues.map((f) => (
         // OLD: <div key={f.column} className="shrink-0 flex items-center gap-1.5">
-        <div key={f.column} className="flex flex-col gap-1 min-w-0">
+        <div key={f.column} className={`flex flex-col min-w-0 ${dense ? 'gap-0.5' : 'gap-1'}`}>
           {/* OLD: className="text-[0.6875rem] font-semibold text-slate-600 whitespace-nowrap" */}
-          <label className="text-ui-small font-semibold text-slate-600 truncate">
-            {labelFor(f)}
-          </label>
+          {/* OLD: className="text-ui-small font-semibold text-slate-600 truncate" */}
+          {/* OLD (dense): text-ui-micro (10px) — smaller than the 12px field and buttons under it. */}
+          <div className="flex items-baseline justify-between gap-2 min-w-0">
+            <label className="font-semibold text-slate-600 truncate text-ui-small">
+              {labelFor(f)}
+            </label>
+            {appliedCount(f) > 0 && (
+              <span className="shrink-0 text-ui-micro text-slate-400">{appliedCount(f)} applied</span>
+            )}
+          </div>
           {/* Date/time ranges (live OR a fixed custom range) are read-only here, not editable —
               this popover's own compact inputs had no real date/datetime picker (just a bare
               number spinner once a column's type hadn't resolved yet, letting someone type
@@ -499,14 +561,25 @@ function FilterPanelExpanded({
               conversation this was reported in), and a live range has no "value" to edit
               anyway. The full "Add and edit filters" modal already has a proper picker for
               this — "Edit in Filters" jumps straight there instead of duplicating it here. */}
-          {isLiveTimeRange(f) ? (() => {
+          {/* Locked by the author (widget filters, `viewerEditable: false`): shown, not editable. */}
+          {isLocked(f) ? (
+            <div className={boxCls} title="Set by the dashboard author">
+              {(() => {
+                if (isLiveTimeRange(f)) { const [from, to] = resolveTimeRangeValue(f.value); return `${from} – ${to}`; }
+                if (isDateRange(f)) { const [from, to] = editableRangeOf(f.value); return `${from || '—'} – ${to || '—'}`; }
+                if (Array.isArray(f.value)) return f.value.length ? f.value.join(', ') : '—';
+                return isComparison(f) ? `${f.operator} ${f.value || '—'}` : (f.value || '—');
+              })()}
+              <span className="text-slate-400"> · locked</span>
+            </div>
+          ) : isLiveTimeRange(f) ? (() => {
             const [from, to] = resolveTimeRangeValue(f.value);
             return (
               <button
                 type="button"
                 onClick={onEditInFilters}
                 disabled={!onEditInFilters}
-                className="w-full text-left text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 hover:bg-slate-100 disabled:hover:bg-slate-50 disabled:cursor-default"
+                className={`${boxCls} hover:bg-slate-100 disabled:hover:bg-slate-50 disabled:cursor-default`}
               >
                 {from} – {to} <span className="text-slate-400 underline">(live, edit in Filters)</span>
               </button>
@@ -518,7 +591,7 @@ function FilterPanelExpanded({
                 type="button"
                 onClick={onEditInFilters}
                 disabled={!onEditInFilters}
-                className="w-full text-left text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 hover:bg-slate-100 disabled:hover:bg-slate-50 disabled:cursor-default"
+                className={`${boxCls} hover:bg-slate-100 disabled:hover:bg-slate-50 disabled:cursor-default`}
               >
                 {from || '—'} – {to || '—'} <span className="text-slate-400 underline">edit in Filters</span>
               </button>
@@ -529,7 +602,8 @@ function FilterPanelExpanded({
               value={f.value || ''}
               onChange={(e) => updateValue(f.column, e.target.value)}
               // OLD: className="w-24 border border-slate-200 rounded-md px-1.5 py-1 text-xs bg-white"
-              className="w-full h-[38px] border border-slate-200 rounded-lg px-2.5 text-sm bg-white"
+              // OLD: className="w-full h-[38px] border border-slate-200 rounded-lg px-2.5 text-sm bg-white"
+              className={dense ? 'w-full h-7 border border-slate-200 rounded-md px-2 text-xs bg-white' : 'w-full h-[38px] border border-slate-200 rounded-lg px-2.5 text-sm bg-white'}
             />
           ) : isMultiSelect(f) ? (
             <MultiSelectFilterInput
@@ -538,6 +612,7 @@ function FilterPanelExpanded({
               value={Array.isArray(f.value) ? f.value : []}
               onChange={(next) => updateValue(f.column, next)}
               fullWidth
+              dense={dense}
             />
           ) : (
             // Plain single-value filter (e.g. "region") — same searchable-dropdown UI as the
@@ -550,6 +625,7 @@ function FilterPanelExpanded({
               value={f.value || ''}
               onChange={(next) => updateValue(f.column, next)}
               fullWidth
+              dense={dense}
             />
           )}
         </div>
@@ -559,48 +635,152 @@ function FilterPanelExpanded({
       {/* OLD: <div className="flex items-center gap-1.5 shrink-0"> */}
       {/* OLD: one row (Apply · Clear all · | Close) — too wide for the narrow column. Now Apply full width,
           Clear all / Close on the row under it. */}
-      <div className="flex flex-col gap-1.5 shrink-0 pt-2.5 border-t border-slate-100">
+      {/* Footer, one row: Apply on the left, Clear all / Reset on the right; no Close (outside click /
+          Esc closes and discards unapplied edits — see FloatingPanel's onClose above). The previous
+          two-row footer (full-width Apply; Clear all · Reset · Close) is kept below, commented out. */}
+      <div className={`flex items-center gap-2 shrink-0 border-t border-slate-100 bg-slate-50/70 ${dense ? 'px-2.5 py-2' : 'pt-2.5'}`}>
+        {/* OLD (left side showed a state — "✓ Applied" / "Nothing set" — instead of a button):
+                {/ * Left: Apply while there are unapplied edits; otherwise the state ("✓ Applied", or nothing set). * /}
+                {isDirty || applying ? (
+                  <button
+                    type="button"
+                    onClick={handleApply}
+                    disabled={applying}
+                    className={`rounded-lg text-xs font-semibold transition-colors text-white bg-[#EC7D09] hover:opacity-90 disabled:opacity-60 ${dense ? 'px-3 py-1' : 'px-3.5 py-1.5'}`}
+                  >
+                    {applying ? 'Applying…' : 'Apply'}
+                  </button>
+                ) : hasAnyValue ? (
+                  <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+                    <Check size={13} aria-hidden="true" /> Applied
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400">Nothing set</span>
+                )}
+        */}
+        {/* Two equal buttons filling the row: Apply (primary; greyed while nothing new to apply) · Reset all. */}
         <button
           type="button"
           onClick={handleApply}
           disabled={applying || !isDirty}
-          // OLD: className={`px-3 py-1.5 rounded-lg …`} (auto width)
-          className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-            isDirty
-              ? 'text-white bg-[#EC7D09] hover:opacity-90'
-              : 'text-slate-400 bg-slate-100 cursor-not-allowed'
-          } disabled:opacity-60`}
-        >
-          {applying ? 'Applying…' : 'Apply filters'}
-        </button>
-        <div className="flex items-center justify-between gap-1.5">
-        <button
-          type="button"
-          onClick={handleClearAll}
-          disabled={applying || !hasAnyValue}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-            hasAnyValue ? 'text-slate-500 hover:bg-slate-50' : 'text-slate-300 cursor-not-allowed'
+          // Idle (nothing new to apply) keeps the orange identity as a soft tint instead of fading out.
+          className={`flex-1 h-7 whitespace-nowrap rounded-lg border text-xs font-semibold transition-colors ${
+            isDirty || applying
+              ? 'border-[#EC7D09] bg-[#EC7D09] text-white shadow-sm hover:opacity-90'
+              : 'border-orange-200 bg-orange-50 text-orange-400 cursor-default'
           }`}
         >
-          Clear all
+          {applying ? 'Applying…' : 'Apply'}
         </button>
-        {/* Manual close back to the chip without applying — a no-op while there's an unsaved
-            edit (isDirty), since `showExpanded` in the parent already forces the popover open
-            in that case; this button only has effect once there's nothing unsaved left to lose.
-            A labeled "Close" button, not a bare ✕ — right next to "Clear all", an icon-only ✕
-            read as if it might also clear something rather than just closing the popover (see
-            the conversation this was reported in); text removes that ambiguity, and pushing it
-            to the far end with its own left border reads as a distinct, lower-emphasis action
-            from the two filter actions beside it. */}
-        <button
-          type="button"
-          onClick={onCollapse}
-          className="ml-auto pl-2.5 border-l border-slate-200 text-xs text-slate-400 hover:text-slate-600"
-        >
-          Close
-        </button>
-        </div>
+        {/* One right-hand action, "Reset all": back to the saved values where a viewer's changes aren't
+            saved (onReset given — read-only views); otherwise (editor) blank every value. Single
+            values still clear with the × on their chip. Replaces separate Clear all + Reset buttons
+            (kept below as comments). */}
+        {(() => {
+          const resetsToSaved = !!onReset;
+          const enabled = !applying && (resetsToSaved ? canReset : hasAnyValue);
+          return (
+            <button
+              type="button"
+              onClick={resetsToSaved ? onReset : handleClearAll}
+              disabled={!enabled}
+              title={resetsToSaved ? 'Back to saved values' : 'Clear every value'}
+              className={`flex-1 h-7 whitespace-nowrap rounded-lg border text-xs font-medium transition-colors ${
+                enabled ? 'border-slate-300 bg-white text-slate-700 hover:border-[#EC7D09] hover:text-[#EC7D09]' : 'border-slate-200 bg-white text-slate-400 cursor-default'
+              }`}
+            >
+              Reset all
+            </button>
+          );
+        })()}
+        {/* OLD (Clear all + Reset as two buttons):
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  disabled={applying || !hasAnyValue}
+                  className={`ml-auto rounded-lg text-xs font-medium transition-colors ${dense ? 'px-1.5 py-1' : 'px-2 py-1.5'} ${
+                    hasAnyValue ? 'text-slate-500 hover:bg-slate-50' : 'text-slate-300 cursor-not-allowed'
+                  }`}
+                >
+                  Clear all
+                </button>
+                {onReset && (
+                  <button
+                    type="button"
+                    onClick={onReset}
+                    disabled={applying || !canReset}
+                    title="Back to saved values"
+                    className={`rounded-lg text-xs font-medium transition-colors ${dense ? 'px-1.5 py-1' : 'px-2 py-1.5'} ${
+                      canReset ? 'text-[#EC7D09] hover:bg-orange-50' : 'text-slate-300 cursor-not-allowed'
+                    }`}
+                  >
+                    Reset
+                  </button>
+                )}
+        */}
       </div>
+      {/* OLD footer (two rows):
+            {/ * OLD: <div className="flex flex-col gap-1.5 shrink-0 pt-2.5 border-t border-slate-100"> * /}
+            <div className={dense ? 'flex flex-col gap-1 shrink-0 px-2.5 py-2 border-t border-slate-100' : 'flex flex-col gap-1.5 shrink-0 pt-2.5 border-t border-slate-100'}>
+              <button
+                type="button"
+                onClick={handleApply}
+                disabled={applying || !isDirty}
+                // OLD: className={`px-3 py-1.5 rounded-lg …`} (auto width)
+                // OLD: className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                className={`w-full rounded-lg text-xs font-semibold transition-colors ${dense ? 'px-2 py-1' : 'px-3 py-1.5'} ${
+                  isDirty
+                    ? 'text-white bg-[#EC7D09] hover:opacity-90'
+                    : 'text-slate-400 bg-slate-100 cursor-not-allowed'
+                } disabled:opacity-60`}
+              >
+                {applying ? 'Applying…' : 'Apply filters'}
+              </button>
+              {/ * OLD: <div className="flex items-center justify-between gap-1.5"> * /}
+              <div className={`flex items-center justify-between ${dense ? 'gap-1' : 'gap-1.5'}`}>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                disabled={applying || !hasAnyValue}
+                // OLD: className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`rounded-lg text-xs font-medium transition-colors ${dense ? 'px-1.5 py-1' : 'px-3 py-1.5'} ${
+                  hasAnyValue ? 'text-slate-500 hover:bg-slate-50' : 'text-slate-300 cursor-not-allowed'
+                }`}
+              >
+                Clear all
+              </button>
+              {/ * Manual close back to the chip without applying — a no-op while there's an unsaved
+                  edit (isDirty), since `showExpanded` in the parent already forces the popover open
+                  in that case; this button only has effect once there's nothing unsaved left to lose.
+                  A labeled "Close" button, not a bare ✕ — right next to "Clear all", an icon-only ✕
+                  read as if it might also clear something rather than just closing the popover (see
+                  the conversation this was reported in); text removes that ambiguity, and pushing it
+                  to the far end with its own left border reads as a distinct, lower-emphasis action
+                  from the two filter actions beside it. * /}
+              {onReset && (
+                <button
+                  type="button"
+                  onClick={onReset}
+                  disabled={applying || !canReset}
+                  // OLD: title="Back to the values saved with the dashboard" — too long for the narrow popover.
+                  title="Back to saved values"
+                  className={`rounded-lg text-xs font-medium transition-colors ${dense ? 'px-1.5 py-1' : 'px-2 py-1.5'} ${
+                    canReset ? 'text-slate-500 hover:bg-slate-50' : 'text-slate-300 cursor-not-allowed'
+                  }`}
+                >
+                  Reset
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="ml-auto pl-2.5 border-l border-slate-200 text-xs text-slate-400 hover:text-slate-600"
+              >
+                Close
+              </button>
+              </div>
+            </div>
+      */}
     </div>
   );
 }

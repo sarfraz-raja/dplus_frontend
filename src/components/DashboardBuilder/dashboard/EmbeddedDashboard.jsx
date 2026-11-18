@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import DashboardCanvasEditor from './DashboardCanvasEditor';
 import { getDashboardDetail } from '../../../store/actions/dashboardBuilder-actions';
@@ -12,6 +12,9 @@ import DashboardViewActions from './DashboardViewActions';
 // vendor-specific filter-id/state encoding to build. Two conventions, checked in this order:
 //   ?filters=<URI-encoded JSON array>   — escape hatch for a non-'=' operator (range, IN, ...)
 //   ?filter.<column>=<value>            — common single-value case, operator implicitly '='
+// Plus `merge=1` (sent by Dashboard Builder widget links, utils/widgetLink.js): instead of replacing
+// the dashboard's saved filters, the link's rows override them column by column and the other saved
+// rows stay (e.g. a passed-on region keeps the target's own date range). Without it: replace, as before.
 // This is a one-off override for this view only — see getDashboardData's own doc comment —
 // never persisted back to the dashboard's saved global_filters.
 function parseDeepLinkFilters(search) {
@@ -61,7 +64,11 @@ function isPublished(dashboard) {
 // builder's fullscreen preview) also gets the Filters setup button and leaves room for its fixed ✕.
 // OLD: export default function EmbeddedDashboard({ dashboardId, height }) {
 // OLD: export default function EmbeddedDashboard({ dashboardId, height, autoRefreshSeconds, showRefreshControls = false, onAutoRefreshChange }) {
-export default function EmbeddedDashboard({ dashboardId, height, autoRefreshSeconds, toolbar = true, fullscreen = false, onAutoRefreshChange }) {
+// `syncTabToUrl` (the Dashboard Builder's deep-linked fullscreen view only): ?tab=<tabId> picks the open
+// tab, and every tab switch is written back — pushed, so browser Back returns to the previous tab. Off
+// for other embeds (Insights Engine), whose own page may already use `tab` for something else.
+// OLD: export default function EmbeddedDashboard({ dashboardId, height, autoRefreshSeconds, toolbar = true, fullscreen = false, onAutoRefreshChange }) {
+export default function EmbeddedDashboard({ dashboardId, height, autoRefreshSeconds, toolbar = true, fullscreen = false, onAutoRefreshChange, syncTabToUrl = false }) {
   const editorRef = useRef(null);
   const [refreshState, setRefreshState] = useState({ refreshing: false, lastRefreshedAt: null });
   const [localSeconds, setLocalSeconds] = useState(null);
@@ -71,7 +78,27 @@ export default function EmbeddedDashboard({ dashboardId, height, autoRefreshSeco
   const [filterState, setFilterState] = useState({ filters: [], datasourceOptions: [] });
   const [state, setState] = useState({ loading: true, error: null, dashboard: null, widgets: null });
   const location = useLocation();
-  const deepLinkFilters = useMemo(() => parseDeepLinkFilters(location.search), [location.search]);
+  // OLD: const deepLinkFilters = useMemo(() => parseDeepLinkFilters(location.search), [location.search]);
+  const urlFilters = useMemo(() => parseDeepLinkFilters(location.search), [location.search]);
+  const mergeFilters = new URLSearchParams(location.search).get('merge') === '1';
+  const savedFilters = state.dashboard?.global_filters;
+  // Memoized — the editor re-fetches whenever this array's identity changes.
+  const deepLinkFilters = useMemo(() => {
+    if (!mergeFilters || urlFilters.length === 0) return urlFilters;
+    const linkColumns = new Set(urlFilters.map((f) => f.column));
+    return [...(savedFilters || []).filter((f) => !linkColumns.has(f.column)), ...urlFilters];
+  }, [urlFilters, mergeFilters, savedFilters]);
+  const navigate = useNavigate();
+  const urlTabId = syncTabToUrl ? new URLSearchParams(location.search).get('tab') : null;
+  // Reads window.location (not the render's `location`) so it never writes from a stale URL.
+  // The first report (on open, URL without ?tab=) replaces instead of pushing — no extra Back step.
+  const writeTabToUrl = (tabId) => {
+    const params = new URLSearchParams(window.location.search);
+    if ((params.get('tab') || null) === (tabId || null)) return;
+    const replace = !params.has('tab');
+    if (tabId) params.set('tab', tabId); else params.delete('tab');
+    navigate({ search: params.toString() }, { replace });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -159,6 +186,8 @@ export default function EmbeddedDashboard({ dashboardId, height, autoRefreshSeco
         autoRefreshSeconds={seconds}
         onRefreshState={setRefreshState}
         titleBarActions={titleBarActions}
+        requestedTabId={urlTabId}
+        onActiveTabChange={syncTabToUrl ? writeTabToUrl : undefined}
       />
     </div>
     </>

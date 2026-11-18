@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { Menu, X, ChevronDown, Check } from "lucide-react";
 import MapActions from "../../store/actions/map-actions";
 import AuthActions from "../../store/actions/auth-actions";
+import { SET_DASHBOARD_FILTER } from "../../store/reducers/map-reducer";
 
 const cbClass =
   "h-3.5 w-3.5 shrink-0 rounded border border-gray-400 bg-transparent text-[#F26522] accent-[#F26522] focus:ring-1 focus:ring-[#F26522]/40";
@@ -68,6 +70,10 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
   const mapConfig = useSelector((state) => state.map.config);
   const activeThematic = useSelector((state) => state.map.activeThematic);
   const saveMapFilters = useSelector((state) => state.auth?.commonConfig?.saveMapFilters);
+  // Filters a dashboard "Open on map" link applied for this visit (DashboardFilterBanner) — shown ticked
+  // instead of the saved ones while active; Apply / Clear here end it and go back to normal.
+  const dashboardFilter = useSelector((state) => state.map.dashboardFilter);
+  const navigate = useNavigate();
 
   const [selected, setSelected] = useState({});
   const [showLeftFilters, setShowLeftFilters] = useState(false);
@@ -115,6 +121,22 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
 
   if (mode !== "floating") return;
   if (!allFilters?.d1?.length) return;
+
+  // Dashboard filters: tick what the panel can show (region / technology bands; first site in the
+  // search box) — and return before the auto-heal below, which would SAVE them as the user's filters.
+  if (dashboardFilter) {
+    const shown = {};
+    (allFilters.d1 || []).forEach((group) => {
+      (group.child || []).forEach((tb) => {
+        const values = dashboardFilter.gisFilters?.[tb.name];
+        if (Array.isArray(values) && values.length) shown[tb.name] = values;
+      });
+    });
+    setSelected(shown);
+    const dashSite = dashboardFilter.gisFilters?.site_name;
+    setSiteSearch(Array.isArray(dashSite) && dashSite[0] ? String(dashSite[0]) : "");
+    return;
+  }
 
   try {
 
@@ -235,6 +257,7 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
 }, [
   mode,
   saveMapFilters,
+  dashboardFilter,
   allFilters?.d1,
   dispatch,
   mapConfig
@@ -285,6 +308,12 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
 
     dispatch(MapActions.getGisCells(payload));
 
+    // Applying here replaces the dashboard's filters — end that mode and drop its link from the URL.
+    if (dashboardFilter) {
+      dispatch(SET_DASHBOARD_FILTER(null));
+      navigate("/gis-engine", { replace: true });
+    }
+
     dispatch(
       AuthActions.setupConf(true, {
         mapScale: mapConfig.mapScale,
@@ -296,13 +325,20 @@ const LeftFilters = ({ mode = "toolbar", onClose }) => {
 
     setShowLeftFilters(false);
     if (mode === "floating") onClose?.();
-  }, [selected, siteSearch, dispatch, mapConfig, activeThematic, mode, onClose]);
+  // OLD: }, [selected, siteSearch, dispatch, mapConfig, activeThematic, mode, onClose]);
+  }, [selected, siteSearch, dispatch, mapConfig, activeThematic, mode, onClose, dashboardFilter, navigate]);
 
   const clearGlobalFilters = useCallback(() => {
     setSelected({});
     setSiteSearch("");
     dispatch(MapActions.getGisCells({}));
-  }, [dispatch]);
+    // Same as Apply: clearing ends the dashboard's filters.
+    if (dashboardFilter) {
+      dispatch(SET_DASHBOARD_FILTER(null));
+      navigate("/gis-engine", { replace: true });
+    }
+  // OLD: }, [dispatch]);
+  }, [dispatch, dashboardFilter, navigate]);
 
   const toggleAllInSection = useCallback((group) => {
     setSelected((prev) => {

@@ -10,7 +10,9 @@ import { Search, Check, X } from 'lucide-react';
  * columns — see FilterPanel.jsx's own doc comment on why there's no real distinct-values
  * endpoint to call instead.
  */
-export default function SingleSelectFilterInput({ options = [], value = '', onChange, loading = false, fullWidth = false }) {
+// `dense`: full width at the small height (widget filter popover).
+// OLD: export default function SingleSelectFilterInput({ options = [], value = '', onChange, loading = false, fullWidth = false }) {
+export default function SingleSelectFilterInput({ options = [], value = '', onChange, loading = false, fullWidth = false, dense = false }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef(null);
@@ -40,7 +42,8 @@ export default function SingleSelectFilterInput({ options = [], value = '', onCh
       <div
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-1 shrink-0 border border-slate-200 bg-white cursor-pointer ${
-          fullWidth ? 'w-full h-[38px] rounded-lg pl-2.5 pr-3 text-sm' : 'w-32 h-7 rounded-md pl-1.5 pr-2 text-xs'
+          // OLD: fullWidth ? 'w-full h-[38px] rounded-lg pl-2.5 pr-3 text-sm' : 'w-32 h-7 rounded-md pl-1.5 pr-2 text-xs'
+          fullWidth && dense ? 'w-full h-7 rounded-md pl-2 pr-2 text-xs' : fullWidth ? 'w-full h-[38px] rounded-lg pl-2.5 pr-3 text-sm' : 'w-32 h-7 rounded-md pl-1.5 pr-2 text-xs'
         }`}
       >
         {!value ? (

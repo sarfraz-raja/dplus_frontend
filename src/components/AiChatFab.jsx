@@ -543,12 +543,43 @@ export default function AiChatFab() {
     }
 
     const FAB_SIZE = 48
+    const TOP_BAR_H = 78 // TopBar height; the FAB stays below it
+    /* right edge of the Sidebar (0 when it's hidden off-screen on mobile); the FAB stays right of it */
+    const sidebarRight = () => {
+        const el = document.querySelector('[data-dy3-sidebar]')
+        return el ? Math.max(0, el.getBoundingClientRect().right) : 0
+    }
+
+    /* keep a saved position inside the content area on load, resize and sidebar open/close; fall back to bottom-right if it can't fit */
+    useEffect(() => {
+        const clamp = () => setFabPos(prev => {
+            if (!prev) return prev
+            const minX = sidebarRight()
+            const maxX = window.innerWidth - FAB_SIZE
+            const maxY = window.innerHeight - FAB_SIZE
+            if (!Number.isFinite(prev.left) || !Number.isFinite(prev.top) || maxX < minX || maxY < TOP_BAR_H) return null
+            const left = Math.min(Math.max(prev.left, minX), maxX)
+            const top = Math.min(Math.max(prev.top, TOP_BAR_H), maxY)
+            return left === prev.left && top === prev.top ? prev : { left, top }
+        })
+        clamp()
+        window.addEventListener('resize', clamp)
+        const sidebar = document.querySelector('[data-dy3-sidebar]')
+        const ro = sidebar && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(clamp) : null
+        if (ro) ro.observe(sidebar)
+        return () => {
+            window.removeEventListener('resize', clamp)
+            ro?.disconnect()
+        }
+    }, [])
+
     const onFabPointerDown = (e) => {
         const rect = e.currentTarget.getBoundingClientRect()
         fabDrag.current = {
             active: true, moved: false,
             startX: e.clientX, startY: e.clientY,
             origX: rect.left, origY: rect.top,
+            minX: sidebarRight(),
             pointerId: e.pointerId,
         }
     }
@@ -564,8 +595,8 @@ export default function AiChatFab() {
         if (d.moved) {
             const maxX = window.innerWidth - FAB_SIZE
             const maxY = window.innerHeight - FAB_SIZE
-            const left = Math.min(Math.max(d.origX + dx, 0), maxX)
-            const top = Math.min(Math.max(d.origY + dy, 0), maxY)
+            const left = Math.min(Math.max(d.origX + dx, d.minX ?? 0), maxX)
+            const top = Math.min(Math.max(d.origY + dy, TOP_BAR_H), maxY)
             setFabPos({ left, top })
         }
     }

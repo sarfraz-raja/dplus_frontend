@@ -6,7 +6,8 @@ import { defaultProRulesDate, normalizeProRuleRow, statusColor } from './cellPro
 const FILTERS = ['All', 'Issues only', 'Warnings', 'OK only', 'Accessibility', 'Capacity', 'Mobility', 'Integrity', 'Quality'];
 
 const categoryColor = (c = '') => {
-  switch (c.toLowerCase()) {
+  // OLD: switch (c.toLowerCase()) {  — crashed when the API sent category: null (default '' only covers undefined)
+  switch (String(c ?? '').toLowerCase()) {
     case 'capacity':      return '#7c3aed';
     case 'integrity':     return '#0891b2';
     case 'mobility':      return '#0d9488';
@@ -16,26 +17,33 @@ const categoryColor = (c = '') => {
   }
 };
 
-const CellProRulesModalContent = ({ cellId, cellName }) => {
+const CellProRulesModalContent = ({ cellId, cellName, technology }) => {
   const [cellData, setCellData]         = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState(null);
   const [date, setDate]                 = useState(defaultProRulesDate);
+  const [fetchedDate, setFetchedDate]   = useState(null);
   const [filter, setFilter]             = useState('All');
+
+  // Submit only makes sense when the picked date differs from the one already loaded
+  const canSubmit = !loading && !!date && date !== fetchedDate;
 
   // tech is derived from response data, not selected
   const techFromData = cellData.length > 0 ? [...new Set(cellData.map(r => r.tech).filter(Boolean))].join(', ') : '-';
 
-  useEffect(() => { if (cellName || cellId) fetchCellProRules(); }, [cellName, cellId]);
+  useEffect(() => { if (cellName || cellId) fetchCellProRules(); }, [cellName, cellId, technology]);
   useEffect(() => { applyFilter(); }, [cellData, filter]);
 
   const fetchCellProRules = async (overrideDate) => {
     const useDate = overrideDate ?? date;
+    setFetchedDate(useDate);
     setLoading(true); setError(null);
     try {
       const response = await Api.get({
-        url: `${Urls.cell_pro_rules}?cell_name=${encodeURIComponent(cellName || cellId)}&date=${encodeURIComponent(useDate)}`,
+        // OLD: technology came from the previous response, so the first call always sent "-"
+        // url: `${Urls.cell_pro_rules}?cell_name=${encodeURIComponent(cellName || cellId)}&date=${encodeURIComponent(useDate)}&technology=${encodeURIComponent(techFromData)}&`,
+        url: `${Urls.cell_pro_rules}?cell_name=${encodeURIComponent(cellName || cellId)}&date=${encodeURIComponent(useDate)}${technology ? `&technology=${encodeURIComponent(technology)}` : ''}`,
         inst: 0,
       });
       if (response?.status === 200 && response.data?.data) {
@@ -97,7 +105,9 @@ const CellProRulesModalContent = ({ cellId, cellName }) => {
           <label className="block text-[9px] text-transparent uppercase tracking-wide mb-0.5">-</label>
           <button
             onClick={() => fetchCellProRules(date)}
-            className="px-3 text-white text-xs rounded font-semibold h-7"
+            disabled={!canSubmit}
+            title={canSubmit ? undefined : 'Change the date to submit'}
+            className="px-3 text-white text-xs rounded font-semibold h-7 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: '#1f2937' }}
           >
             Submit

@@ -12,10 +12,13 @@
 
 /* Firefox doesn't support ::-webkit-scrollbar at all — without this it renders its
    native (thicker) scrollbar, which can pick up the OS accent color unstyled. */
-* {
+/* OLD: applied to every browser — since Chrome 121, setting the standard scrollbar-width /
+   scrollbar-color makes Chromium ignore every ::-webkit-scrollbar rule below. Now Firefox-only,
+   see the @supports block after the app-wide scrollbar rules. */
+/* * {
   scrollbar-width: thin !important;
   scrollbar-color: #ec7d09 #f5f5f5 !important;
-}
+} */
 
 /* Thin scrollbar for all scrollbars inside Planned Neighbors panel — width only, colors from theme */
 .neighbours-panel *::-webkit-scrollbar,
@@ -23,11 +26,13 @@
   width: 2px !important;
   height: 2px !important;
 }
-.neighbours-panel *:hover::-webkit-scrollbar,
+/* OLD: widened to 6px on hover — the width change reflowed the panel content. Width now stays
+   fixed; the thumb fades in on hover via the app-wide rules. */
+/* .neighbours-panel *:hover::-webkit-scrollbar,
 .neighbours-panel:hover::-webkit-scrollbar {
   width: 6px !important;
   height: 6px !important;
-}
+} */
 
 @font-face {
   font-family: "DatayogQuantico";
@@ -216,7 +221,10 @@ html[data-theme="dark"] body {
  * lives in — so a same-specificity local override (see the doc comment above) could still win
  * this tie depending on exact mount timing. !important removes that ambiguity outright rather
  * than relying on being confident about DOM insertion order. */
-html[data-theme="light"] ::-webkit-scrollbar {
+/* OLD: width toggled 0 → 4px on hover. A scrollbar takes space inside its box, so every hover
+ * narrowed the content by 4px and reflowed it (wrapped text, grid columns, table header/body
+ * alignment all jumped). Track colors were hardcoded rather than matching the container. */
+/* html[data-theme="light"] ::-webkit-scrollbar {
   width: 0 !important;
   height: 0 !important;
 }
@@ -270,13 +278,68 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
 
 html[data-theme="dark"] ::-webkit-scrollbar-track:hover {
   background-color: #04003a3f;
-}
+} */
 
 /* Firefox equivalent of the show/hide split above (no track/thumb color control there, just
  * the width tri-state) — `scrollbar-width` isn't inherited, so this has to target every
  * element directly, not just `html`, to reach nested scrollable divs. */
-* { scrollbar-width: none !important; }
-*:hover { scrollbar-width: thin !important; }
+/* OLD: none → thin on hover reflowed content the same way (and in Chrome 121+ it also
+ * overrode every ::-webkit-scrollbar rule, giving Chrome's ~11px bar instead of 4px). */
+/* * { scrollbar-width: none !important; }
+*:hover { scrollbar-width: thin !important; } */
+
+/* App-wide scrollbar: fixed width, revealed by color only. The 4px is always reserved (width
+ * never changes, so hover never reflows content); track and corner are transparent, so at rest
+ * the strip shows the scroll container's own background; hovering the container fades the
+ * orange thumb in. Local overrides that set `scrollbar-width: none` (DashboardBuilder panels)
+ * still hide their scrollbar entirely. */
+::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 0;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background-color: #ec7d09;
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+  background-color: #d96f08;
+}
+
+/* Firefox only (Chromium would drop the ::-webkit-scrollbar styling above if these were set). */
+@supports (-moz-appearance: none) {
+  * {
+    scrollbar-width: thin !important;
+    scrollbar-color: transparent transparent !important;
+  }
+
+  *:hover {
+    scrollbar-color: #ec7d09 transparent !important;
+  }
+}
+
+/* Dashboard Builder table widgets (Charts-tab preview and dashboards, both via VirtualizedTable):
+ * the thumb is always visible so it's clear the table scrolls. Same 4px width, so no shift. */
+.dbe-table-scroll::-webkit-scrollbar-thumb {
+  background-color: #ec7d09;
+}
+
+@supports (-moz-appearance: none) {
+  .dbe-table-scroll {
+    scrollbar-color: #ec7d09 transparent !important;
+  }
+}
 
 ::-webkit-progress-bar {
   background-color: #1b0027;

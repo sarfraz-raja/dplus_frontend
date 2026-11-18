@@ -2,6 +2,7 @@ import {
   Hash, Gauge, LineChart as LineChartIcon, BarChart3, PieChart as PieChartIcon,
   BarChartHorizontal, AreaChart as AreaChartIcon, Grid3x3, Funnel, BarChart4, Boxes,
   ChartNoAxesCombined, ScatterChart as ScatterChartIcon, Table as TableIcon, TrendingUp,
+  Map as MapIcon,
 } from 'lucide-react';
 
 // Icon + accent color per real backend chart_type — one source of truth shared by
@@ -30,6 +31,10 @@ const CHART_TYPE_META = {
   STACKED_BAR: { icon: BarChart4, color: '#D97706', label: 'Stacked Bar', description: 'Best for comparing category totals while also showing what sub-groups make each one up.' },
   FUNNEL: { icon: Funnel, color: '#0D9488', label: 'Funnel', description: 'Best for a sequential process where each stage narrows from the one before it (e.g. signup → activation → purchase).' },
   WATERFALL: { icon: ChartNoAxesCombined, color: '#059669', label: 'Waterfall', description: 'Best for showing how a series of gains/losses add up to a final total, step by step.' },
+  // Frontend-only chart type: saved as TABLE + mapping.chart_variant 'map' (see toBackendChartType
+  // below) — a TABLE with no x/y returns raw rows, which MapChartView.jsx draws as cell sectors or
+  // site points.
+  MAP: { icon: MapIcon, color: '#0EA5E9', label: 'Map', description: 'Best for where things are — cells drawn as sectors or sites as points, colored by a band, vendor or KPI.' },
   TREEMAP: { icon: Boxes, color: '#7C3AED', label: 'Treemap', description: 'Best for many categories at once, sized by value — fits far more categories legibly than a Pie chart can.' },
 };
 
@@ -37,11 +42,17 @@ export const CHART_TYPES = Object.keys(CHART_TYPE_META);
 
 // Big Number lives in the backend as a KPI_CARD with this marker in its mapping.
 export const BIG_NUMBER_VARIANT = 'big_number';
+// Map lives in the backend as a TABLE (no x/y → raw rows) with this marker in its mapping.
+export const MAP_VARIANT = 'map';
 // What to send as chart_type (every backend call, and anything that runs KPI_CARD logic).
-export const toBackendChartType = (type) => (type === 'BIG_NUMBER' ? 'KPI_CARD' : type);
+// OLD: export const toBackendChartType = (type) => (type === 'BIG_NUMBER' ? 'KPI_CARD' : type);
+export const toBackendChartType = (type) => (type === 'BIG_NUMBER' ? 'KPI_CARD' : type === 'MAP' ? 'TABLE' : type);
 // What to show / pick fields by, given a saved widget's chart_type + mapping.
+// OLD: chartType === 'KPI_CARD' && mapping?.kpi_variant === BIG_NUMBER_VARIANT ? 'BIG_NUMBER' : chartType
 export const displayChartType = (chartType, mapping) => (
-  chartType === 'KPI_CARD' && mapping?.kpi_variant === BIG_NUMBER_VARIANT ? 'BIG_NUMBER' : chartType
+  chartType === 'KPI_CARD' && mapping?.kpi_variant === BIG_NUMBER_VARIANT ? 'BIG_NUMBER'
+    : chartType === 'TABLE' && mapping?.chart_variant === MAP_VARIANT ? 'MAP'
+    : chartType
 );
 
 // Maps a widgetTypeRegistry.js mock-widget-type key to its equivalent real backend

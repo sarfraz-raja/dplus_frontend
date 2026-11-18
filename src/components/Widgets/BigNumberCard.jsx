@@ -126,8 +126,12 @@ export default function BigNumberCard({
         style={{ color: valueColor, fontSize: valueTextSize ? `${valueTextSize}px` : undefined }}
       >
         {value}
+        {/* Inside the number's span so it takes the number's size and color (Value text size /
+            color, or the target status color) — only the weight stays lighter. A compact suffix
+            (K/M/B) is already part of `value`. No gap of its own, so it sits flush like that
+            suffix; a unit typed with a leading space (" Mbps") keeps that space. */}
+        {unit && <span className="font-medium">{unit}</span>}
       </span>
-      {unit && <span className={cn('text-sm font-medium', muted)}>{unit}</span>}
       {status && (
         <span className={cn('ml-1 shrink-0 text-[10px] font-semibold uppercase tracking-wide', statusText[status])}>
           {STATUS_LABEL[status]}

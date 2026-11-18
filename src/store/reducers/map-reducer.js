@@ -87,6 +87,15 @@ const initialState = {
 
     siteKpiData: {}, // { tower_id: kpi_value } — fetched from /map/gis-sites-kpi on Apply
 
+    // Filters a Dashboard Builder widget opened the map with ("Open on map" →
+    // /gis-engine?mapFilters=…, see MapsUsingDeckgl/Utils/dashboardMapFilter.js). Applied for this
+    // visit only — never saved to the user's map setup. null = no dashboard filter active.
+    // { gisFilters, labels: [{ field, values }], skipped: [{ column, reason }], from }
+    dashboardFilter: null,
+    // Bumped to ask TelecomMap to fit the view to the loaded cells again (its own auto-fit runs only
+    // once per mount) — e.g. after dashboard filters are applied or cleared.
+    fitRequest: 0,
+
     activeSiteThematic: {
         type: "Technology",
         colors: {}
@@ -204,6 +213,14 @@ const mapQuery = createSlice({
             if (!state.selectedOperator && payload.length > 0) {
                 state.selectedOperator = payload[0].operator;
             }
+        },
+
+        SET_DASHBOARD_FILTER: (state, { payload }) => {
+            state.dashboardFilter = payload;
+        },
+
+        REQUEST_MAP_FIT: (state) => {
+            state.fitRequest += 1;
         },
 
         // 🔹 Update filters (region, tech, vendor)
@@ -539,6 +556,8 @@ export const {
     SET_NEIGHBOUR_RELATIONS,
     SET_NEIGHBORS_PLAN_DATA,
     SET_PLAN_NEIGHBOUR_LINES,
+    SET_DASHBOARD_FILTER,
+    REQUEST_MAP_FIT,
 
 } = mapQuery.actions
 

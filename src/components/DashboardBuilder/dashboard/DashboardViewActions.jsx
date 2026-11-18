@@ -34,9 +34,12 @@ export default function DashboardViewActions({
         <div className="shrink-0">
           <FilterPanel
             compact
+            dense
             filters={filterState.filters}
             onApply={(rows) => editorRef.current?.applyFilters(rows)}
             onClear={() => editorRef.current?.clearFilterValues()}
+            onReset={() => editorRef.current?.resetFilters()}
+            canReset={!!filterState.changedFromSaved}
             datasourceOptions={filterState.datasourceOptions}
           />
         </div>

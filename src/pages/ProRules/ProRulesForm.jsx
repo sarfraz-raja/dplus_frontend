@@ -96,6 +96,21 @@ const ProRulesForm = ({ isOpen, setIsOpen, resetting, formValue = {} }) => {
             required: true,
             classes: "col-span-1"
         }, {
+            label: "Category",
+            value: "",
+            name: "category",
+            type: "select",
+            option: [
+                { label: "Accessibility", value: "Accessibility" },
+                { label: "Capacity",      value: "Capacity" },
+                { label: "Mobility",      value: "Mobility" },
+                { label: "Integrity",     value: "Integrity" },
+                { label: "Quality",       value: "Quality" },
+            ],
+            props: "",
+            required: false,
+            classes: "col-span-1"
+        }, {
             label: "Query",
             value: "",
             name: "query",
@@ -184,6 +199,10 @@ const ProRulesForm = ({ isOpen, setIsOpen, resetting, formValue = {} }) => {
                     setValue(key, momentObj.toDate());
 
 
+                } else if (key === "fromreport") {
+                    // Postgres returns the column lowercased; the form field is "fromReport".
+                    // Set only that name so the stale lowercase key can't override the edit on save.
+                    setValue("fromReport", formValue.fromReport ?? formValue[key]);
                 } else {
                     // console.log("formValuekey",key,key)
                     setValue(key, formValue[key]);

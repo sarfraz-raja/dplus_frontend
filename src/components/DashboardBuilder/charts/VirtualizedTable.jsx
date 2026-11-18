@@ -397,7 +397,8 @@ export default function VirtualizedTable({
       onScroll={shouldVirtualize ? handleScroll : undefined}
       // Table frame: the grid is set in from the card edges, rounded, with an outer border in
       // the grid line color (the pager stays outside, under it).
-      className={`overflow-auto flex-1 min-h-0${framed ? ` mx-2.5 rounded-lg border ${lineCls}${paged ? '' : ' mb-2.5'}` : ''}`}
+      // dbe-table-scroll: table scrollbar stays visible at rest (index.css), not hover-only.
+      className={`dbe-table-scroll overflow-auto flex-1 min-h-0${framed ? ` mx-2.5 rounded-lg border ${lineCls}${paged ? '' : ' mb-2.5'}` : ''}`}
       style={framed ? lineStyle : undefined}
     >
       {/* `resizingCol` also forces fixed layout — an auto-layout table mostly ignores a <col>'s

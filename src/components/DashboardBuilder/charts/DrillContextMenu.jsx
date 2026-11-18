@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getPortalRoot } from '../../../utils/common';
-import { ChevronsDown, ChevronsUp, Filter } from 'lucide-react';
+// OLD: import { ChevronsDown, ChevronsUp, Filter } from 'lucide-react';
+// OLD: import { ChevronsDown, ChevronsUp, Filter, ArrowRight } from 'lucide-react';
+import { ChevronsDown, ChevronsUp, Filter, ArrowRight, MapPin } from 'lucide-react';
 
 /**
  * Right-click menu on a single chart point — "Drill down into X" / "Drill up" / "Cross-filter
@@ -23,8 +25,14 @@ import { ChevronsDown, ChevronsUp, Filter } from 'lucide-react';
  * to its own widget tile instead, clipped by that tile's overflow and barely visible at its
  * edge rather than floating over the whole dashboard at the actual click point.
  */
+// `linkLabel` ("Go to Network" / "Open Cell KPI ↗") adds the widget's double-click link as an entry;
+// `linkValueLabel`: the clicked value it passes on, if it does.
+// `mapLabel` ("Open on map ↗") / `mapValueLabel` / `onMap`: the same for the widget's "Open on map".
+// OLD: x, y, label, showDrillSection, canDrillDown, canDrillUp, canCrossFilter, onDrillDown, onDrillUp, onCrossFilter, onClose,
 export default function DrillContextMenu({
   x, y, label, showDrillSection, canDrillDown, canDrillUp, canCrossFilter, onDrillDown, onDrillUp, onCrossFilter, onClose,
+  linkLabel = null, linkValueLabel = null, onLink,
+  mapLabel = null, mapValueLabel = null, onMap,
 }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -85,6 +93,33 @@ export default function DrillContextMenu({
         >
           <Filter size={13} className="shrink-0" />
           <span className="truncate">Cross-filter by "{label}"</span>
+        </button>
+      )}
+      {linkLabel && (showDrillSection || canCrossFilter) && (
+        <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
+      )}
+      {linkLabel && (
+        <button
+          type="button"
+          onClick={onLink}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+        >
+          <ArrowRight size={13} className="shrink-0" />
+          <span className="truncate">{linkLabel}{linkValueLabel != null ? ` · filtered by "${linkValueLabel}"` : ''}</span>
+        </button>
+      )}
+      {/* Divider only when something sits above it that isn't the link (the link + map read as one group). */}
+      {mapLabel && !linkLabel && (showDrillSection || canCrossFilter) && (
+        <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
+      )}
+      {mapLabel && (
+        <button
+          type="button"
+          onClick={onMap}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+        >
+          <MapPin size={13} className="shrink-0" />
+          <span className="truncate">{mapLabel}{mapValueLabel != null ? ` · filtered by "${mapValueLabel}"` : ''}</span>
         </button>
       )}
     </div>,

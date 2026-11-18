@@ -22,7 +22,8 @@ const COLUMNS = [
 ];
 
 const categoryColor = (c = '') => {
-    switch (c.toLowerCase()) {
+    // OLD: switch (c.toLowerCase()) {  — crashed when the API sent category: null (default '' only covers undefined)
+    switch (String(c ?? '').toLowerCase()) {
         case 'capacity':      return '#7c3aed';
         case 'integrity':     return '#0891b2';
         case 'mobility':      return '#0d9488';

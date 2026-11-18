@@ -9,6 +9,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import AssuranceActions from '../../store/actions/assurance-actions';
 import { PageTitle } from '../../components/FormPage';
 import ActionButton from '../../components/ActionButton';
+import AssuranceRulesHelp from './AssuranceRulesHelp';
 
 const COLUMNS = [
     { label: 'Rule Name',   key: 'rule_name' },
@@ -152,6 +153,7 @@ const AssuranceRuleList = () => {
                     />
 
                     <div className="flex items-center gap-2">
+                        <AssuranceRulesHelp />
                         {/* Incidents belong to Assurance (they group a rule's alarms per site). Until the
                             backend sidebar menu lists /assurance/incidents, this is the way in. */}
                         <Button onClick={() => navigate('/assurance/incidents')} variant="secondary">

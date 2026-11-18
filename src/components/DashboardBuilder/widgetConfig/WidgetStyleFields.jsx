@@ -12,6 +12,7 @@ import EditedBadge, { sameStyleValue } from './EditedBadge';
 import { contrastRatio } from '../utils/contrast';
 import { LOW_CONTRAST_THRESHOLD, CARD_BORDER_KEYS, guardStyleColors } from '../utils/themedStyle';
 import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
+import NumberStepper from './NumberStepper';
 
 // Auto-groups a field into one of four collapsible sections purely from its own
 // key/type shape — no per-field `group` metadata needed on every styleFields entry across
@@ -131,8 +132,17 @@ const GROUP_ORDER = ['Dashboard Title', 'Dashboard Background', 'Title', 'Value'
 // uses for its own color-key set: every `color` field plus the palette.
 const isModeField = (field) => field.type === 'color' || field.type === 'palette' || field.key === 'palette';
 
-const isShowHide = (field) => field.type === 'select' && field.options?.length === 2
-  && field.options.every((o) => ['show', 'hide'].includes(String(o.value).toLowerCase()));
+// Any yes/no pair is drawn as one switch (right-aligned, in the switch block) — Show/Hide, On/Off and
+// Yes/No alike — so every yes/no in every style panel looks the same. Two NAMED choices (Pie | Donut,
+// Solid | Fade) stay segmented. OLD: only Show/Hide pairs —
+// field.options.every((o) => ['show', 'hide'].includes(String(o.value).toLowerCase()))
+const SWITCH_ON_VALUES = ['show', 'on', 'yes'];
+const SWITCH_OFF_VALUES = ['hide', 'off', 'no'];
+const isShowHide = (field) => {
+  if (field.type !== 'select' || field.options?.length !== 2) return false;
+  const vals = field.options.map((o) => String(o.value).toLowerCase());
+  return vals.some((v) => SWITCH_ON_VALUES.includes(v)) && vals.some((v) => SWITCH_OFF_VALUES.includes(v));
+};
 
 // Custom widget colors are stored as one literal hex value, rendered identically regardless of
 // which theme the viewer is in — so a color picked (or inherited from a Theme) while looking
@@ -248,19 +258,62 @@ function SliderRow({ field, current, resolvedDefaults = {}, onChange }) {
   // or an arbitrary midpoint.
   const fallback = resolvedDefaults[field.key] ?? field.default ?? Math.round((min + max) / 2);
   const numeric = current === '' || current == null ? fallback : Number(current);
+  // A trailing unit in the label — "(px)", "(%)" — is shown with the range instead (see below).
+  const unitMatch = /\s*\(([^()]{1,4})\)\s*$/.exec(field.label || '');
+  const unit = unitMatch ? unitMatch[1] : '';
+  const labelText = unitMatch ? field.label.slice(0, unitMatch.index) : field.label;
+  // OLD: a range slider + value pill —
+  //   <div className="dbe-style-slider-line">
+  //     <input type="range" min={min} max={max} value={numeric} onChange={(e) => onChange(field.key, Number(e.target.value))} />
+  //     <span className="dbe-style-value-pill">{numeric}</span>
+  //   </div>
+  // Now a typed number box with ▲/▼ and the min–max range shown (NumberStepper) — exact values,
+  // same `field.min`/`max` (and optional `field.step`), same onChange. Unset = the inherited value, muted.
   return (
     <div className="dbe-style-row">
-      <span className="dbe-style-row-label">{field.label}</span>
-      <div className="dbe-style-slider-line">
-        <input
-          type="range"
-          min={min}
-          max={max}
-          value={numeric}
-          onChange={(e) => onChange(field.key, Number(e.target.value))}
-        />
-        <span className="dbe-style-value-pill">{numeric}</span>
-      </div>
+      {/* A <span> like every other row's label — a <label> here picked up the dark-mode label colors
+          (near-white on this light panel). The input has its own aria-label.
+          OLD: <label className="dbe-style-row-label" htmlFor={`dbe-num-${field.key}`}>{field.label}</label> */}
+      {/* Label on the left, the allowed range at the right of the same line; the box gets the full
+          width below. OLD: <span className="dbe-style-row-label">{field.label}</span> + range beside the box. */}
+      {/* The unit moves from the label to the range — "Corner radius" · "0 – 24 px" instead of
+          "Corner radius (px)" · "0 – 24", which got cut to "Corner radius (…" in a half-width column.
+          The label wraps rather than truncates if it still doesn't fit (dbe-style-row-label-line--num).
+          OLD: label {field.label}, range {min} – {max} */}
+      <span className="dbe-style-row-label-line dbe-style-row-label-line--num">
+        <span className="dbe-style-row-label"><span className="dbe-style-row-label-text">{labelText}</span><FieldHintMark hint={field.hint} /></span>
+        <span className="dbe-style-range" title={`Allowed: ${min} to ${max}${unit ? ` ${unit}` : ''}`}>{min} – {max}{unit ? ` ${unit}` : ''}</span>
+      </span>
+      {/* `field.slider`: a drag slider + value pill instead of the typed stepper (the Map chart's
+          zoomed-out cell size). `field.format(n)` = the pill text; the range line above stays. */}
+      {field.slider ? (
+        <div className="dbe-style-slider-line">
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={field.step ?? 1}
+            value={numeric}
+            onChange={(e) => onChange(field.key, Number(e.target.value))}
+            aria-label={labelText}
+            className="accent-[#EC7D09]"
+          />
+          <span className="dbe-style-value-pill">{field.format ? field.format(numeric) : numeric}</span>
+        </div>
+      ) : (
+      <NumberStepper
+        id={`dbe-num-${field.key}`}
+        showRange={false}
+        fullWidth
+        value={numeric}
+        min={min}
+        max={max}
+        step={field.step ?? 1}
+        inherited={current === '' || current == null}
+        ariaLabel={field.label}
+        onChange={(n) => onChange(field.key, n)}
+      />
+      )}
     </div>
   );
 }
@@ -268,8 +321,9 @@ function SliderRow({ field, current, resolvedDefaults = {}, onChange }) {
 // `onInherit`: shown when this level sets the switch — clears it so the value comes from the level
 // above again (dashboard / theme / default). Same "Use inherited" wording as the section toggles.
 function SwitchRow({ field, current, onChange, onInherit = null }) {
-  const onValue = field.options.find((o) => String(o.value).toLowerCase() === 'show')?.value ?? field.options[0].value;
-  const offValue = field.options.find((o) => String(o.value).toLowerCase() === 'hide')?.value ?? field.options[1].value;
+  // OLD: matched only 'show' / 'hide' — now also on/off and yes/no (see isShowHide).
+  const onValue = field.options.find((o) => SWITCH_ON_VALUES.includes(String(o.value).toLowerCase()))?.value ?? field.options[0].value;
+  const offValue = field.options.find((o) => SWITCH_OFF_VALUES.includes(String(o.value).toLowerCase()))?.value ?? field.options[1].value;
   const checked = (current || field.default) === onValue;
   return (
     <div className="dbe-style-row dbe-style-row-inline">
@@ -350,12 +404,26 @@ function IconSelectRow({ field, current, onChange }) {
   );
 }
 
-function SelectRow({ field, current, onChange }) {
+// The "inherit" option (value '' — "Dashboard setting", "Default") says what it resolves to:
+// "Dashboard setting (Grow)", "Default (Inter)". The level above's value when there is one
+// (resolvedDefaults), else the field's own `inheritLabel` (what's used when nothing is set anywhere).
+function inheritedOptionLabel(field, resolvedDefaults) {
+  const r = resolvedDefaults?.[field.key];
+  const opt = r !== undefined && r !== null && r !== '' ? (field.options || []).find((o) => o.value !== '' && String(o.value) === String(r)) : null;
+  return opt ? opt.label : (field.inheritLabel || null);
+}
+
+// OLD: function SelectRow({ field, current, onChange }) {
+function SelectRow({ field, current, onChange, resolvedDefaults }) {
+  const inheritedLabel = inheritedOptionLabel(field, resolvedDefaults);
   return (
     <label className="dbe-style-row">
       <span className="dbe-style-row-label"><span className="dbe-style-row-label-text">{field.label}</span><FieldHintMark hint={field.hint} /></span>
       <Select value={current} onChange={(e) => onChange(field.key, e.target.value)}>
-        {(field.options || []).map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        {/* OLD: {opt.label} — the inherit option now names the value it falls back to. */}
+        {(field.options || []).map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.value === '' && inheritedLabel ? `${opt.label} (${inheritedLabel})` : opt.label}</option>
+        ))}
       </Select>
     </label>
   );
@@ -508,6 +576,50 @@ function PositionPickerRow({ field, current, onChange }) {
   );
 }
 
+// A preset list plus "Custom…", which shows a text box for anything else (e.g. Unit: the
+// known units, or your own text). Saved as the one value either way — a value that isn't one
+// of the presets is a custom one, so no extra key is needed (same idea as PageSizeRow).
+function PresetTextRow({ field, current, onChange }) {
+  const value = current == null ? '' : String(current);
+  const isPreset = (field.options || []).some((opt) => opt.value === value);
+  const [customMode, setCustomMode] = useState(!isPreset);
+  useEffect(() => { if (!isPreset) setCustomMode(true); }, [value, isPreset]);
+  return (
+    <div className="dbe-style-row">
+      <span className="dbe-style-row-label"><span className="dbe-style-row-label-text">{field.label}</span><FieldHintMark hint={field.hint} /></span>
+      <div className="flex items-center gap-1.5">
+        <Select
+          className="flex-1 min-w-0"
+          value={customMode ? '__custom' : value}
+          onChange={(e) => {
+            if (e.target.value === '__custom') {
+              setCustomMode(true);
+              onChange(field.key, '');
+            } else {
+              setCustomMode(false);
+              onChange(field.key, e.target.value);
+            }
+          }}
+        >
+          {(field.options || []).map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          <option value="__custom">Custom…</option>
+        </Select>
+        {customMode && (
+          <input
+            type="text"
+            autoFocus={!value}
+            placeholder={field.placeholder || ''}
+            aria-label={`Custom ${field.label}`}
+            value={value}
+            onChange={(e) => onChange(field.key, e.target.value)}
+            className="dbe-style-text-input !w-24 shrink-0"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TextRow({ field, current, onChange }) {
   return (
     <label className="dbe-style-row">
@@ -550,20 +662,54 @@ function PaletteRow({ field, current, onChange }) {
   );
 }
 
-function FieldRow({ field, value, resolvedDefaults, onChange, markOverrides = false, applied, rejected = null }) {
+// Same value as what the field inherits? Numbers compare numerically ("100" = 100), colors
+// case-insensitively (#FFF = #fff), palettes by their colors; nothing set / nothing inherited → false.
+function isSameStyleValue(val, inherited, type) {
+  if (val === undefined || val === null || val === '' || inherited === undefined || inherited === null) return false;
+  if (Array.isArray(val) || Array.isArray(inherited)) {
+    return Array.isArray(val) && Array.isArray(inherited)
+      && JSON.stringify(val.map((c) => String(c).toLowerCase())) === JSON.stringify(inherited.map((c) => String(c).toLowerCase()));
+  }
+  if (typeof val === 'object' || typeof inherited === 'object') return JSON.stringify(val) === JSON.stringify(inherited);
+  if (type === 'number' || (typeof val === 'number' && typeof inherited === 'number')) {
+    return Number(val) === Number(inherited) && !Number.isNaN(Number(val));
+  }
+  if (type === 'color') return String(val).toLowerCase() === String(inherited).toLowerCase();
+  return String(val) === String(inherited);
+}
+
+// OLD: function FieldRow({ field, value, resolvedDefaults, onChange, markOverrides = false, applied, rejected = null }) {
+function FieldRow({ field, value, resolvedDefaults, onChange: onChangeProp, markOverrides = false, applied, rejected = null }) {
   const raw = value?.[field.key];
+  // Selects/position pickers show the inherited value (resolvedDefaults — the chart's own or the
+  // dashboard's) while unset, like sliders and color swatches already do; otherwise an
+  // inherited "Bold" title read as the field's own "Normal" default.
+  const inheritable = field.type === 'select' || field.type === 'position';
+  // What this field shows while unset — the level above's resolved value (chart → dashboard → theme),
+  // else the field's own default. Every field type (select, slider, color, text, palette, …).
+  // OLD: selects/position only — `inheritable ? (resolvedDefaults?.[field.key] ?? field.default) : undefined`.
+  const inheritedValue = resolvedDefaults?.[field.key] ?? field.default;
+  const sameAsInherited = isSameStyleValue(raw, inheritedValue, field.type);
+  // Setting the value it would inherit anyway clears the override instead of pinning a copy — the
+  // field keeps following the level above (and shows no ×), since nothing was actually changed.
+  // OLD: every pick was stored as-is, so re-picking e.g. "Auto" on Basemap, or dragging Shape opacity
+  // back to 100, marked it overridden. Only this field's own key — a row writing a sibling key
+  // (e.g. Rows per page's companion) passes through untouched.
+  const onChange = (key, val) => onChangeProp(
+    key,
+    key === field.key && isSameStyleValue(val, inheritedValue, field.type) ? undefined : val,
+  );
   // A field only counts as an explicit override once it holds a real value — an empty
   // string (cleared text input) or undefined (cleared via the × below) both mean "inherit
   // from the dashboard theme/local default," same as never having touched it. A palette's
   // "empty" is `[]`/undefined, never `''` (it's an array field, not text) — checked
   // separately so an untouched palette doesn't read as "overridden with nothing".
+  // OLD: field.type === 'palette' ? … : raw !== undefined && raw !== null && raw !== ''
+  // A saved value equal to the inherited one (picked before the rule above) isn't an override either.
   const isOverridden = field.type === 'palette'
     ? Array.isArray(raw) && raw.length > 0
-    : raw !== undefined && raw !== null && raw !== '';
-  // Selects/position pickers show the inherited value (resolvedDefaults — the chart's own or the
-  // dashboard's) while unset, like sliders and color swatches already do; otherwise an
-  // inherited "Bold" title read as the field's own "Normal" default.
-  const inheritable = field.type === 'select' || field.type === 'position';
+    : raw !== undefined && raw !== null && raw !== '' && !sameAsInherited;
+  // OLD: const inheritable = field.type === 'select' || field.type === 'position'; — moved above.
   const current = field.type === 'palette'
     ? (raw ?? field.default ?? [])
     : (raw ?? (inheritable ? resolvedDefaults?.[field.key] : undefined) ?? field.default ?? '');
@@ -573,6 +719,7 @@ function FieldRow({ field, value, resolvedDefaults, onChange, markOverrides = fa
   else if (field.type === 'palette') row = <PaletteRow field={field} current={current} onChange={onChange} />;
   else if (field.type === 'number') row = <SliderRow field={field} current={current} resolvedDefaults={resolvedDefaults} onChange={onChange} />;
   else if (field.type === 'text') row = <TextRow field={field} current={current} onChange={onChange} />;
+  else if (field.type === 'presetText') row = <PresetTextRow field={field} current={current} onChange={onChange} />;
   else if (field.type === 'textarea') row = <TextAreaRow field={field} current={current} onChange={onChange} />;
   else if (field.type === 'position') row = <PositionPickerRow field={field} current={current} onChange={onChange} />;
   else if (field.type === 'pageSize') row = <PageSizeRow field={field} current={current} value={value} resolvedDefaults={resolvedDefaults} onChange={onChange} />;
@@ -580,7 +727,8 @@ function FieldRow({ field, value, resolvedDefaults, onChange, markOverrides = fa
   else if (field.type === 'select') {
     if (isShowHide(field)) row = <SwitchRow field={field} current={current} onChange={onChange} onInherit={isOverridden ? () => onChange(field.key, undefined) : null} />;
     else if (field.options?.length === 2 && !field.asDropdown) row = <SegmentedRow field={field} current={current} onChange={onChange} />;
-    else row = <SelectRow field={field} current={current} onChange={onChange} />;
+    // OLD: <SelectRow field={field} current={current} onChange={onChange} />
+    else row = <SelectRow field={field} current={current} onChange={onChange} resolvedDefaults={resolvedDefaults} />;
   }
   if (!row) return null;
 
@@ -593,11 +741,21 @@ function FieldRow({ field, value, resolvedDefaults, onChange, markOverrides = fa
   // OLD: isOverridden && !isShowHide(field) && !isSegmented — set switches/segmented pairs had no way
   // back to the inherited value. Switches now carry their own "Use inherited"; segmented pairs get the ×.
   const showClear = isOverridden && !isShowHide(field);
+  // A plain dropdown (not a switch / segmented pair) with any option over ~12 characters can't show it
+  // in half of the narrow panel — see the wrapper below.
+  const isDropdown = field.type === 'select' && !isShowHide(field) && !isSegmented;
+  // Counts the "(…)" the inherit option shows too (SelectRow).
+  const inheritSuffixLen = (() => { const l = inheritedOptionLabel(field, resolvedDefaults); return l ? l.length + 3 : 0; })();
+  const hasLongOptions = isDropdown && (field.options || []).some((o) => String(o?.label ?? o?.value ?? o).length + (o?.value === '' ? inheritSuffixLen : 0) > 12);
 
   return (
     // `field.fullWidth` spans every column of a multi-column section (e.g. Rows per page, whose
     // dropdown + number box need the room).
-    <div className={`dbe-style-field-wrap${field.fullWidth ? ' col-span-full' : ''}${isOverridden ? '' : ' inherited'}${markOverrides && isOverridden ? ' override-marked' : ''}`}>
+    // OLD: className={`dbe-style-field-wrap${field.fullWidth ? ' col-span-full' : ''}…`} — in a 2-column
+    // section a dropdown whose options are longer than half a column ("Dashboard setting", "Auto (K / M /
+    // B / T)") got cut to "Dashboard set…". Such dropdowns now take the whole row (by their LONGEST
+    // option, so the layout doesn't jump when the pick changes); short ones (Normal / Bold) stay paired.
+    <div className={`dbe-style-field-wrap${field.fullWidth || hasLongOptions ? ' col-span-full' : ''}${isOverridden ? '' : ' inherited'}${markOverrides && isOverridden ? ' override-marked' : ''}${showClear ? ' has-clear' : ''}`}>
       {row}
       {showClear && (
         <button
@@ -930,7 +1088,10 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
                 {bodyFields.some(isShowHide) && (
                   <div
                     className="dbe-style-switch-block"
-                    style={columns > 1 ? { gridColumn: '1 / -1', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, columnGap: 24 } : undefined}
+                    // OLD: gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` — two switches per row left each
+                    // switch floating mid-row next to its label. Now a settings list: one per row, label on
+                    // the left, switch at the right edge (in line with the section-header switches).
+                    style={columns > 1 ? { gridColumn: '1 / -1', gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}
                   >
                     {bodyFields.filter(isShowHide).map((field) => (
                       <FieldRow key={field.key} field={field} value={activeValue} resolvedDefaults={resolvedDefaults} onChange={commitChange} markOverrides={markOverrides} applied={appliedFor(field.key)} rejected={rejectedColors[field.key] || null} />
@@ -1107,8 +1268,24 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
         /* flex + nowrap so a long label ("Background gradient from") + the hint mark stay on
            one line instead of the marker wrapping to its own line in a narrow 2-column cell —
            the label text truncates with an ellipsis instead, the marker itself never shrinks. */
-        .dbe-style-row-label { display:flex; align-items:center; gap:1px; max-width:100%; font-size:var(--dbe-fs-body); color:#334155; }
-        .dbe-style-row-label-text { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        /* OLD: weight 400 — labels read as faint next to the values. Medium now. */
+        .dbe-style-row-label { display:flex; align-items:center; gap:1px; max-width:100%; font-size:var(--dbe-fs-body); font-weight:500; color:#334155; }
+        .dbe-style-range { flex-shrink:0; font-size:var(--dbe-fs-meta); font-variant-numeric:tabular-nums; color:#64748b; }
+        [data-mode="dark"] .dbe-style-range { color:#94a3b8; }
+        /* Number rows: label + range share a line — the range sits at the right edge, and steps in only
+           when the × clear button is showing in that corner. */
+        .dbe-style-field-wrap.has-clear > .dbe-style-row > .dbe-style-row-label-line { padding-right:20px; }
+        .dbe-style-row-label-line > .dbe-style-row-label { min-width:0; }
+        .dbe-style-row-label-line:has(> .dbe-style-range) { gap:8px; }
+        /* Number rows: the label wraps onto a second line instead of "Corner radius (…" — range stays top-right. */
+        .dbe-style-row-label-line--num { align-items:flex-start; }
+        .dbe-style-row-label-line--num .dbe-style-row-label-text { white-space:normal; overflow:visible; text-overflow:clip; }
+        .dbe-style-row-label-line--num .dbe-style-range { padding-top:1px; white-space:nowrap; }
+        /* OLD: flex:1 1 auto — the text filled the row and FieldHintMark's ml-auto pushed the (?) to the far end,
+           which stopped 20px short of the edge (room kept for the × clear) — neither beside the text nor
+           at the edge. Now the text only takes its own width (still truncates) and the (?) sits right after it. */
+        .dbe-style-row-label-text { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .dbe-style-row-label > .ml-auto { margin-left:0; padding-left:4px; }
         .dbe-style-row-label-line { display:flex; align-items:center; justify-content:space-between; }
         .dbe-style-slider-line { display:flex; align-items:center; gap:8px; }
         .dbe-style-slider-line input[type="range"] { flex:1; height:6px; }
@@ -1213,7 +1390,8 @@ export default function WidgetStyleFields({ fields = [], value = {}, onChange, r
            resize logic itself, in ChartLibrary.jsx, was never the actual cause). */
         .dbe-style-field-wrap { position:relative; min-width:0; }
         .dbe-style-field-wrap > .dbe-style-row:not(.dbe-style-row-inline) > .dbe-style-row-label { padding-right:20px; }
-        .dbe-style-field-wrap.inherited { opacity:0.6; }
+        /* OLD: opacity:0.6 — inherited fields read as disabled / too faint. Still a step lighter than a set field. */
+        .dbe-style-field-wrap.inherited { opacity:0.85; }
         .dbe-style-field-wrap.override-marked { box-shadow:inset 2px 0 0 #64748b; padding-left:8px; }
         .dbe-style-field-clear {
           position:absolute; top:0; right:0; width:15px; height:15px; border-radius:50%;

@@ -543,10 +543,14 @@ export async function deleteDashboardBackend(id) {
  * independent copy of every one of its widgets (new widget_id each), so editing either
  * dashboard's widgets no longer affects the other. No selective/partial option yet (per-widget
  * choice), per the backend team's own note. */
-export async function cloneDashboardBackend(id, { name, duplicateWidgets = false } = {}) {
+// OLD: export async function cloneDashboardBackend(id, { name, duplicateWidgets = false } = {}) {
+// `widgetNames`: { "<old widget id>": "<new name>" } for the copies (duplicate_widgets only),
+// applied by the backend in the same transaction (B7).
+export async function cloneDashboardBackend(id, { name, duplicateWidgets = false, widgetNames } = {}) {
   const res = await Api.post({
     url: `${Urls.dashboardBuilder_dashboards}/${id}/clone`,
-    data: { name, duplicate_widgets: duplicateWidgets },
+    // OLD: data: { name, duplicate_widgets: duplicateWidgets },
+    data: { name, duplicate_widgets: duplicateWidgets, ...(widgetNames && Object.keys(widgetNames).length ? { widget_names: widgetNames } : {}) },
   });
   if (!res) {
     throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
@@ -561,7 +565,48 @@ export async function cloneDashboardBackend(id, { name, duplicateWidgets = false
     console.error(`[dashboardBuilder-actions] Unexpected POST /dashboards/${id}/clone response:`, res.data);
     throw new Error(`Unexpected response shape from POST /dashboard-builder/dashboards/${id}/clone (see console).`);
   }
-  return { dashboard, widgets: body.widgets || [] };
+  // OLD: return { dashboard, widgets: body.widgets || [] };
+  // The backend now remaps the layout itself; the id maps are returned for anything that needs them.
+  return { dashboard, widgets: body.widgets || [], widgetIdMap: body.widget_id_map || {}, slicerIdMap: body.slicer_id_map || {} };
+}
+
+// ── Import (docs/DASHBOARD_IMPORT_EXPORT.md) ──────────────────────────────────────────────
+
+/**
+ * Dry run: checks an export file (bundle) against THIS deployment and writes nothing. Returns the
+ * backend's report: { dashboard: {name, name_taken, suggested_name}, datasources: [{ref, name,
+ * source, table_exists, sql_safe, missing_columns, candidates: [{id, name, reason}]}], widgets:
+ * [{ref, name, chart_type, chart_type_supported, mapping_errors: {new|<candidate id>: msg|null}}],
+ * theme: {ref, name, candidates} | null, errors: [{code, message, ref}], warnings: [...] }.
+ */
+export async function previewDashboardImport(bundle) {
+  const res = await Api.post({ url: `${Urls.dashboardBuilder_dashboards}/import/preview`, data: { bundle } });
+  if (!res) throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  if (res.status !== 200) throw new Error(res.data?.msg || res.data?.message || `Import check failed with status ${res.status}.`);
+  const report = res.data?.data;
+  if (!report || typeof report !== 'object') throw new Error('Unexpected response from the import check.');
+  return report;
+}
+
+/**
+ * Commit: imports the bundle with the user's choices — `resolutions` = { dashboard: {name, mode},
+ * datasources: {<ref>: {action: 'map', id} | {action: 'create'}}, widgets: {<ref>: {action:
+ * 'create'}}, theme: {action: 'map', id} | {action: 'create'} | {action: 'none'} }. One transaction
+ * on the backend. Returns { dashboard, widgets, report: {created, reused, mapped, cleared_links,
+ * dropped_tiles, warnings} }. A 422 (checks failed again) throws with `.report` = the backend's
+ * report, so the caller can show its errors.
+ */
+export async function importDashboard(bundle, resolutions) {
+  const res = await Api.post({ url: `${Urls.dashboardBuilder_dashboards}/import`, data: { bundle, resolutions } });
+  if (!res) throw new Error("Network error — could not reach the Dashboard Builder API (check connectivity/CORS).");
+  if (res.status !== 201 && res.status !== 200) {
+    const err = new Error(res.data?.msg || res.data?.message || `Import failed with status ${res.status}.`);
+    if (res.data?.data && typeof res.data.data === 'object') err.report = res.data.data;
+    throw err;
+  }
+  const body = res.data?.data;
+  if (!body?.dashboard) throw new Error('Unexpected response from the import.');
+  return { dashboard: body.dashboard, widgets: body.widgets || [], report: body.report || {} };
 }
 
 export async function publishDashboard(id) {

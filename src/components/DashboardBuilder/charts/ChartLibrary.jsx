@@ -18,7 +18,8 @@ import { chartLibraryStyleFieldsFor, chartTextSizeDefaults, chartColorDefaults }
 import { exportRowsCSV } from '../utils/exportUtils';
 import ChartLibraryWidgetView from './ChartLibraryWidgetView';
 import { ANIMATION_KEYS, ChartAnimationContext, resolveAnimation, cardEntrance } from '../utils/chartAnimation';
-import CHART_TYPE_META, { CHART_TYPES, BIG_NUMBER_VARIANT, toBackendChartType, displayChartType } from './chartTypeMeta';
+// OLD: import CHART_TYPE_META, { CHART_TYPES, BIG_NUMBER_VARIANT, toBackendChartType, displayChartType } from './chartTypeMeta';
+import CHART_TYPE_META, { CHART_TYPES, BIG_NUMBER_VARIANT, MAP_VARIANT, toBackendChartType, displayChartType } from './chartTypeMeta';
 import { wantsBigNumberTrend, fetchBigNumberTrend, isBigNumberTrendOn, TREND_WINDOW_OPTIONS, TREND_WINDOW_SAME } from '../utils/bigNumberTrend';
 import { isLatestShiftComparison, buildLatestShiftComparisonFilters } from '../utils/latestComparison';
 import { useTheme } from '../../../context/ThemeContext';
@@ -462,6 +463,72 @@ const CHART_TYPE_FIELDS = {
     { key: 'columns', label: 'Columns to display', type: 'multiColumn' },
     { key: 'table_date_format', label: 'Date format', type: 'select', options: TIME_AXIS_FORMAT_OPTIONS, default: DEFAULT_TIME_AXIS_FORMAT, optional: true, hint: 'Applied to any date/time column', fullWidth: true },
   ],
+  // Map (frontend-only, saved as TABLE + mapping.chart_variant — chartTypeMeta.js). A TABLE with no
+  // x/y returns raw rows (up to the backend's TABLE row limit); MapChartView.jsx reads these columns
+  // from each row. Picking the right columns is the chart author's job — nothing is guessed.
+  MAP: [
+    { key: 'map_layer', label: 'Draw as', type: 'select', default: 'cells', fullWidth: true, options: [{ value: 'cells', label: 'Cells (sectors)' }, { value: 'sites', label: 'Sites (points)' }] },
+    { key: 'map_location_group', label: 'Location', type: 'group', fields: [
+      { key: 'map_lat', label: 'Latitude', type: 'column' },
+      { key: 'map_lng', label: 'Longitude', type: 'column' },
+      { key: 'map_azimuth', label: 'Azimuth', type: 'column', showIf: (m) => (m.map_layer || 'cells') === 'cells' },
+      // Same single value the GIS Engine sizes a sector by (gid.arc_setting's `length`, per band):
+      // the sweep AND the length both come from it (see MapChartView / TelecomMap's sectorLayer).
+      // OLD hint: 'The GIS Engine\'s sector "length" value — sets both width and reach. Unset = 60.'
+      { key: 'map_sector_size', label: 'Sector size (optional)', type: 'column', optional: true, hint: 'The GIS Engine\'s sector "length" value — sets both beamwidth and length (radius). Unset = 60.', showIf: (m) => (m.map_layer || 'cells') === 'cells' },
+      // Testing the "correct" parameters against the GIS look (sectorGeometry.js's generateTrueSector).
+      // OLD labels: 'Sector geometry' — 'GIS Engine (length = width + reach)' / 'Real beamwidth, GIS reach' /
+      // 'Real beamwidth, reach in metres' / 'Real beamwidth, nested by length' (unclear what each draws).
+      { key: 'map_sector_geometry', label: 'Sector shape', type: 'select', default: 'gis', options: [
+        // OLD: 'Same as GIS Engine (width and length from Sector size)' / 'Real beamwidth, bands nested (widest band = true width)' /
+        // 'Real beamwidth, same width for every band' — "width" now always "beamwidth" (docs/GIS_SECTOR_GEOMETRY.md terms).
+        { value: 'gis', label: 'Same as GIS Engine (beamwidth and length from Sector size)' },
+        { value: 'nested', label: 'Real beamwidth, bands nested (largest length = true beamwidth)' },
+        { value: 'beamwidth', label: 'Real beamwidth, same for every band' },
+        { value: 'true', label: 'Real beamwidth, Sector size as metres on the ground' },
+      ], hint: 'For comparing shapes only. The GIS Engine always draws "Same as GIS Engine".', showIf: (m) => (m.map_layer || 'cells') === 'cells' },
+      { key: 'map_beamwidth', label: 'Beamwidth', type: 'column', optional: true, hint: 'Degrees. Unset = the Sector size value (as the GIS Engine does)', showIf: (m) => (m.map_layer || 'cells') === 'cells' && (m.map_sector_geometry || 'gis') !== 'gis' },
+      // Which sector is on top (and wins clicks) where sectors overlap — mapChartLayers.js sortForDrawing.
+      // OLD (three-way picker — unclear; the DB already has the order in arc_setting's `orderring`):
+      // { key: 'map_draw_order', label: 'Draw order', type: 'select', default: 'data', options: [
+      //   { value: 'data', label: 'As the data comes' },
+      //   { value: 'size', label: 'Largest Sector size first (smallest on top)' },
+      //   { value: 'column', label: 'By a column (lowest first, highest on top)' },
+      // ], hint: 'Shapes drawn later sit on top and get the click where sectors overlap', showIf: (m) => (m.map_layer || 'cells') === 'cells' },
+      // { key: 'map_order_by', label: 'Order column', type: 'column', optional: true, hint: 'A number column, e.g. orderring', showIf: (m) => (m.map_layer || 'cells') === 'cells' && m.map_draw_order === 'column' },
+      { key: 'map_order_by', label: 'Draw order (optional)', type: 'column', optional: true, hint: 'Pick orderring. Higher values are drawn on top and get the click where sectors overlap. Unset = data order.', showIf: (m) => (m.map_layer || 'cells') === 'cells' },
+    ] },
+    { key: 'map_id', label: 'Cell / site ID', type: 'column', fullWidth: true, hint: 'One shape per ID — rows with the same ID are merged (a number column is averaged)' },
+    // OLD: { key: 'map_color_group', label: 'Color', type: 'group', fields: [
+    // "(optional)" moved from Color by up to the group heading.
+    { key: 'map_color_group', label: 'Color (optional)', type: 'group', fields: [
+      // OLD hint: '… number column → 5 steps from red to green' / '… number column → red-to-green ranges (Color ranges below)'
+      // OLD label: 'Color by (optional)'
+      { key: 'map_color_by', label: 'Color by', type: 'column', optional: true, hint: 'Text → one color per value. Number → Color ranges below' },
+      // Only for a number column — a text one (region, band…) gets one palette color per value, where
+      // "higher" means nothing. A saved metric has no data_type but is always a number.
+      // OLD: showIf: (m) => !!m.map_color_by
+      // OLD showIf (hid it for KPI columns the datasource types as text, e.g. a computed drop rate —
+      // their numbers still color as steps, so high drop rates showed green with no way to flip it):
+      // showIf: (m, columns) => {
+      //   const col = (columns || []).find((c) => c.column_name === m.map_color_by);
+      //   return !!col && (col.data_type ? /int|numeric|decimal|double|real|float|money/i.test(col.data_type) : !!col.is_measure);
+      // } },
+      // Number values only (mapChartLayers.js buildColorScale); a text column ignores both fields below.
+      // OLD (Automatic / Custom picker — now only custom ranges + presets; no rows = automatic):
+      // { key: 'map_color_steps', label: 'Color ranges', type: 'select', default: 'auto', options: [
+      // { value: 'auto', label: 'Automatic (5 steps, equal number of shapes)' },
+      // { value: 'custom', label: 'Custom ranges' },
+      // ], hint: 'Number values only. Automatic steps move with the data; custom ranges are fixed, with your own colors', showIf: (m) => !!m.map_color_by },
+      // OLD (typed breakpoints, colors fixed red → green — only "Higher is" to choose from):
+      // { key: 'map_color_breaks', label: 'Range breakpoints', type: 'text', placeholder: 'e.g. 0.5, 1, 2, 5', hint: 'Numbers where a new color starts. 0.5, 1, 2, 5 → < 0.5, 0.5 – 1, 1 – 2, 2 – 5, ≥ 5. A value on a breakpoint goes to the range above', showIf: (m) => !!m.map_color_by && m.map_color_steps === 'custom' },
+      // OLD: { key: 'map_color_ranges', label: 'Ranges', type: 'colorRanges', optional: true, hint: 'Your own ranges, each with its own color and label — the GIS Engine KPI thematics\' range system and presets', showIf: (m) => !!m.map_color_by && m.map_color_steps === 'custom' },
+      { key: 'map_color_ranges', label: 'Color ranges', type: 'colorRanges', optional: true, showIf: (m) => !!m.map_color_by },
+      // OLD: { key: 'map_higher_is', label: 'Higher is', type: 'select', default: 'good', options: [{ value: 'good', label: 'Good (green)' }, { value: 'bad', label: 'Bad (red)' }], hint: 'Number values only. Bad for drop / failure rates', showIf: (m) => !!m.map_color_by },
+      // OLD (hidden — custom ranges set their own colors): { key: 'map_higher_is', label: 'Higher is', type: 'select', default: 'good', options: [{ value: 'good', label: 'Good (green)' }, { value: 'bad', label: 'Bad (red)' }], hint: 'Automatic ranges only (custom ranges set their own colors). Bad for drop / failure rates', showIf: (m) => !!m.map_color_by && m.map_color_steps !== 'custom' },
+    ] },
+    { key: 'map_tooltip', label: 'Tooltip columns (optional)', type: 'multiColumn', optional: true },
+  ],
   HEAT_MAP: [...buildAxisFields('Dimension', 'Measure', true, false, false, false, 'X Axis', 'Y Axis', false, true), DRILL_DOWN_FIELD],
   HORIZONTAL_BAR: [...buildAxisFields('Category', 'Measure', true, true, true, true, 'Category', 'Measure', false), DRILL_DOWN_FIELD],
   FUNNEL: [...buildAxisFields('Stage', 'Value (measure)', false, false, false, false, 'X Axis', 'Y Axis', false, true), DRILL_DOWN_FIELD],
@@ -627,6 +694,18 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       });
     }
   }, [chartType, mapping.kpi_variant]);
+  // Same rule for Map's marker (TABLE + chart_variant 'map' — chartTypeMeta.js).
+  useEffect(() => {
+    const isMap = chartType === 'MAP';
+    if (isMap && mapping.chart_variant !== MAP_VARIANT) {
+      setMapping((prev) => ({ ...prev, chart_variant: MAP_VARIANT }));
+    } else if (!isMap && mapping.chart_variant) {
+      setMapping((prev) => {
+        const { chart_variant: _drop, ...rest } = prev;
+        return rest;
+      });
+    }
+  }, [chartType, mapping.chart_variant]);
   // True once a Preview has actually succeeded at least once for the widget currently loaded
   // — gates the auto-refresh effect below so it never fires before the user's first explicit
   // Preview click (a brand-new/unconfigured widget has nothing worth auto-running yet), but
@@ -1049,6 +1128,7 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
     setMapping((prev) => ({
       ...Object.fromEntries(Object.entries(prev).filter(([k]) => allowedKeys.has(k) || k === 'style')),
       ...(type === 'BIG_NUMBER' ? { kpi_variant: BIG_NUMBER_VARIANT } : {}),
+      ...(type === 'MAP' ? { chart_variant: MAP_VARIANT } : {}),
     }));
     markDirty();
     // Preview auto-refreshes via the effect below (chartType is one of its deps) once the

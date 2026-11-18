@@ -16,6 +16,7 @@ const COLUMNS = [
     { label: 'Report',      key: 'fromReport' },
     { label: 'Technology',  key: 'technology' },
     { label: 'Rule Name',   key: 'rule_name'  },
+    { label: 'Category',    key: 'category'   },
     { label: 'Query',       key: 'query'      },
     { label: 'Actions',     key: '_actions'   },
 ];

@@ -7,6 +7,7 @@ import {
 import { FONT_FAMILY_OPTIONS, chartTokens } from '../../../theme/tokens';
 import { POSITION_OPTIONS } from '../../Widgets/titlePositions';
 import { KPI_ICON_OPTIONS } from '../../Widgets/kpiIcons';
+import { UNIT_PRESETS, NUMBER_FORMAT_OPTIONS } from '../utils/formatNumber';
 import ChartLibraryWidgetView from '../charts/ChartLibraryWidgetView';
 import SlicerWidgetCard from '../filters/SlicerWidgetCard';
 import StatCard from '../../Widgets/StatCard';
@@ -95,7 +96,9 @@ function textStyleFields({ colorKey, colorLabel, weightKey, weightLabel, sizeKey
     fields.push({ key: sizeKey, label: sizeLabel, type: 'number', min: 8, max: 48, default: sizeDefault });
   }
   if (fontKey) {
-    fields.push({ key: fontKey, label: fontLabel, type: 'select', options: FONT_FAMILY_OPTIONS, default: '' });
+    // inheritLabel: "Default (Aptos / Segoe UI)" — the app font (--app-font) the canvas draws with when no level sets one.
+    // OLD: fields.push({ key: fontKey, label: fontLabel, type: 'select', options: FONT_FAMILY_OPTIONS, default: '' });
+    fields.push({ key: fontKey, label: fontLabel, type: 'select', options: FONT_FAMILY_OPTIONS, default: '', inheritLabel: 'Aptos / Segoe UI' });
   }
   return fields;
 }
@@ -143,7 +146,8 @@ const BG_GRADIENT_FIELDS = [
 const ANIMATION_OPTIONS = {
   animation: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
   animEntrance: [{ value: 'draw', label: 'Draw' }, { value: 'rise', label: 'Rise' }, { value: 'zoom', label: 'Zoom' }, { value: 'fade', label: 'Fade' }],
-  animSpeed: [{ value: 'fast', label: 'Fast' }, { value: 'normal', label: 'Normal' }, { value: 'slow', label: 'Slow' }],
+  // OLD labels: 'Fast' / 'Normal' / 'Slow' — now say how long (same values as the hint).
+  animSpeed: [{ value: 'fast', label: 'Fast (0.4s)' }, { value: 'normal', label: 'Normal (1s)' }, { value: 'slow', label: 'Slow (2s)' }],
   animEasing: [{ value: 'smooth', label: 'Smooth' }, { value: 'linear', label: 'Linear' }, { value: 'bounce', label: 'Bounce' }, { value: 'elastic', label: 'Elastic' }],
   animStagger: [{ value: 'none', label: 'None' }, { value: 'wave', label: 'Wave' }],
 };
@@ -161,6 +165,8 @@ export const DASHBOARD_ANIMATION_FIELDS = ANIMATION_FIELD_META.map((m) => ({
 }));
 const WIDGET_ANIMATION_FIELDS = ANIMATION_FIELD_META.map((m) => ({
   ...m, type: 'select', asDropdown: true, default: '', options: [{ value: '', label: 'Dashboard setting' }, ...ANIMATION_OPTIONS[m.key]],
+  // "Dashboard setting (Draw)" when the dashboard sets nothing either — the built-in default.
+  inheritLabel: ANIMATION_OPTIONS[m.key].find((o) => o.value === m.default)?.label,
 }));
 
 export const CARD_BORDER_FIELDS = [
@@ -228,6 +234,14 @@ const VALUE_TEXT_STYLE_FIELDS = textStyleFields({
 // funnel/waterfall value labels) to this many decimal places — defaults to 2 rather than
 // showing whatever raw float the backend's AVG/SUM aggregation happens to produce.
 const VALUE_DECIMALS_FIELD = { key: 'valueDecimals', label: 'Decimal places', type: 'number', min: 0, max: 4, default: 2 };
+// Style → Value → Unit (KPI Card, Big Number): the unit the column is stored in. A known one
+// (UNIT_PRESETS, utils/formatNumber.js) lets formatWithUnit scale and suffix the value itself —
+// "MB" + Compact shows 4531879 as "4.53 TB", "%" is never shortened to K/M. "Custom…" is free
+// text, appended as before. Same `unit` key as the old free-text field.
+const UNIT_FIELD = {
+  key: 'unit', label: 'Unit', type: 'presetText', default: '', options: UNIT_PRESETS, placeholder: 'e.g. ms',
+  hint: 'The unit the data is stored in. Pick a data size or rate and Auto scales it for you (MB → GB → TB). Custom adds your own text.',
+};
 VALUE_TEXT_STYLE_FIELDS.push(VALUE_DECIMALS_FIELD);
 
 // Axis text color/weight/size/font — for widgets with a visible category/value axis.
@@ -431,7 +445,7 @@ const WIDGET_TYPE_REGISTRY = {
     label: 'Text Box', icon: Type, iconColor: '#64748B', component: TextBox, defaultSize: { w: 36, h: 12 }, dataShape: null,
     styleFields: [
       { key: 'text', label: 'Text', type: 'textarea', default: '' },
-      { key: 'fontFamily', label: 'Font', type: 'select', options: FONT_FAMILY_OPTIONS, default: '' },
+      { key: 'fontFamily', label: 'Font', type: 'select', options: FONT_FAMILY_OPTIONS, default: '', inheritLabel: 'Aptos / Segoe UI' }, // OLD: no inheritLabel
       { key: 'fontSize', label: 'Font size (px)', type: 'number', min: 8, max: 96, default: 14 },
       { key: 'fontWeight', label: 'Weight', type: 'select', options: FONT_WEIGHT_FIELD_OPTIONS, default: 'normal' },
       // `default: null` — TextBox.jsx itself computes a real default (black or white,
@@ -478,7 +492,7 @@ const WIDGET_TYPE_REGISTRY = {
       // a bare divider has no "inside" for a label to sit in, same as Word never offering Add
       // Text on its own line shapes.
       { key: 'text', label: 'Text', type: 'textarea', default: '', hint: 'Not for Line — double-click the shape on canvas to edit in place too.' },
-      { key: 'fontFamily', label: 'Font', type: 'select', options: FONT_FAMILY_OPTIONS, default: '' },
+      { key: 'fontFamily', label: 'Font', type: 'select', options: FONT_FAMILY_OPTIONS, default: '', inheritLabel: 'Aptos / Segoe UI' }, // OLD: no inheritLabel
       { key: 'fontSize', label: 'Font size (px)', type: 'number', min: 8, max: 96, default: 14 },
       { key: 'fontWeight', label: 'Weight', type: 'select', options: FONT_WEIGHT_FIELD_OPTIONS, default: 'normal' },
       // `default: null` — Shape.jsx itself computes a real default (black or white, whichever
@@ -585,7 +599,9 @@ const AREA_FILL_OPACITY_FIELD = { key: 'areaOpacity', label: 'Fill opacity (%)',
 const GRID_LINES_FIELD = { key: 'showGridLines', label: 'Grid lines', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] };
 const Y_AXIS_TICKS_FIELD = {
   key: 'yAxisTicks', label: 'Y-axis ticks', type: 'select', default: 'few', asDropdown: true,
-  options: [{ value: 'few', label: 'Few' }, { value: 'normal', label: 'Normal' }, { value: 'many', label: 'Many' }],
+  // OLD labels: 'Few' / 'Normal' / 'Many' — now say roughly how many (chartStyleHelpers' Y_AXIS_SPLITS 2 / 4 / 6;
+  // ECharts treats it as a target, hence "about").
+  options: [{ value: 'few', label: 'Few (~2 intervals)' }, { value: 'normal', label: 'Normal (~4 intervals)' }, { value: 'many', label: 'Many (~6 intervals)' }],
 };
 const FILL_STYLE_FIELD = { key: 'fillStyle', label: 'Fill style', type: 'select', default: 'solid', options: [{ value: 'solid', label: 'Solid' }, { value: 'fade', label: 'Fade' }] };
 const LINE_LOOK_FIELDS = [GRID_LINES_FIELD, Y_AXIS_TICKS_FIELD];
@@ -662,17 +678,16 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
   // Free-text suffix appended after the value (e.g. "%", "MB", "ms") — mirrors statCard's
   // own `unit` field (widgetTypeRegistry.js's statCard entry) for the mock-widget path.
   KPI_CARD: [
-    { key: 'unit', label: 'Unit', type: 'text', default: '', placeholder: 'e.g. %, MB, ms' },
+    // OLD: { key: 'unit', label: 'Unit', type: 'text', default: '', placeholder: 'e.g. %, MB, ms' },
+    UNIT_FIELD,
     {
       // `asDropdown` forces WidgetStyleFields' plain <select> instead of its default
       // 2-option-select => segmented-buttons behavior — the segmented pair's labels wrap
       // to two lines here (they're value examples, not single words like other segmented
       // fields), which was making this row taller than every sibling row in the panel.
       key: 'numberFormat', label: 'Number format', type: 'select', default: 'compact', asDropdown: true,
-      options: [
-        { value: 'compact', label: 'Compact (1.2M)' },
-        { value: 'full', label: 'Full (1,234,567)' },
-      ],
+      // OLD: options: [{ value: 'compact', label: 'Compact (1.2M)' }, { value: 'full', label: 'Full (1,234,567)' }],
+      options: NUMBER_FORMAT_OPTIONS,
     },
     VALUE_POSITION_FIELD,
   ],
@@ -709,10 +724,8 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
     { key: 'gaugeMax', label: 'Max value', type: 'number', default: 100, hint: 'The ring (and Show as percent, when on) are both value ÷ this × 100.' },
     {
       key: 'numberFormat', label: 'Number format', type: 'select', default: 'compact', asDropdown: true,
-      options: [
-        { value: 'compact', label: 'Compact (1.2M)' },
-        { value: 'full', label: 'Full (1,234,567)' },
-      ],
+      // OLD: options: [{ value: 'compact', label: 'Compact (1.2M)' }, { value: 'full', label: 'Full (1,234,567)' }],
+      options: NUMBER_FORMAT_OPTIONS,
     },
     { key: 'showPercent', label: 'Show as percent', type: 'select', default: 'yes', options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
   ],
@@ -893,6 +906,27 @@ export function dashboardColorDefaults(isDark) {
 // shared TITLE_TEXT_STYLE_FIELDS one); valuePosition/deltaPosition are Big Number's own with
 // defaults that reproduce its original layout (number and change stacked, middle-left) — the
 // generic VALUE_POSITION_FIELD defaults to top-right, so chartLibraryStyleFieldsFor swaps it out.
+// Map chart (a TABLE with mapping.chart_variant 'map' — chartTypeMeta.js / MapChartView.jsx). Reuses
+// the shared `palette` / `showLegend` / cross-filter keys; the map_* ones are its own. Defaults match
+// what MapChartView draws when unset. Chart + placement level only (no dashboard/theme fallback).
+export const MAP_STYLE_FIELDS = [
+  { key: 'mapBasemap', label: 'Basemap', type: 'select', default: 'auto', options: [
+    { value: 'auto', label: 'Auto (follows background)' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' },
+    { value: 'voyager', label: 'Street' }, { value: 'satellite', label: 'Satellite (online only)' },
+  ] },
+  { key: 'mapOpacity', label: 'Shape opacity', type: 'number', min: 0, max: 100, default: 100 },
+  // OLD: { key: 'mapSectorScale', label: 'Sector size (%)', type: 'number', min: 25, max: 400, default: 100 },
+  // Renamed: "Sector size" also names the Data tab's per-band column; this is the GIS Engine's Cell Scale.
+  { key: 'mapSectorScale', label: 'Cell scale', type: 'number', slider: true, fullWidth: true, min: 25, max: 400, step: 5, default: 100, format: (n) => `${n}%`, hint: 'Makes cells longer or shorter at every zoom, like the GIS Engine\'s Cell Scale. 100% = normal' },
+  // mapChartLayers.js buildSectorLayer minCellPx — cells (sector) layer only. 0 = the GIS Engine's own zoom boost.
+  // OLD: { key: 'mapMinCellPx', label: 'Min cell size zoomed out (px)', type: 'number', min: 0, max: 80, default: 24, hint: 'Cells stay at least this long on screen when zoomed out, so you don\'t have to zoom in to see them. 0 = same as the GIS Engine' },
+  { key: 'mapMinCellPx', label: 'Cell size when zoomed out', type: 'number', slider: true, fullWidth: true, min: 0, max: 80, step: 2, default: 0, format: (n) => (n ? `${n} px` : 'Off'), hint: 'Keeps cells at least this long on screen when zoomed out, so you don\'t have to zoom in to see them. Off = same as the GIS Engine' },
+  { key: 'mapPointSize', label: 'Site size (px)', type: 'number', min: 2, max: 20, default: 6 },
+  { key: 'showLegend', label: 'Legend', type: 'select', default: 'show', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
+  PALETTE_FIELD,
+  ...CROSS_FILTER_FIELDS,
+];
+
 export const BIG_NUMBER_STYLE_FIELDS = [
   { key: 'titleIcon', label: 'Title icon', type: 'iconSelect', default: 'none', options: KPI_ICON_OPTIONS },
   { ...VALUE_POSITION_FIELD, default: 'mid-left' },
@@ -909,6 +943,11 @@ export const BIG_NUMBER_STYLE_FIELDS = [
 ];
 
 export function chartLibraryStyleFieldsFor(chartType, mapping) {
+  // Map (TABLE + mapping.chart_variant 'map'): the shared card fields (title, background, border)
+  // plus its own — not TABLE's header/row/grid fields, which a map doesn't draw.
+  if (chartType === 'TABLE' && mapping?.chart_variant === 'map') {
+    return [...TITLE_TEXT_STYLE_FIELDS, BG_COLOR_FIELD, ...BG_GRADIENT_FIELDS, ...CARD_BORDER_FIELDS, ...MAP_STYLE_FIELDS];
+  }
   const hasAxis = CHART_TYPES_WITH_AXIS.has(chartType);
   const hasValueLabel = CHART_TYPES_WITH_VALUE_LABEL.has(chartType);
   const hasSeries = ['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR'].includes(chartType) && !!mapping?.series;

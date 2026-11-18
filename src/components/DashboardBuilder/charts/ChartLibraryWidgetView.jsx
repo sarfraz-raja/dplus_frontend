@@ -23,6 +23,10 @@ export default function ChartLibraryWidgetView({
   chartType, name, mapping, rows, loading, error, picked, height, style, onPointClick, onDrillUp,
   drillDown, drilling, comparison, trend, crossFilterEnabled, onPointCrossFilter, showWarnings = true,
   onReorderColumns, onColumnResize, onColumnLabelChange, isDark: isDarkProp = null,
+  // Double-click "Link to" (DashboardCanvasEditor, read-only views): also offered in the point menu.
+  linkLabel = null, linkCarriesValue = false, onPointLink,
+  // "Open on map" (DashboardCanvasEditor, read-only views): also offered in the point menu.
+  mapLabel = null, mapCarriesValue = false, onPointMap,
 }) {
   const [menu, setMenu] = useState(null); // { label, x, y } | null
   // Same isDark-resolution fallback every widget component does: an explicit prop (e.g. the
@@ -42,7 +46,10 @@ export default function ChartLibraryWidgetView({
   // Same xAxis fallback renderChartWidget.jsx uses (drill dimension once a hierarchy is
   // configured, else the chart's own mapped column) — the column a cross-filter fired from
   // this menu should filter sibling widgets on.
-  const crossFilterColumn = (drillDown?.enabled && drillDown.dimension) || mapping?.x_axis;
+  // OLD: const crossFilterColumn = (drillDown?.enabled && drillDown.dimension) || mapping?.x_axis;
+  // A Map chart's point is its ID column (the clicked cell / site) — see renderChartWidget's map branch.
+  const crossFilterColumn = (drillDown?.enabled && drillDown.dimension)
+    || (mapping?.chart_variant === 'map' ? mapping.map_id : mapping?.x_axis);
   const canCrossFilter = !!crossFilterEnabled && !!onPointCrossFilter;
   // Whether drill-down is configured on this widget AT ALL (vs. merely "not clickable right
   // now because we're already at the deepest level") — gates whether the menu's Drill
@@ -95,7 +102,9 @@ export default function ChartLibraryWidgetView({
         // drilling — a widget with both drill-down and cross-filter configured needs the menu
         // to expose cross-filter too, since left-click there is claimed by drilling (see
         // handleWidgetPointClickRef's priority in DashboardCanvasEditor.jsx).
-        onPointContextMenu: (canDrillDown || canCrossFilter) ? (label, x, y) => setMenu({ label, x, y }) : undefined,
+        // OLD: onPointContextMenu: (canDrillDown || canCrossFilter) ? … — a linked widget gets the menu too.
+        // OLD: onPointContextMenu: (canDrillDown || canCrossFilter || (onPointLink && linkLabel)) ? … — a map link gets the menu too.
+        onPointContextMenu: (canDrillDown || canCrossFilter || (onPointLink && linkLabel) || (onPointMap && mapLabel)) ? (label, x, y) => setMenu({ label, x, y }) : undefined,
       })}
       {menu && (
         <DrillContextMenu
@@ -116,6 +125,18 @@ export default function ChartLibraryWidgetView({
           }}
           onCrossFilter={() => {
             onPointCrossFilter?.({ column: crossFilterColumn, value: menu.label });
+            setMenu(null);
+          }}
+          linkLabel={onPointLink ? linkLabel : null}
+          linkValueLabel={linkCarriesValue ? menu.label : null}
+          onLink={() => {
+            onPointLink?.({ column: crossFilterColumn, value: menu.label === 'null' ? null : menu.label });
+            setMenu(null);
+          }}
+          mapLabel={onPointMap ? mapLabel : null}
+          mapValueLabel={mapCarriesValue ? menu.label : null}
+          onMap={() => {
+            onPointMap?.({ column: crossFilterColumn, value: menu.label === 'null' ? null : menu.label });
             setMenu(null);
           }}
           onClose={() => setMenu(null)}

@@ -15,10 +15,15 @@ import TreemapChart from '../../Widgets/TreemapChart';
 import HeatStripChart from '../../Widgets/HeatStripChart';
 import VirtualizedTable from './VirtualizedTable';
 import { isTimeAxis, isTimeValue, formatDateLabel, DEFAULT_TIME_AXIS_FORMAT, resolveTickInterval } from './axisTypeUtils';
-import { formatCompactNumber } from '../utils/formatNumber';
+import { formatCompactNumber, formatWithUnit, formatScaledNumber, isKnownUnit } from '../utils/formatNumber';
 import { COMPARE_TO_LABELS } from '../utils/resolveTimeRange';
 import { resolveStyleForMode, guardStyleColors } from '../utils/themedStyle';
 import { isDarkColor } from '../utils/contrast';
+import { MAP_VARIANT } from './chartTypeMeta';
+
+// Map chart (TABLE + mapping.chart_variant 'map' — chartTypeMeta.js). Lazy, so deck.gl + MapLibre
+// only download once a map is actually on screen (the same chunk the GIS Engine already uses).
+const MapChartView = React.lazy(() => import('./MapChartView'));
 
 // Undernote for a single-value chart_type's delta (KPI_CARD/GAUGE — see
 // SINGLE_VALUE_COMPARISON_GROUP in ChartLibrary.jsx) — what it's actually being compared
@@ -239,6 +244,25 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
     return { categories, series };
   };
 
+  // Map — drawn by MapChartView, not the table. Clicking a shape reports its ID column, so
+  // cross-filter / drill / links treat it like a clicked bar.
+  if (chartType === 'TABLE' && mapping.chart_variant === MAP_VARIANT) {
+    return (
+      <React.Suspense fallback={<div className="h-full w-full animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />}>
+        <MapChartView
+          name={name}
+          mapping={mapping}
+          rows={rows}
+          height={height}
+          style={style}
+          isDark={isDark}
+          onPointClick={onPointClick ? (value) => onPointClick({ column: mapping.map_id, value }) : null}
+          onPointContextMenu={handlePointContextMenu}
+        />
+      </React.Suspense>
+    );
+  }
+
   switch (chartType) {
     case 'BAR': {
       // mapping.series unset (every pre-existing saved BAR widget) keeps today's exact
@@ -288,10 +312,22 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       // `?? 'compact'` for the same reason as valueDecimals' `?? 2` above — ChartLibrary.jsx's
       // own standalone preview passes `mapping.style` directly, bypassing resolveWidgetStyle's
       // default-filling cascade, so the field default needs a safety net here too.
-      const formatValue = (v) => ((numberFormat ?? 'compact') === 'compact'
-        ? formatCompactNumber(round(v), valueDecimals)
-        : String(round(v)));
-      const displayValue = typeof rawValue === 'number' ? formatValue(rawValue) : String(rawValue ?? '—');
+      // OLD: const formatValue = (v) => ((numberFormat ?? 'compact') === 'compact'
+      //   ? formatCompactNumber(round(v), valueDecimals)
+      //   : String(round(v)));
+      // OLD: const displayValue = typeof rawValue === 'number' ? formatValue(rawValue) : String(rawValue ?? '—');
+      // Unit-aware (Style → Unit — see formatWithUnit): the number and its unit come back apart;
+      // a unit it doesn't know (custom text) is the old compact/full number + that text.
+      const unitOpts = { unit, numberFormat, decimals: valueDecimals };
+      const valueParts = typeof rawValue === 'number' ? formatWithUnit(rawValue, unitOpts) : { text: String(rawValue ?? '—'), unit: unit || '' };
+      const displayValue = valueParts.text;
+      const displayUnit = valueParts.unit;
+      // A "Number" delta in a known unit carries its own unit ("+1.2 GB") — it may scale
+      // differently from the value. Custom text units keep the old bare delta.
+      const formatDelta = (v) => {
+        const parts = formatWithUnit(v, unitOpts);
+        return isKnownUnit(unit) ? `${parts.text}${parts.unit}` : parts.text;
+      };
       // "Compare to" (mapping.compare_to/delta_format — see CHART_TYPE_FIELDS's KPI_CARD
       // entry in ChartLibrary.jsx) — `comparison` is computed by DashboardCanvasEditor.jsx's
       // own second-query effect (this component has no fetch of its own); `null` there means
@@ -301,10 +337,10 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       const deltaFormat = mapping.delta_format || 'Percent';
       const deltaText = comparison && comparison.delta != null
         ? (deltaFormat === 'Number'
-          ? `${comparison.delta >= 0 ? '+' : ''}${formatValue(comparison.delta)}`
+          ? `${comparison.delta >= 0 ? '+' : ''}${formatDelta(comparison.delta)}`
           : comparison.deltaPercent != null
             ? `${comparison.deltaPercent >= 0 ? '+' : ''}${round(comparison.deltaPercent)}%`
-            : `${comparison.delta >= 0 ? '+' : ''}${formatValue(comparison.delta)}`) // no prior-period value to divide by — fall back to the raw number even in Percent mode
+            : `${comparison.delta >= 0 ? '+' : ''}${formatDelta(comparison.delta)}`) // no prior-period value to divide by — fall back to the raw number even in Percent mode
         : null;
       const deltaTooltip = deltaText ? describeCompareTo(mapping) : '';
       // Big Number (chart type BIG_NUMBER — saved as KPI_CARD + mapping.kpi_variant, see
@@ -328,7 +364,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             label={displayName}
             subtitle={mapping.subtitle}
             value={displayValue}
-            unit={unit}
+            unit={displayUnit}
             status={status}
             // Style → Comparison (BIG_NUMBER_STYLE_FIELDS): hide the change, or just its
             // "vs <period>" text. The period stays on the change as a hover tooltip either way.
@@ -366,7 +402,7 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
         <StatCard
           label={displayName}
           value={displayValue}
-          unit={unit}
+          unit={displayUnit}
           delta={deltaText}
           deltaUp={comparison?.deltaUp}
           deltaTooltip={deltaTooltip}
@@ -389,9 +425,10 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       // of a plain <span> — the "not using Echarts" framing in the design ask was about which
       // widgets render a number as-is with no formatting at all, not literally which library
       // draws the widget's chrome.
-      const gaugeFormatter = (v) => ((numberFormat ?? 'compact') === 'compact'
-        ? formatCompactNumber(round(v), valueDecimals)
-        : String(round(v)));
+      // OLD: const gaugeFormatter = (v) => ((numberFormat ?? 'compact') === 'compact'
+      // OLD:   ? formatCompactNumber(round(v), valueDecimals)
+      // OLD:   : String(round(v)));
+      const gaugeFormatter = (v) => formatScaledNumber(v, numberFormat, valueDecimals);
       // Same "Compare to" feature as KPI_CARD above (see SINGLE_VALUE_COMPARISON_GROUP in
       // ChartLibrary.jsx) — identical delta/tooltip derivation, just handed to GaugeCard's
       // own delta props instead of StatCard's.
@@ -557,7 +594,8 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             headerBgColor={headerBgColor}
             headerTextColor={headerTextColor}
             onReorderColumns={onReorderColumns}
-            formatValue={(numberFormat ?? 'compact') === 'compact' ? (v) => formatCompactNumber(v, valueDecimals) : null}
+            // OLD: formatValue={(numberFormat ?? 'compact') === 'compact' ? (v) => formatCompactNumber(v, valueDecimals) : null}
+            formatValue={(numberFormat ?? 'compact') === 'full' ? null : (v) => formatScaledNumber(v, numberFormat, valueDecimals)}
             dateFormat={mapping.table_date_format || DEFAULT_TIME_AXIS_FORMAT}
             columnWidths={style.column_widths}
             onColumnResize={onColumnResize}

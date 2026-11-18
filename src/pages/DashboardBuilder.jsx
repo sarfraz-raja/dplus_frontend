@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Pencil, LayoutGrid, ChevronLeft, ChevronRight, Trash2, Copy, Download, Database, FlaskConical, UploadCloud, Palette, PanelsTopLeft, Grid2x2, Search, Maximize2, X } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
+// OLD: import { Plus, Pencil, LayoutGrid, ChevronLeft, ChevronRight, Trash2, Copy, Download, Database, FlaskConical, UploadCloud, Palette, PanelsTopLeft, Grid2x2, Search, Maximize2, X } from 'lucide-react';
+import { Plus, Pencil, LayoutGrid, ChevronLeft, ChevronRight, Trash2, Copy, Download, Database, FlaskConical, UploadCloud, Palette, PanelsTopLeft, Grid2x2, Search, Maximize2, X, FileJson, FileUp, Upload } from 'lucide-react';
+import StatusPill from '../components/StatusPill';
+import { exportDashboardDefinition } from '../components/DashboardBuilder/utils/exportUtils';
+import ImportDashboardModal from '../components/DashboardBuilder/dashboard/ImportDashboardModal';
+import { BUNDLE_FILE_SUFFIX } from '../components/DashboardBuilder/utils/dashboardBundle';
 import Button from '../components/Button';
 import FormModal from '../components/FormModal';
 import ConfirmModal from '../components/ConfirmModal';
@@ -119,6 +126,39 @@ function remapClonedLayoutForNewWidgets(originalDashboard, clonedLayout, pairs) 
     return !isRealWidgetEntry;
   });
   return [...remapped, ...passthrough];
+}
+
+// Replaces pairClonedWidgetsWithOriginal + remapClonedLayoutForNewWidgets above (kept, unused).
+// Those paired from the LOCAL record (by on-dashboard title, so a widget renamed on the dashboard
+// never matched; empty when the record wasn't hydrated) and rebuilt layout entries from the local
+// layout (only i/x/y/w/h/tabId, so style, title, link, mapLink and filters were dropped).
+// Now: pair against the original's BACKEND rows — clone_dashboard copies name, chart_type,
+// datasource_id and mapping verbatim into each duplicate, so all four together identify the copy.
+// Two originals identical in all four are interchangeable, so pairing them in order is harmless.
+// `originalAttached`: getDashboardDetail(original).widgets. Returns [{ original: { i }, widget }]
+// with `original.i` = the original's layout key (`w_<oldId>`), as the rename step expects.
+function pairClonedWidgetsByDefinition(originalAttached, newWidgets) {
+  const keyFor = (w) => JSON.stringify([w.name || '', w.chart_type || '', String(w.datasource_id || ''), w.mapping || {}]);
+  const originalsByKey = new Map();
+  (originalAttached || []).forEach((w) => {
+    const key = keyFor(w);
+    if (!originalsByKey.has(key)) originalsByKey.set(key, []);
+    originalsByKey.get(key).push(w);
+  });
+  const pairs = [];
+  (newWidgets || []).forEach((w) => {
+    const original = originalsByKey.get(keyFor(w))?.shift();
+    if (original) pairs.push({ original: { i: `w_${original.id}` }, widget: w });
+  });
+  return pairs;
+}
+
+// The backend copied the original's layout verbatim (every field, still keyed by the ORIGINAL
+// widget ids) — only the `w_<oldId>` keys of paired widgets are rewritten to `w_<newId>`;
+// everything else (text boxes, shapes, slicer tiles, tabs, settings) passes through unchanged.
+function remapClonedLayoutByPairs(clonedLayout, pairs) {
+  const newKeyByOldKey = new Map(pairs.map(({ original, widget }) => [original.i, `w_${widget.id}`]));
+  return (clonedLayout || []).map((l) => (newKeyByOldKey.has(l.i) ? { ...l, i: newKeyByOldKey.get(l.i) } : l));
 }
 
 const STATIC_DASHBOARDS = [
@@ -285,6 +325,7 @@ const DashboardBuilder = () => {
   // the horizontal strip DashboardCanvasEditor renders internally in its own editable view.
   const [previewFilters, setPreviewFilters] = useState([]);
   const [previewFilterDatasourceOptions, setPreviewFilterDatasourceOptions] = useState([]);
+  const [previewFiltersChanged, setPreviewFiltersChanged] = useState(false); // viewer's values ≠ saved → Reset
   // Phase 19c — mirrored out of the *editable* DashboardCanvasEditor instance via its
   // onDashboardStyleState callback, so a brand-new (not-yet-saved) dashboard's style/theme
   // choice can be included in the very first createDashboard call in handleSave below,
@@ -331,11 +372,69 @@ const DashboardBuilder = () => {
   // always succeeds regardless (see handleSave/confirmDelete/cloneDashboard).
   const [syncError, setSyncError] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  const [exportingDefinition, setExportingDefinition] = useState(false);
+  // Import a dashboard file: the File picked on the dashboards list (null = dialog closed).
+  const [importFile, setImportFile] = useState(null);
+  const importInputRef = useRef(null);
+  // Sidebar header search box — Ctrl/⌘ K focuses it.
+  const dashboardSearchRef = useRef(null);
+  const isMacPlatform = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key?.toLowerCase() === 'k' && !sidebarCollapsed) {
+        e.preventDefault();
+        dashboardSearchRef.current?.focus();
+        dashboardSearchRef.current?.select();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [sidebarCollapsed]);
   // Lets an admin see exactly how a dashboard will read once embedded elsewhere (e.g.
   // EmbeddedDashboard.jsx inside Insights Engine) without leaving the builder or publishing
   // first — same read-only DashboardCanvasEditor, just filling the viewport instead of the
   // preview panel.
-  const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  // OLD: const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  // Now driven by the URL, so the fullscreen view is a shareable deep link:
+  //   /dashboard-builder?d=<dashboardId>[&tab=<tabId>][&filter.<column>=<value> | &filters=<JSON array>]
+  // `d` opens that dashboard fullscreen (EmbeddedDashboard — published only); `tab` picks the tab
+  // (kept in sync on every switch, so Back returns to the previous tab); the filter params are
+  // EmbeddedDashboard's existing deep-link filters. Opening pushes a history entry; ✕ clears them all.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkId = searchParams.get('d');
+  const previewFullscreen = !!deepLinkId && previewId === deepLinkId;
+  // "← Back to <source>": opened by a same-window widget link (`from`, utils/widgetLink.js) AND there's
+  // a history entry to return to (react-router's history.state.idx) — Back restores the source exactly
+  // (its tab, filters). Not shown for a pasted link or a new browser tab (nothing to go back to).
+  const navigate = useNavigate();
+  const linkFromId = searchParams.get('from');
+  const linkFromDashboard = linkFromId && (window.history.state?.idx ?? 0) > 0
+    ? customDashboards.find((d) => d.id === linkFromId) || null
+    : null;
+  // History position on arrival — tab switches on the target push entries of their own, so Back
+  // jumps over all of them to the entry before the link, not just one tab back.
+  const linkArrivalIdxRef = useRef(null);
+  useEffect(() => {
+    linkArrivalIdxRef.current = linkFromId ? (window.history.state?.idx ?? null) : null;
+  }, [deepLinkId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The entry before may be the source's browse preview (no ?d=) — select the source there once the
+  // history has moved (setting it before would race the "drop ?d=" effect and could wipe the URL).
+  const pendingBackPreviewRef = useRef(null);
+  const backToLinkSource = () => {
+    const nowIdx = window.history.state?.idx ?? 0;
+    const arrivalIdx = linkArrivalIdxRef.current ?? nowIdx;
+    pendingBackPreviewRef.current = linkFromId;
+    navigate(-(nowIdx - arrivalIdx + 1));
+  };
+  useEffect(() => {
+    if (!pendingBackPreviewRef.current || deepLinkId === previewId) return;
+    if (!deepLinkId) setPreviewId(pendingBackPreviewRef.current);
+    pendingBackPreviewRef.current = null;
+  }, [deepLinkId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setPreviewFullscreen = (on) => {
+    if (on && previewId) setSearchParams({ d: previewId });
+    else setSearchParams({}, { replace: true });
+  };
   // Auto-refresh in view / fullscreen: a viewer's own interval per dashboard (session only — kept in
   // sessionStorage so a page reload keeps it; never saved to the dashboard). Unset → the dashboard's
   // saved default (record.refreshInterval, set in the editor).
@@ -350,7 +449,11 @@ const DashboardBuilder = () => {
   const autoRefreshFor = (d) => (d ? (refreshOverrides[d.id] ?? d.refreshInterval ?? 0) : 0);
   // { refreshing, lastRefreshedAt } reported by the preview editor (onRefreshState) for the header button.
   const [previewRefreshState, setPreviewRefreshState] = useState({ refreshing: false, lastRefreshedAt: null });
-  useEffect(() => { setPreviewFullscreen(false); }, [previewId]);
+  // OLD: useEffect(() => { setPreviewFullscreen(false); }, [previewId]);
+  // Previewing another dashboard leaves the deep-linked fullscreen one (drops ?d= and the rest).
+  useEffect(() => {
+    if (previewId && deepLinkId && previewId !== deepLinkId) setSearchParams({}, { replace: true });
+  }, [previewId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Backend is now the single source of truth for the dashboard list (previously
   // localStorage-only, which is why dashboards created on one device/browser never showed
@@ -415,6 +518,21 @@ const DashboardBuilder = () => {
       setCustomDashboards((prev) => prev.map((d) => (d.id === id ? { ...d, detailLoading: false, detailError: e.message } : d)));
     }
   };
+
+  // Deep link in (?d=, see previewFullscreen above) — on page load and on Back/Forward: select that
+  // dashboard so its fullscreen view opens. Unknown id → say so and drop the params. Not while the
+  // editor is open (would throw away unsaved edits).
+  useEffect(() => {
+    if (!deepLinkId || dashboardsLoading || editingDashboard) return;
+    if (!customDashboards.some((d) => d.id === deepLinkId)) {
+      toast.error("That dashboard doesn't exist or was deleted.");
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    setView('browse');
+    setPreviewId(deepLinkId);
+    ensureDashboardDetail(deepLinkId);
+  }, [deepLinkId, dashboardsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Newest first — customDashboards itself is in whatever order the backend list/create/clone
   // calls happened to return/append in (oldest-created first, since a new one is always
@@ -601,7 +719,36 @@ const DashboardBuilder = () => {
   // this keyed exactly that way). Any widget with no override (or an override that fails to
   // resolve to a pair — see pairClonedWidgetsWithOriginal) falls back to an auto-generated
   // progressive name, same as before this override existed.
+  // Clone (backend B7): the backend copies everything in one transaction — with "duplicate widgets"
+  // it also creates the copies, applies their names (`widget_names`, keyed by the OLD widget id) and
+  // rewrites the layout's w_<id> keys, theme_id and slicers itself. So the response is used as is:
+  // no after-clone pairing, layout PATCH or per-widget rename calls any more (see
+  // cloneDashboardBeforeB7 below, kept for reference). `widgetNames` from the dialog is keyed by the
+  // original layout id (`w_<oldId>`).
   const cloneDashboard = (dashboard, duplicateWidgets = false, name, widgetNames = {}) => {
+    const namesByOldWidgetId = duplicateWidgets
+      ? Object.fromEntries(Object.entries(widgetNames || {})
+        .filter(([key, value]) => key.startsWith('w_') && value?.trim())
+        .map(([key, value]) => [key.slice(2), value.trim()]))
+      : undefined;
+    cloneDashboardBackend(dashboard.backendId, {
+      name: name || nextCopyName(baseDashboardName(dashboard.name), new Set(allDashboards.map((d) => d.name))),
+      duplicateWidgets,
+      widgetNames: namesByOldWidgetId,
+    })
+      .then(({ dashboard: backendDashboard, widgets: attachedWidgets }) => {
+        const record = buildRecordFromBackend(backendDashboard, attachedWidgets);
+        setCustomDashboards((prev) => [...prev, record]);
+        setPreviewId(record.id);
+        if (duplicateWidgets) notifyWidgetsChanged();
+      })
+      .catch((e) => setSyncError(e.message));
+  };
+
+  // OLD (before backend B7): pairs the copies with their originals, PATCHes the remapped layout and
+  // renames each copy with a separate call. Unused.
+  // eslint-disable-next-line no-unused-vars
+  const cloneDashboardBeforeB7 = (dashboard, duplicateWidgets = false, name, widgetNames = {}) => {
     // OLD fallback: `${dashboard.name} (Copy)` — now the shared counter rule.
     cloneDashboardBackend(dashboard.backendId, { name: name || nextCopyName(baseDashboardName(dashboard.name), new Set(allDashboards.map((d) => d.name))), duplicateWidgets })
       .then(async ({ dashboard: backendDashboard, widgets: attachedWidgets }) => {
@@ -611,9 +758,20 @@ const DashboardBuilder = () => {
         // below so the two can't disagree about which original a given new widget maps to
         // (see pairClonedWidgetsWithOriginal's own doc comment).
         if (duplicateWidgets) {
-          const pairs = pairClonedWidgetsWithOriginal(dashboard, attachedWidgets);
+          // OLD: const pairs = pairClonedWidgetsWithOriginal(dashboard, attachedWidgets);
+          // OLD: const fixedLayout = remapClonedLayoutForNewWidgets(dashboard, backendDashboard.layout, pairs);
+          let originalAttached = [];
+          try {
+            ({ widgets: originalAttached } = await getDashboardDetail(dashboard.backendId, { quiet: true }));
+          } catch (e) {
+            if (import.meta.env.DEV) console.error('[DashboardBuilder] Clone: could not load the original to pair widgets:', e);
+          }
+          const pairs = pairClonedWidgetsByDefinition(originalAttached, attachedWidgets);
+          if (pairs.length < attachedWidgets.length) {
+            toast.error(`${attachedWidgets.length - pairs.length} copied chart(s) couldn't be matched to the original and were placed in default positions.`);
+          }
 
-          const fixedLayout = remapClonedLayoutForNewWidgets(dashboard, backendDashboard.layout, pairs);
+          const fixedLayout = remapClonedLayoutByPairs(backendDashboard.layout, pairs);
           backendDashboard = { ...backendDashboard, layout: fixedLayout };
           // Persisted immediately, not just applied to this in-memory record — otherwise the
           // backend's own still-stale layout (old widget ids) would silently come back the
@@ -721,6 +879,27 @@ const DashboardBuilder = () => {
     setCloneWidgetNamesLoading(false);
   };
 
+  // "Export definition" (next to Clone): downloads the SAVED dashboard as a .dashboard.json file
+  // for import into any deployment — see exportDashboardDefinition / docs/DASHBOARD_IMPORT_EXPORT.md.
+  const handleExportDefinition = async () => {
+    if (!previewDashboard?.backendId || exportingDefinition) return;
+    setExportingDefinition(true);
+    const toastId = toast.loading('Preparing export…');
+    try {
+      const { warnings } = await exportDashboardDefinition(previewDashboard.backendId);
+      if (warnings.length) {
+        const shown = warnings.slice(0, 2).map((w) => w.message).join(' ');
+        toast.success(`Exported. On import: ${shown}${warnings.length > 2 ? ` (+${warnings.length - 2} more)` : ''}`, { id: toastId, duration: 8000 });
+      } else {
+        toast.success('Dashboard exported.', { id: toastId });
+      }
+    } catch (e) {
+      toast.error(`Export failed: ${e.message}`, { id: toastId });
+    } finally {
+      setExportingDefinition(false);
+    }
+  };
+
   const handlePublish = () => {
     if (!previewDashboard?.backendId) return;
     setPublishing(true);
@@ -789,6 +968,13 @@ const DashboardBuilder = () => {
           // A real chart renamed for this dashboard only (Selected Widget → Title) — saved only
           // when it differs from the chart's own name; buildLocalLayoutAndWidgets reads it back.
           ...(w?.type === 'chartLibrary' && w.title && w.dataSource?.chartName && w.title !== w.dataSource.chartName ? { title: w.title } : {}),
+          // Double-click "Link to" target (utils/widgetLink.js) — read back by buildLocalLayoutAndWidgets.
+          ...(w?.type === 'chartLibrary' && w.link ? { link: w.link } : {}),
+          // "Open on map" (utils/mapLink.js) — read back by buildLocalLayoutAndWidgets.
+          ...(w?.type === 'chartLibrary' && w.mapLink ? { mapLink: w.mapLink } : {}),
+          // This placement's own filters (the widget's Filter action) — read back by
+          // buildLocalLayoutAndWidgets. Were never written before, so they were lost on Save + reload.
+          ...(w?.type === 'chartLibrary' && w.filters?.length ? { filters: w.filters } : {}),
         };
       });
       // Tabs list rides along as one extra reserved-id entry in the same layout array (see
@@ -1014,6 +1200,10 @@ const DashboardBuilder = () => {
                     initialDashboardStyle={editingExisting?.theme || {}}
                     initialThemeId={editingExisting?.themeId || null}
                     editable
+                    // Targets for a widget's double-click "Open another dashboard" link (not this one).
+                    linkDashboardOptions={sortedCustomDashboards
+                      .filter((d) => d.backendId && d.id !== editingExisting?.id)
+                      .map((d) => ({ id: String(d.backendId), name: d.name, published: !!d.published }))}
                     onSave={handleSave}
                     onCancel={backToBrowse}
                     onCreateViaChartsTab={handleCreateViaChartsTab}
@@ -1125,6 +1315,18 @@ const DashboardBuilder = () => {
                       >
                         <Copy size={14} />
                       </button>
+                      {previewDashboard.backendId && (
+                        <button
+                          type="button"
+                          title="Export dashboard file(.json)"
+                          aria-label="Export dashboard definition"
+                          disabled={exportingDefinition}
+                          onClick={handleExportDefinition}
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-content border border-line bg-surface-2 hover:border-accent transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        >
+                          <FileJson size={14} />
+                        </button>
+                      )}
                       {previewDashboard.backendId && !previewDashboard.published && (
                         <button
                           type="button"
@@ -1206,7 +1408,7 @@ const DashboardBuilder = () => {
                       titleBarActions={previewDashboard.backendId ? (
                         <DashboardViewActions
                           editorRef={previewEditorRef}
-                          filterState={{ filters: previewFilters, datasourceOptions: previewFilterDatasourceOptions }}
+                          filterState={{ filters: previewFilters, datasourceOptions: previewFilterDatasourceOptions, changedFromSaved: previewFiltersChanged }}
                           seconds={autoRefreshFor(previewDashboard)}
                           onSecondsChange={(sec) => setRefreshOverride(previewDashboard.id, sec)}
                           refreshState={previewRefreshState}
@@ -1214,9 +1416,10 @@ const DashboardBuilder = () => {
                       ) : null}
                       onSave={handleSave}
                       onCancel={backToBrowse}
-                      onFiltersState={({ filters, datasourceOptions }) => {
+                      onFiltersState={({ filters, datasourceOptions, changedFromSaved }) => {
                         setPreviewFilters(filters);
                         setPreviewFilterDatasourceOptions(datasourceOptions);
+                        setPreviewFiltersChanged(!!changedFromSaved);
                       }}
                     />
                   )}
@@ -1239,11 +1442,18 @@ const DashboardBuilder = () => {
                       <X size={16} />
                     </button>
                     <div className="p-3">
+                      {linkFromDashboard && (
+                        <Button variant="secondary" size="sm" className="mb-2" onClick={backToLinkSource} title={`Back to ${linkFromDashboard.name}`}>
+                          <ChevronLeft size={14} aria-hidden="true" />
+                          <span className="max-w-[320px] truncate">Back to {linkFromDashboard.name}</span>
+                        </Button>
+                      )}
                       {/* OLD: <EmbeddedDashboard key={`fullscreen-${previewDashboard.id}`} dashboardId={previewDashboard.backendId} /> */}
                       <EmbeddedDashboard
                         key={`fullscreen-${previewDashboard.id}`}
                         dashboardId={previewDashboard.backendId}
                         fullscreen
+                        syncTabToUrl
                         autoRefreshSeconds={autoRefreshFor(previewDashboard)}
                         onAutoRefreshChange={(sec) => setRefreshOverride(previewDashboard.id, sec)}
                       />
@@ -1255,7 +1465,7 @@ const DashboardBuilder = () => {
               <div className="h-full flex flex-col items-center justify-center gap-2 text-center px-6">
                 <Pencil size={28} className="text-slate-300" />
                 <div className="text-sm font-medium text-slate-500">Select a dashboard to preview</div>
-                <div className="text-xs text-slate-400">or click + New Dashboard to build one</div>
+                <div className="text-xs text-slate-400">or click + New to build one</div>
               </div>
             )}
           </div>
@@ -1273,29 +1483,125 @@ const DashboardBuilder = () => {
               type="button"
               onClick={() => setSidebarCollapsed((c) => !c)}
               title={sidebarCollapsed ? 'Expand' : 'Collapse'}
-              className="absolute top-2 left-1.5 w-5 h-5 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/70 transition-colors z-10"
+              className={`absolute ${sidebarCollapsed ? 'top-2' : 'top-3.5'} left-1.5 w-5 h-5 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-white/70 transition-colors z-10`}
             >
               {sidebarCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
             </button>
+            {/* OLD header row:
+                        {!sidebarCollapsed && (
+                          <div className="flex items-center gap-1.5 px-4 pt-8 pb-2.5 border-b border-white/40">
+                            <button
+                              type="button"
+                              onClick={openNewDashboard}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-[#EC7D09] hover:opacity-80 shrink-0"
+                            >
+                              <Plus size={14} /> New dashboard
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => importInputRef.current?.click()}
+                              title="Import dashboard file"
+                              aria-label="Import dashboard file"
+                              className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-[#EC7D09] hover:bg-white/70 transition-colors"
+                            >
+                              <FileUp size={14} />
+                            </button>
+                            <input
+                              ref={importInputRef}
+                              type="file"
+                              accept={`${BUNDLE_FILE_SUFFIX},.json,application/json`}
+                              className="hidden"
+                              onChange={(e) => {
+                                const picked = e.target.files?.[0];
+                                e.target.value = ''; // so picking the same file again still opens the dialog
+                                if (picked) setImportFile(picked);
+                              }}
+                            />
+                            <div className="relative flex-1 min-w-0">
+                              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="text"
+                                value={dashboardSearch}
+                                onChange={(e) => setDashboardSearch(e.target.value)}
+                                placeholder="Search"
+                                className="w-full pl-7 pr-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                              />
+                            </div>
+                          </div>
+                        )}
+            */}
+            {/* Header: title + count · full-width search (Ctrl/⌘ K) · labelled "+ New" and "Import" buttons.
+                Was one row with "+ New dashboard" as orange text, an unlabeled import icon and search squeezed
+                into 288px — see the OLD header row above. */}
             {!sidebarCollapsed && (
-              <div className="flex items-center gap-1.5 px-4 pt-8 pb-2.5 border-b border-white/40">
-                <button
-                  type="button"
-                  onClick={openNewDashboard}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-[#EC7D09] hover:opacity-80 shrink-0"
-                >
-                  <Plus size={14} /> New dashboard
-                </button>
-                <div className="relative flex-1 min-w-0">
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="flex flex-col gap-2.5 px-4 pt-2 pb-3 border-b border-white/40 dark:border-line">
+                <div className="flex items-center gap-2 h-8 pl-5">
+                  {/* 13px label, not a heading: the active tab above already says "Dashboards". */}
+                  <h2 className="flex-1 min-w-0 truncate text-ui-body font-semibold text-content">Dashboards</h2>
+                  {/* Icon-only New / Import on the title row. */}
+                  <button
+                    type="button"
+                    onClick={openNewDashboard}
+                    title="New dashboard"
+                    aria-label="New dashboard"
+                    className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center bg-accent text-white hover:bg-accent-hover transition-colors"
+                  >
+                    <Plus size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => importInputRef.current?.click()}
+                    title="Import dashboard file (.dashboard.json)"
+                    aria-label="Import dashboard file"
+                    className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-content border border-line bg-surface-2 hover:border-accent hover:text-accent transition-colors"
+                  >
+                    <Upload size={14} />
+                  </button>
+                  {/* The picker the ⬆ button opens (it lived in the removed labelled-button row, so ⬆ did nothing). */}
                   <input
+                    ref={importInputRef}
+                    type="file"
+                    accept={`${BUNDLE_FILE_SUFFIX},.json,application/json`}
+                    className="hidden"
+                    onChange={(e) => {
+                      const picked = e.target.files?.[0];
+                      e.target.value = ''; // so picking the same file again still opens the dialog
+                      if (picked) setImportFile(picked);
+                    }}
+                  />
+                  <span className="shrink-0 text-ui-small text-muted" title={`${allDashboards.length} dashboards`}>
+                    {dashboardSearch.trim() ? `${visibleDashboards.length} of ${allDashboards.length}` : allDashboards.length}
+                  </span>
+                </div>
+                <div className="relative">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    ref={dashboardSearchRef}
                     type="text"
                     value={dashboardSearch}
                     onChange={(e) => setDashboardSearch(e.target.value)}
-                    placeholder="Search"
-                    className="w-full pl-7 pr-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                    onKeyDown={(e) => { if (e.key === 'Escape' && dashboardSearch) { e.stopPropagation(); setDashboardSearch(''); } }}
+                    placeholder="Filter dashboards…"
+                    aria-label="Filter dashboards"
+                    className="w-full h-8 pl-8 pr-14 rounded-lg border border-slate-200 bg-white text-ui-body"
                   />
+                  {dashboardSearch ? (
+                    <button
+                      type="button"
+                      onClick={() => { setDashboardSearch(''); dashboardSearchRef.current?.focus(); }}
+                      title="Clear"
+                      aria-label="Clear filter"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-slate-700"
+                    >
+                      <X size={12} />
+                    </button>
+                  ) : (
+                    <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-px rounded border border-slate-200 bg-slate-50 text-ui-micro text-slate-400 font-sans pointer-events-none">
+                      {isMacPlatform ? '⌘K' : 'Ctrl K'}
+                    </kbd>
+                  )}
                 </div>
+
               </div>
             )}
             {sidebarCollapsed && <div className="h-9" />}
@@ -1317,8 +1623,11 @@ const DashboardBuilder = () => {
                 type="button"
                 onClick={() => { setPreviewId(d.id); setEditingDashboard(null); if (!d.static) ensureDashboardDetail(d.id); }}
                 title={sidebarCollapsed ? d.name : undefined}
-                className={`w-full flex items-center gap-2 border-b border-white/30 dark:border-line transition-colors ${
-                  sidebarCollapsed ? 'justify-center py-2.5' : 'text-left px-4 py-2.5'
+                // OLD: className={`w-full flex items-center gap-2 border-b border-white/30 dark:border-line transition-colors ${
+                //   sidebarCollapsed ? 'justify-center py-2.5' : 'text-left px-4 py-2.5'
+                // } …`} — a divider under every row; now hover / selected backgrounds only.
+                className={`w-full flex items-center gap-2 transition-colors ${
+                  sidebarCollapsed ? 'justify-center py-2.5' : 'text-left px-4 py-2'
                 } ${previewId === d.id ? 'bg-white/80 dark:bg-hoverlay border-l-2 border-l-accent' : 'hover:bg-white/50 dark:hover:bg-hoverlay'}`}
               >
                 {sidebarCollapsed ? (
@@ -1332,6 +1641,7 @@ const DashboardBuilder = () => {
                   <LayoutGrid size={14} className={previewId === d.id ? 'text-[#EC7D09]' : 'text-slate-400'} />
                 )}
                 {!sidebarCollapsed && (
+                  /* OLD: the Draft/Pub badge sat right after the name, with its own colours:
                   <span className={`flex-1 flex items-center gap-1.5 min-w-0 text-sm truncate ${previewId === d.id ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>
                     <span className="truncate">{d.name}</span>
                     {d.backendId && (
@@ -1341,7 +1651,24 @@ const DashboardBuilder = () => {
                         {d.published ? 'Pub' : 'Draft'}
                       </span>
                     )}
-                  </span>
+                  </span> */
+                  <>
+                    {/* OLD: text-sm (14px) — 1px over the app's body size and 2px over the Charts list. */}
+                    <span className={`flex-1 min-w-0 text-ui-body truncate ${previewId === d.id ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>
+                      {d.name}
+                    </span>
+                    {d.backendId && (
+                      // OLD: <StatusPill tone={d.published ? 'ok' : 'grey'} className="shrink-0 px-2 uppercase tracking-wide">{d.published ? 'Pub' : 'Draft'}</StatusPill>
+                      // Quieter: 10px, sentence case, small radius; Draft outlined (no fill) so the column of
+                      // drafts recedes, Published green-tinted so it stands out.
+                      <StatusPill
+                        tone={d.published ? 'ok' : 'grey'}
+                        className={`shrink-0 px-1.5 py-px rounded text-ui-micro font-medium ${d.published ? '' : 'bg-transparent border border-line'}`}
+                      >
+                        {d.published ? 'Published' : 'Draft'}
+                      </StatusPill>
+                    )}
+                  </>
                 )}
               </button>
             ))}
@@ -1354,6 +1681,20 @@ const DashboardBuilder = () => {
             </div>
           </div>
         </div>
+      <ImportDashboardModal
+        file={importFile}
+        onClose={() => setImportFile(null)}
+        existingNames={new Set(allDashboards.map((d) => d.name))}
+        // F8: the imported dashboard joins the list and opens; charts lists refresh (new copies).
+        onImported={({ dashboard, widgets }) => {
+          const record = buildRecordFromBackend(dashboard, widgets);
+          setCustomDashboards((prev) => [...prev, record]);
+          setPreviewId(record.id);
+          setEditingDashboard(null);
+          notifyWidgetsChanged();
+        }}
+      />
+
       <FormModal
         title="Delete Dashboard"
         headerColor="#b91c1c"

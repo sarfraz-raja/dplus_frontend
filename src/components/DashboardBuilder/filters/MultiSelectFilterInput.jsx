@@ -18,7 +18,9 @@ import { Search, Check, X } from 'lucide-react';
  * default); FilterEditorModal.jsx's form needs it to match its other full-width, taller
  * fields (Operator/Datasource/Column) instead of looking like a visibly smaller control.
  */
-export default function MultiSelectFilterInput({ options = [], value = [], onChange, loading = false, fullWidth = false }) {
+// `dense`: full width at the small height (widget filter popover).
+// OLD: export default function MultiSelectFilterInput({ options = [], value = [], onChange, loading = false, fullWidth = false }) {
+export default function MultiSelectFilterInput({ options = [], value = [], onChange, loading = false, fullWidth = false, dense = false }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef(null);
@@ -47,7 +49,8 @@ export default function MultiSelectFilterInput({ options = [], value = [], onCha
       <div
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-1 shrink-0 border border-slate-200 bg-white cursor-pointer ${
-          fullWidth ? 'w-full h-[38px] rounded-lg pl-2.5 pr-3 text-sm' : 'w-44 h-7 rounded-md pl-1.5 pr-2 text-xs'
+          // OLD: fullWidth ? 'w-full h-[38px] rounded-lg pl-2.5 pr-3 text-sm' : 'w-44 h-7 rounded-md pl-1.5 pr-2 text-xs'
+          fullWidth && dense ? 'w-full h-7 rounded-md pl-2 pr-2 text-xs' : fullWidth ? 'w-full h-[38px] rounded-lg pl-2.5 pr-3 text-sm' : 'w-44 h-7 rounded-md pl-1.5 pr-2 text-xs'
         }`}
       >
         {value.length === 0 ? (

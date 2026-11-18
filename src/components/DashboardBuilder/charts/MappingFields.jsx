@@ -6,6 +6,7 @@ import ColumnMultiSelect from '../ColumnMultiSelect';
 import FieldHintMark from '../FieldHintMark';
 import { ValidateExpressionButton } from './AdvancedSqlFields';
 import Select from '../../Select'; // shared dropdown — replaces native <select> (CLAUDE.md §4)
+import MapColorRanges from './MapColorRanges';
 
 // One accent per drill-down depth (cycles if a hierarchy ever goes deeper than 5 levels) —
 // purely a visual "which ring is this" cue in the orderedColumns editor below, distinct from
@@ -227,6 +228,16 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
               <div className="text-xs font-medium text-slate-600">{field.label}</div>
               {paletteHeader}
               <PaletteEditor value={styleValue?.[field.key] || []} onChange={(next) => onStyleChange?.(field.key, next)} />
+            </div>
+          );
+        }
+        if (field.type === 'colorRanges') {
+          // Map chart custom color ranges — the GIS Engine's KPI-thematic { min, max, color, label } rows.
+          return (
+            <div key={field.key} className="w-full">
+              {/* OLD: <span className="flex items-center text-xs font-medium text-slate-600 mb-1">{field.label}<FieldHintMark hint={field.hint} /></span> */}
+              {/* The editor puts the label on its own preset row. */}
+              <MapColorRanges value={current} onChange={(next) => onChange(field.key, next)} label={field.label} />
             </div>
           );
         }

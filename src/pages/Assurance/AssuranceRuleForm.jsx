@@ -11,6 +11,7 @@ import AssuranceActions from '../../store/actions/assurance-actions';
 import EmailChipInput from '../../components/EmailChipInput';
 import { wholeNumber, getDefaultDb, dbOptionLabel } from '../../utils/common';
 import { TELECOM_CONSTANTS } from '../Tickets/ticketConstants';
+import AssuranceRulesHelp from './AssuranceRulesHelp';
 
 const inputCls = "w-full border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400";
 const labelCls = "block text-xs font-semibold text-slate-600 mb-1.5";
@@ -392,9 +393,12 @@ const AssuranceRuleForm = () => {
     if (mode === 'view') {
         return (
             <div className="flex flex-col h-full overflow-hidden" style={{ background: '#ffffff' }}>
-                <div className="shrink-0 px-4 sm:px-6 py-4 border-b border-slate-200">
-                    <h1 className="text-xl font-bold text-slate-800 leading-tight">View Assurance Rule</h1>
-                    <p className="text-xs text-slate-400 font-medium tracking-wide">Intelligent Telecom Assurance — read-only summary</p>
+                <div className="shrink-0 px-4 sm:px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <h1 className="text-xl font-bold text-slate-800 leading-tight">View Assurance Rule</h1>
+                        <p className="text-xs text-slate-400 font-medium tracking-wide">Intelligent Telecom Assurance — read-only summary</p>
+                    </div>
+                    <AssuranceRulesHelp rule={loadingRule ? null : formValues} />
                 </div>
                 <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5">
                     {loadingRule ? (
@@ -431,11 +435,14 @@ const AssuranceRuleForm = () => {
         <div className="flex flex-col h-full overflow-hidden" style={{ background: '#ffffff' }}>
 
             {/* Header */}
-            <div className="shrink-0 px-4 sm:px-6 py-4 border-b border-slate-200">
-                <h1 className="text-xl font-bold text-slate-800 leading-tight">
-                    {mode === 'edit' ? 'Edit Assurance Rule' : 'New Assurance Rule'}
-                </h1>
-                <p className="text-xs text-slate-400 font-medium tracking-wide">Intelligent Telecom Assurance — 8-step Rule Builder</p>
+            <div className="shrink-0 px-4 sm:px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h1 className="text-xl font-bold text-slate-800 leading-tight">
+                        {mode === 'edit' ? 'Edit Assurance Rule' : 'New Assurance Rule'}
+                    </h1>
+                    <p className="text-xs text-slate-400 font-medium tracking-wide">Intelligent Telecom Assurance — 8-step Rule Builder</p>
+                </div>
+                <AssuranceRulesHelp rule={formValues} />
             </div>
 
             {/* Step indicator — full rail on larger screens */}
@@ -629,10 +636,10 @@ const AssuranceRuleForm = () => {
                         <div className="flex flex-col gap-4">
                             <div className="flex items-center gap-2">
                                 <input type="checkbox" id="generate_ticket" className="w-4 h-4 accent-orange-500" {...register('generate_ticket')} />
-                                <label htmlFor="generate_ticket" className="text-sm text-slate-700 select-none">Generate a ticket when this rule breaches</label>
+                                <label htmlFor="generate_ticket" className="text-sm text-slate-700 select-none">Generate a ticket when this rule raises an alarm</label>
                             </div>
                             <p className="text-xs text-slate-400 -mt-2">
-                                Only fires on a breach-driven RAISE/REOPEN/UPDATE (<code>data_status == "BREACHED"</code>) — a rule that never crosses its threshold never creates a ticket, even with this on.
+                                A ticket is created only when the alarm is raised, i.e. after the Consecutive Breach Threshold (Step 2) is met. Breaches below the threshold create no ticket, and a missing or failed reading never creates or reopens one.
                             </p>
 
                             {generateTicket && (

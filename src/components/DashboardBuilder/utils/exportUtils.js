@@ -1,5 +1,7 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { getDashboardDetail, getDatasourceDetail, listSlicers, getThemeDetail } from '../../../store/actions/dashboardBuilder-actions';
+import { buildBundle, bundleDatasourceIds, validateBundle, BUNDLE_FILE_SUFFIX } from './dashboardBundle';
 
 // FR-10 (Export): CSV/PNG/PDF export for the Dashboard Builder. Kept as plain functions
 // (not React hooks/components) so both a per-widget action button and a whole-dashboard
@@ -205,4 +207,35 @@ export function exportDashboardPDFMultiPage(pages, dashboardName) {
     pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
   });
   pdf.save(`${dashboardName || 'dashboard'}.pdf`);
+}
+
+// Dashboard definition export (.dashboard.json, docs/DASHBOARD_IMPORT_EXPORT.md): the SAVED
+// dashboard with its charts, the datasources they use (columns + metrics), its slicers and its
+// linked theme — read fresh from the backend, never from editor state, so unsaved edits can't
+// leak in. Offered only from the Dashboard Builder preview (next to Clone), not in the editor nor
+// in viewers' CSV/PNG/PDF menu. Throws with a readable message when the file would be unusable;
+// returns the validation warnings (things an import will drop or clear) for the caller to show.
+export async function exportDashboardDefinition(backendId) {
+  const { dashboard, widgets } = await getDashboardDetail(backendId, { quiet: true });
+  const [slicers, theme] = await Promise.all([
+    listSlicers(backendId),
+    // A theme deleted since it was linked just isn't carried (validateBundle warns).
+    dashboard.theme_id ? getThemeDetail(dashboard.theme_id).catch(() => null) : null,
+  ]);
+  const widgetDatasourceIds = new Set(widgets.map((w) => String(w.datasource_id)));
+  const datasources = (await Promise.all(bundleDatasourceIds({ dashboard, widgets, slicers }).map((id) => (
+    getDatasourceDetail(id).catch((e) => {
+      // A chart's own datasource is required; one only a filter points at is optional (warned).
+      if (widgetDatasourceIds.has(id)) throw new Error(`Couldn't read a datasource one of the charts uses (${e.message}).`);
+      return null;
+    })
+  )))).filter(Boolean);
+
+  const bundle = buildBundle({ dashboard, widgets, datasources, slicers, theme, origin: window.location.origin });
+  const { errors, warnings } = validateBundle(bundle);
+  if (errors.length) throw new Error(errors[0].message);
+
+  const safeName = String(dashboard.name || 'dashboard').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'dashboard';
+  triggerDownload(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }), `${safeName}${BUNDLE_FILE_SUFFIX}`);
+  return { warnings };
 }

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import CellProRulesModalContent from './CellProRulesModalContent';
 
-const CellProRulesModal = ({ isOpen, setIsOpen, cellId, cellName }) => {
+const CellProRulesModal = ({ isOpen, setIsOpen, cellId, cellName, technology }) => {
   const [position, setPosition] = useState({
     x: Math.max(0, (window.innerWidth - 580) / 2),
     y: 80,
@@ -98,7 +98,7 @@ const CellProRulesModal = ({ isOpen, setIsOpen, cellId, cellName }) => {
 
       {/* Scrollable content */}
       <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '12px 16px' }}>
-        <CellProRulesModalContent cellId={cellId} cellName={cellName} />
+        <CellProRulesModalContent cellId={cellId} cellName={cellName} technology={technology} />
       </div>
     </div>
   );

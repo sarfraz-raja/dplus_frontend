@@ -34,7 +34,7 @@ const DASHBOARD_STYLE_FIELDS = [
   { key: 'titleColor', label: 'Widget title color', type: 'color', default: null },
   { key: 'titleWeight', label: 'Widget title weight', type: 'select', default: 'normal', options: [{ value: 'normal', label: 'Normal' }, { value: 'bold', label: 'Bold' }] },
   { key: 'titleSize', label: 'Widget title size (px)', type: 'number', default: null, min: 8, max: 32 },
-  { key: 'titleFont', label: 'Widget title font', type: 'select', default: '', options: FONT_FAMILY_OPTIONS },
+  { key: 'titleFont', label: 'Widget title font', type: 'select', default: '', options: FONT_FAMILY_OPTIONS, inheritLabel: 'Aptos / Segoe UI' }, // OLD: no inheritLabel — 'Default' now names the app font
   // Universal — every widget renders its title as plain HTML outside the chart canvas (see
   // TitleValueOverlay.jsx), unlike value position which only a few widget types even have.
   { key: 'titlePosition', label: 'Widget title position', type: 'position', default: 'top-left', options: POSITION_OPTIONS },
@@ -62,7 +62,7 @@ const DASHBOARD_STYLE_FIELDS = [
   { key: 'dashboardTitleColor', label: 'Dashboard title color', type: 'color', default: null },
   { key: 'dashboardTitleWeight', label: 'Dashboard title weight', type: 'select', default: 'bold', options: [{ value: 'normal', label: 'Normal' }, { value: 'bold', label: 'Bold' }] },
   { key: 'dashboardTitleSize', label: 'Dashboard title size (px)', type: 'number', default: null, min: 12, max: 48 },
-  { key: 'dashboardTitleFont', label: 'Dashboard title font', type: 'select', default: '', options: FONT_FAMILY_OPTIONS },
+  { key: 'dashboardTitleFont', label: 'Dashboard title font', type: 'select', default: '', options: FONT_FAMILY_OPTIONS, inheritLabel: 'Aptos / Segoe UI' }, // OLD: no inheritLabel — 'Default' now names the app font
   // Horizontal alignment only (left/center/right) — unlike the per-widget `titlePosition`
   // above (a full 3x3 grid, since a widget's title can sit anywhere around its own chart),
   // the dashboard's own heading is always a single line above the whole grid, so vertical
@@ -77,7 +77,7 @@ const DASHBOARD_STYLE_FIELDS = [
   { key: 'axisTextColor', label: 'Axis text color', type: 'color', default: null },
   { key: 'axisTextWeight', label: 'Axis text weight', type: 'select', default: 'normal', options: [{ value: 'normal', label: 'Normal' }, { value: 'medium', label: 'Medium' }, { value: 'semibold', label: 'Semibold' }, { value: 'bold', label: 'Bold' }] },
   { key: 'axisTextSize', label: 'Axis text size (px)', type: 'number', default: null, min: 8, max: 24 },
-  { key: 'axisTextFont', label: 'Axis text font', type: 'select', default: '', options: FONT_FAMILY_OPTIONS },
+  { key: 'axisTextFont', label: 'Axis text font', type: 'select', default: '', options: FONT_FAMILY_OPTIONS, inheritLabel: 'Aptos / Segoe UI' }, // OLD: no inheritLabel — 'Default' now names the app font
   // Hide every chart's axis titles at once — same key as each chart's own Axis titles field.
   SHOW_AXIS_TITLES_FIELD,
   // Same key as each widget type's own valueDecimals styleField (widgetTypeRegistry.js's

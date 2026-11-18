@@ -166,7 +166,8 @@ export default function Select({
                     o.disabled && 'cursor-not-allowed opacity-40',
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                  {/* title: full label on hover when a long one is cut off. OLD: no title. */}
+                  <span className="min-w-0 flex-1 truncate" title={o.label}>{o.label}</span>
                   {isSel && <Check size={12} className="shrink-0 text-[#EC7D09]" aria-hidden="true" />}
                 </button>
               </React.Fragment>

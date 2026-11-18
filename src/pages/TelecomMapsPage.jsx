@@ -65,22 +65,29 @@
 
 import React, { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useLocation } from "react-router-dom";
 import TelecomMap from "../components/MapsUsingDeckgl/TelecomMap";
 import TelecomMapGisToolbar from "../components/MapsUsingDeckgl/TelecomMapGisToolbar";
+import DashboardFilterBanner from "../components/MapsUsingDeckgl/DashboardFilterBanner";
+import { readDashboardMapLink } from "../components/MapsUsingDeckgl/Utils/dashboardMapFilter";
 import MapActions from "../store/actions/map-actions";
 
 const TelecomMapsPage = () => {
   const dispatch = useDispatch();
   const gisFullscreenRootRef = useRef(null);
   const selectedOperator = useSelector((state) => state.map.selectedOperator);
+  const { search } = useLocation();
 
+  // Opened from a Dashboard Builder widget ("Open on map") — its filters, read once on load. null for a
+  // normal visit (the user's saved filters apply).
   useEffect(() => {
     const init = async () => {
       try {
         await Promise.all([
           dispatch(MapActions.getBoundaryGroups()),
           dispatch(MapActions.getRfPredictionFilters()),
-          dispatch(MapActions.getUserMapSetup()),
+          // OLD: dispatch(MapActions.getUserMapSetup()),
+          dispatch(MapActions.getUserMapSetup(readDashboardMapLink(search))),
           dispatch(MapActions.getSites()),
         ]);
       } catch (e) {
@@ -88,6 +95,9 @@ const TelecomMapsPage = () => {
       }
     };
     init();
+  // `search` deliberately left out: read on load only — "Show all" (DashboardFilterBanner) clears the
+  // URL and reloads the saved setup itself, which mustn't re-trigger this.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch]);
 
 // const [kenyaGeoJson, setKenyaGeoJson] = useState(null);
@@ -126,6 +136,10 @@ const TelecomMapsPage = () => {
         <div className="pointer-events-auto">
           <TelecomMapGisToolbar />
         </div>
+      </div>
+      {/* Dashboard "Open on map" filters — bottom centre, clear of the toolbar and the side panels. */}
+      <div className="pointer-events-none absolute bottom-3 left-0 right-0 z-20 flex justify-center px-3">
+        <DashboardFilterBanner />
       </div>
     </div>
 

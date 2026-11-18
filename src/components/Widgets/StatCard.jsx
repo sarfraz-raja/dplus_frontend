@@ -57,8 +57,13 @@ export default function StatCard({
   );
   const valueNode = (
     <span className="kpi-stat-value flex items-center gap-1 text-xl font-semibold whitespace-nowrap text-slate-900 dark:text-white" style={valueStyle}>
-      {value}
-      {unit && <span className="text-xs font-medium opacity-70">{unit}</span>}
+      {/* No size, color or gap of its own — inherits the value's (Value text size / color) and
+          sits flush like a compact K/M suffix. Wrapped together so the row's flex `gap-1` (meant
+          for the delta) doesn't push the unit away; a unit typed with a leading space keeps it. */}
+      <span>
+        {value}
+        {unit && <span className="font-medium">{unit}</span>}
+      </span>
       {delta && (
         <span
           className={`kpi-stat-delta kpi-tooltip text-[0.6875rem] ml-1 ${deltaUp ? 'up text-emerald-600 dark:text-emerald-400' : 'down text-amber-600 dark:text-amber-400'}`}

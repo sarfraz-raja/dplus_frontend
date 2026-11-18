@@ -41,6 +41,8 @@ import {
   polygonCentroid,
 } from "./Utils/gisMeasurement";
 import { TELECOM_GIS_NAV_BTN_CLASS, TelecomMapStyleRightControl } from "./TelecomMapDatayogStyleStrip";
+import { IS_OFFLINE_MODE, getMapStyle, OFFLINE_STYLE_MAP, loadOfflineStyle } from "./Utils/basemapStyles";
+import { computeZoomBoost, getSectorTip, hexToRgba, generateCoordinates } from "./Utils/sectorGeometry";
 
 /** `false` → original `LegendBox.jsx`; `true` → themed `LegendBoxV2` (resize, z-order, red close). */
 const USE_LEGEND_BOX_V2 = true;
@@ -78,10 +80,13 @@ const getNrColor = (type, biDirectional = true) => {
 
 };
 
+/* OLD — moved verbatim to ./Utils/sectorGeometry.js (shared with the Dashboard Builder map), imported above.
 // Smooth exponential zoomBoost — anchored at zoom 12, capped at 8 to prevent sector blowup
 // at zoom 9-11: z9-11→8, z12→6, z13→3, z15+→1. Sectors appear starting at zoom 9.
 const computeZoomBoost = (zoom) => Math.min(8, Math.max(1, 6 * Math.pow(0.5, zoom - 12)));
+*/
 
+/* OLD — moved verbatim to ./Utils/sectorGeometry.js (shared with the Dashboard Builder map), imported above.
 // Arc tip at center azimuth — explicit mirror of generateCoordinates formula.
 // generateCoordinates(lng, lat, az, radius_m, radius_m*zoomBoost, mapScale*20) uses:
 //   factor = c_length / (69.093*9000) * (scale/20)  → *20 and /20 cancel
@@ -98,6 +103,7 @@ const getSectorTip = (lat, lng, azimuth, radius_m, mapScale = 1, zoomBoost = 1) 
   // return [lng + Math.sin(azRad) * factor, lat + Math.cos(azRad) * factor];
   return [lng + Math.sin(azRad) * factor / lngScale, lat + Math.cos(azRad) * factor];
 };
+*/
 
 //hardcoded uuid for the superset dashboard on the Charts(Cellinfopopup) modal.
 // This is the dashboard that contains the charts for the cell
@@ -275,6 +281,7 @@ function gisLiveDraftLabelOffsetPx(vp, lastPoint, cursorPoint, draftPoints) {
 }
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+/* OLD — moved verbatim to ./Utils/basemapStyles.js (shared with the Dashboard Builder map), imported above.
 const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY;
 const CARTO_KEY_PARAM = CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : '';
 
@@ -569,6 +576,7 @@ const getMapStyle = (styleKey, isOnline, offlineMapStyle) => {
     layers: [{ id: 'basemap-layer', type: 'raster', source: 'basemap' }],
   };
 };
+*/
 
 // const MAP_STYLES = {
 //   streets:   `https://api.mapbox.com/styles/v1/mapbox/streets-v12/style.json?access_token=${MAPBOX_TOKEN}`,
@@ -581,6 +589,7 @@ const getMapStyle = (styleKey, isOnline, offlineMapStyle) => {
 // const getMapStyle = (styleKey) => 
 //   MAP_STYLES[styleKey] || MAP_STYLES.streets;
 
+/* OLD — moved verbatim to ./Utils/sectorGeometry.js (shared with the Dashboard Builder map), imported above.
 const hexToRgba = (hex, opacity = 1) => {
 
   if (!hex) return [0,150,255,255];
@@ -596,6 +605,7 @@ const hexToRgba = (hex, opacity = 1) => {
   return [r,g,b,a];
 
 };
+*/
 
 const haversineKm = ([lng1, lat1], [lng2, lat2]) => {
     const R = 6371;
@@ -1282,6 +1292,7 @@ const neighborsLegendThematic = useMemo(() => {
    /* ============================================================
    🔹 GENERATE COORDINATES FOR DRAWING
 ============================================================ */
+/* OLD — moved verbatim to ./Utils/sectorGeometry.js (shared with the Dashboard Builder map), imported above.
 const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     const coords = [];
     coords.push([x, y]);
@@ -1312,6 +1323,7 @@ const generateCoordinates = (x, y, Dir, antBW, c_length, scale = 20) => {
     coords.push([x, y]);
     return coords;
 };
+*/
 
 // Generates an annular sector polygon (donut wedge) in geographic coordinates.
 // innerMeters=0 produces a full sector (pie slice); innerMeters>0 excludes the inner portion.
@@ -3725,6 +3737,7 @@ console.log("CACHE SIZE", Object.keys(nrRadiusCacheRef.current).length);
             setIsOpen={setShowCellProRulesModal}
             cellId={cellProRulesCell?.cell_id || cellProRulesCell?.Cell_name}
             cellName={cellProRulesCell?.Cell_name || cellProRulesCell?.cell_name}
+            technology={cellProRulesCell?.technology || cellProRulesCell?.tech}
           />
         )}
 
