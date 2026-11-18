@@ -151,7 +151,14 @@ export default function MapChartView({ name, mapping = {}, rows = [], height = 3
   const layer = useMemo(() => {
     // OLD: if (!onScreen || !viewState || !items.length) return null;
     if (!live || !viewState || !items.length) return null;
-    const onClick = onPointClick ? ({ object }) => { if (object) onPointClick(object.id === null ? null : String(object.id)); } : undefined;
+    // OLD: const onClick = onPointClick ? ({ object }) => { if (object) onPointClick(object.id === null ? null : String(object.id)); } : undefined;
+    // The clicked row's own ID value, not the item id: an item with no ID falls back to "lat,lng"
+    // (toMapItems), which as a cross-filter value matched nothing. No ID → null (an IS NULL filter).
+    const onClick = onPointClick ? ({ object }) => {
+      if (!object) return;
+      const raw = object.row?.[mapping.map_id];
+      onPointClick(raw === null || raw === undefined || raw === '' ? null : String(raw));
+    } : undefined;
     return isSites
       ? buildSiteLayer({ items, getHex, opacity, radius: pointSize, onClick })
       // OLD: : buildSectorLayer({ items, zoom: viewState.zoom, getHex, opacity, scale: sectorScale, onClick });
@@ -162,7 +169,8 @@ export default function MapChartView({ name, mapping = {}, rows = [], height = 3
   // OLD: }, [items, getHex, opacity, pointSize, sectorScale, isSites, onPointClick, viewState?.zoom, live]);
   // OLD: }, [items, getHex, opacity, pointSize, sectorScale, isSites, onPointClick, viewState?.zoom, live, mapping.map_sector_geometry]);
   // OLD: }, [items, drawItems, getHex, opacity, pointSize, sectorScale, isSites, onPointClick, viewState?.zoom, live, mapping.map_sector_geometry]);
-  }, [items, drawItems, getHex, opacity, pointSize, sectorScale, minCellPx, isSites, onPointClick, viewState?.zoom, viewState?.latitude, live, mapping.map_sector_geometry]);
+  // OLD: }, [items, drawItems, getHex, opacity, pointSize, sectorScale, minCellPx, isSites, onPointClick, viewState?.zoom, viewState?.latitude, live, mapping.map_sector_geometry]);
+  }, [items, drawItems, getHex, opacity, pointSize, sectorScale, minCellPx, isSites, onPointClick, viewState?.zoom, viewState?.latitude, live, mapping.map_sector_geometry, mapping.map_id]);
 
   // Right-click: pick the shape under the pointer. Coordinates go back to the map's own pixels — the
   // dashboard canvas can be zoomed with a CSS transform, so the on-screen box isn't 1:1.

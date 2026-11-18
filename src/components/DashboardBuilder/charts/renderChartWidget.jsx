@@ -608,6 +608,9 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             showToolbar={tableToolbar === 'show'}
             gridLines={gridLines || 'rows'}
             gridColor={gridColor}
+            // Cross-filter source: a cell click sends its own column + raw value (onPointClick is only
+            // passed when this placement is a cross-filter source, drillable or linked).
+            onCellClick={onPointClick ? (column, value) => onPointClick({ column, value }) : null}
           />
           </div>
         </div>

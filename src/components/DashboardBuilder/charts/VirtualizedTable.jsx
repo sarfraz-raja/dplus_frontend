@@ -81,6 +81,8 @@ export default function VirtualizedTable({
   columnWidths = null, onColumnResize = null, columnLabels = null, onColumnLabelChange = null,
   pageSize: configuredPageSize = null, pagerColor = null, isDark = false, framed = false, gridLines = 'rows', gridColor = null,
   showToolbar = false,
+  // Cross-filter source: (column, rawValue) when a cell is clicked. Absent = cells aren't clickable.
+  onCellClick = null,
 }) {
   // No column metadata (data_type) is threaded down to this component — same constraint
   // axisTypeUtils.js's own doc comment notes for chart axes — so the date column is detected
@@ -547,7 +549,10 @@ export default function VirtualizedTable({
                 return (
                   <td
                     key={c}
-                    className={`px-2 py-1 ${tone('text-slate-600', 'text-white/70')} whitespace-nowrap overflow-hidden text-ellipsis${colLines && ci > 0 ? ` border-l ${lineCls}` : ''}`}
+                    onClick={onCellClick ? (e) => { e.stopPropagation(); onCellClick(c, row[c] ?? null); } : undefined}
+                    title={onCellClick ? `Filter by ${columnLabels?.[c] || c} = ${display}` : undefined}
+                    // OLD: className={`px-2 py-1 ${tone('text-slate-600', 'text-white/70')} whitespace-nowrap overflow-hidden text-ellipsis${colLines && ci > 0 ? ` border-l ${lineCls}` : ''}`}
+                    className={`px-2 py-1 ${tone('text-slate-600', 'text-white/70')} whitespace-nowrap overflow-hidden text-ellipsis${colLines && ci > 0 ? ` border-l ${lineCls}` : ''}${onCellClick ? ` cursor-pointer ${tone('hover:bg-orange-50', 'hover:bg-white/10')}` : ''}`}
                     style={{
                       ...(colLines && ci > 0 ? lineStyle : null),
                       // Priority: a matching Conditional Formatting text-color rule wins

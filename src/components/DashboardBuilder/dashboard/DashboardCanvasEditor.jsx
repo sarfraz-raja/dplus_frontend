@@ -9,7 +9,8 @@ import Button from '../../Button';
 import ConfirmModal from '../../ConfirmModal';
 import DashboardTabBar from './DashboardTabBar';
 // OLD: import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields, BIG_NUMBER_STYLE_FIELDS, chartTextSizeDefaults, chartColorDefaults, dashboardColorDefaults } from '../widgetConfig/widgetTypeRegistry';
-import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields, BIG_NUMBER_STYLE_FIELDS, MAP_STYLE_FIELDS, chartTextSizeDefaults, chartColorDefaults, dashboardColorDefaults } from '../widgetConfig/widgetTypeRegistry';
+// OLD: import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields, BIG_NUMBER_STYLE_FIELDS, MAP_STYLE_FIELDS, chartTextSizeDefaults, chartColorDefaults, dashboardColorDefaults } from '../widgetConfig/widgetTypeRegistry';
+import WIDGET_TYPE_REGISTRY, { resolveWidgetStyle, CHART_TYPE_EXTRA_STYLE_FIELDS, chartLibraryStyleFieldsFor, seriesExtraStyleFields, BIG_NUMBER_STYLE_FIELDS, MAP_STYLE_FIELDS, chartLibraryExtraStyleFields, chartTextSizeDefaults, chartColorDefaults, dashboardColorDefaults } from '../widgetConfig/widgetTypeRegistry';
 import MOCK_DATA_SOURCES from '../legacy/mock/mockDataSources';
 import { measureKey } from '../charts/renderChartWidget';
 import WidgetStyleFields from '../widgetConfig/WidgetStyleFields';
@@ -1831,12 +1832,22 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // conversation this was decided in), otherwise just the dashboard's own filters unchanged.
   // Shared by both the base-rows fetch effect below and the "Compare to" effect further down,
   // so "what am I comparing against" always matches "what am I currently showing".
-  const kpiEffectiveFilters = (mapping) => {
+  // OLD: const kpiEffectiveFilters = (mapping) => { … dashboardFilters (+ the card's own date filter) … };
+  // The active cross-filter row for a chart (by backend widget id) when it's one of the targets —
+  // so a target's own extra fetches (KPI date filter, Compare to, Big Number trend) describe the
+  // same slice as its number.
+  const crossFilterRowsFor = (backendWidgetId) => {
+    if (!activeCrossFilter || !backendWidgetId) return [];
+    const isTarget = activeCrossFilter.targetIds.some((id) => widgets[id]?.dataSource?.widgetId === backendWidgetId);
+    return isTarget ? [{ column: activeCrossFilter.column, operator: '=', value: activeCrossFilter.value }] : [];
+  };
+  const kpiEffectiveFilters = (mapping, backendWidgetId) => {
+    const base = [...dashboardFilters, ...crossFilterRowsFor(backendWidgetId)];
     const dateCol = mapping.date_filter_column;
-    if (!dateCol) return dashboardFilters;
+    if (!dateCol) return base;
     const cardFilter = buildDateFilterFromPreset(dateCol, mapping.date_filter_range || 'Last 7 days');
-    if (!cardFilter) return dashboardFilters;
-    return [...dashboardFilters.filter((f) => f.column !== dateCol), cardFilter];
+    if (!cardFilter) return base;
+    return [...base.filter((f) => f.column !== dateCol), cardFilter];
   };
 
   // Dashboard-scoped `getWidgetData` 404s with "Widget is not attached to this dashboard" for
@@ -1880,7 +1891,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const widgetId = w.dataSource.widgetId;
       const mapping = w.dataSource.mapping || {};
       if (!widgetId || !mapping.date_filter_column) return;
-      const filters = resolveFiltersForQuery(kpiEffectiveFilters(mapping));
+      const filters = resolveFiltersForQuery(kpiEffectiveFilters(mapping, widgetId));
       // OLD: const cacheKey = `${widgetId}:${JSON.stringify(filters)}`;
       const cacheKey = `${widgetId}:${JSON.stringify(filters)}:r${refreshTick}`;
       if (kpiDateFilterKeyRef.current.get(widgetId) === cacheKey) return;
@@ -1898,7 +1909,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           }
         });
     });
-  }, [widgets, dashboardFilters, backendId, refreshTick]);
+  // OLD: }, [widgets, dashboardFilters, backendId, refreshTick]);
+  }, [widgets, dashboardFilters, backendId, refreshTick, activeCrossFilter]);
 
   // Per-widget-PLACEMENT own filters (`w.filters`, set via the Filter action in the widget's
   // own action strip — see widgetFilterModalId/FilterEditorModal below), on top of whatever
@@ -1914,7 +1926,12 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const widgetId = w.dataSource.widgetId;
       if (!widgetId) return;
       // OLD: const filters = resolveFiltersForQuery([...dashboardFilters, ...w.filters]);
-      const filters = resolveFiltersForQuery([...dashboardFilters, ...placementFilters(l.i, w)]);
+      // OLD: const filters = resolveFiltersForQuery([...dashboardFilters, ...placementFilters(l.i, w)]);
+      // + the active cross-filter when this placement is a target (its rows come from here, not
+      // from chartLibraryData, so applyCrossFilterTo alone never reached it).
+      const crossRows = activeCrossFilter?.targetIds?.includes(l.i)
+        ? [{ column: activeCrossFilter.column, operator: '=', value: activeCrossFilter.value }] : [];
+      const filters = resolveFiltersForQuery([...dashboardFilters, ...placementFilters(l.i, w), ...crossRows]);
       // OLD: const cacheKey = `${widgetId}:${JSON.stringify(filters)}`;
       const cacheKey = `${widgetId}:${JSON.stringify(filters)}:r${refreshTick}`;
       if (widgetFilterKeyRef.current.get(l.i) === cacheKey) return;
@@ -1933,7 +1950,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         });
     });
   // OLD: }, [layout, widgets, dashboardFilters, backendId, refreshTick]);
-  }, [layout, widgets, dashboardFilters, backendId, refreshTick, viewerWidgetFilters, editable]);
+  // OLD: }, [layout, widgets, dashboardFilters, backendId, refreshTick, viewerWidgetFilters, editable]);
+  }, [layout, widgets, dashboardFilters, backendId, refreshTick, viewerWidgetFilters, editable, activeCrossFilter]);
 
   // KPI_CARD "Compare to" — a second, independent fetch against a date-shifted filter set
   // (see buildComparisonFilters's own doc comment for why this can't just be a backend
@@ -1962,7 +1980,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       // its own query (latestComparison.js) — so the filters are only known once that resolves,
       // and the cache key is built from what they're derived from instead.
       if (isLatestShiftComparison(mapping)) {
-        const baseFilters = resolveFiltersForQuery(kpiEffectiveFilters(mapping));
+        const baseFilters = resolveFiltersForQuery(kpiEffectiveFilters(mapping, widgetId));
         const cacheKey = `${widgetId}:${compareTo}:latest:${JSON.stringify([mapping.y_axis, mapping.aggregation, mapping.date_filter_column, baseFilters])}:r${refreshTick}`;
         if (comparisonKeyRef.current.get(widgetId) === cacheKey) return;
         comparisonKeyRef.current.set(widgetId, cacheKey);
@@ -1986,13 +2004,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       // two shapes this can produce depending on the range.
       const compareFilters = compareTo === 'Custom'
         ? buildCustomComparisonFilters({
-          filters: kpiEffectiveFilters(mapping),
+          filters: kpiEffectiveFilters(mapping, widgetId),
           customDate: mapping.compare_custom_date,
           customFrom: mapping.compare_custom_from,
           customTo: mapping.compare_custom_to,
           latestByColumn: mapping.date_filter_range === 'Latest' ? mapping.date_filter_column : null,
         })
-        : buildComparisonFilters(kpiEffectiveFilters(mapping), compareTo);
+        : buildComparisonFilters(kpiEffectiveFilters(mapping, widgetId), compareTo);
       if (!compareFilters) return; // no BETWEEN filter to shift — nothing meaningful to compare
       // OLD: const cacheKey = `${widgetId}:${compareTo}:${JSON.stringify(compareFilters)}`;
       const cacheKey = `${widgetId}:${compareTo}:${JSON.stringify(compareFilters)}:r${refreshTick}`;
@@ -2010,7 +2028,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           }
         });
     });
-  }, [widgets, chartLibraryData, dashboardFilters, backendId, refreshTick]);
+  // OLD: }, [widgets, chartLibraryData, dashboardFilters, backendId, refreshTick]);
+  }, [widgets, chartLibraryData, dashboardFilters, backendId, refreshTick, activeCrossFilter]);
 
   // Recomputes each KPI_CARD/GAUGE widget's delta purely from state — whatever
   // `chartLibraryData[widgetId]` (current-window rows) and `comparisonRawData[widgetId]`
@@ -2056,7 +2075,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const widgetId = w.dataSource.widgetId;
       const datasourceId = w.dataSource.datasourceId;
       if (!widgetId || !datasourceId) return;
-      const filters = resolveFiltersForQuery(kpiEffectiveFilters(mapping));
+      const filters = resolveFiltersForQuery(kpiEffectiveFilters(mapping, widgetId));
       // The dashboard's filters minus anything on the card's date column — what a trend with its
       // own window (Trend window / Period 'Latest') runs under instead of `filters`.
       const otherFilters = resolveFiltersForQuery(dashboardFilters.filter((f) => f.column !== mapping.date_filter_column));
@@ -2077,7 +2096,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
           }
         });
     });
-  }, [widgets, dashboardFilters, refreshTick]);
+  // OLD: }, [widgets, dashboardFilters, refreshTick]);
+  }, [widgets, dashboardFilters, refreshTick, activeCrossFilter]);
 
   // Phase 18 — batched, filter-aware fetch for dashboards with a real backend id. Omitting
   // `filters` from the call (see getDashboardData's own doc comment) makes the backend
@@ -2466,6 +2486,10 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       const next = { ...prev };
       targetIds.forEach((id) => {
         const backendWidgetId = widgets[id]?.dataSource?.widgetId;
+        // A KPI / Gauge with its own date filter gets its rows from that fetch (kpiEffectiveFilters
+        // adds the cross-filter there) — writing the batch result too would race it.
+        const ds = widgets[id]?.dataSource;
+        if (ds && SINGLE_VALUE_CHART_TYPES.has(ds.chartType) && ds.mapping?.date_filter_column) return;
         const result = backendWidgetId ? dataResult.widgets[backendWidgetId] : undefined;
         if (result) {
           next[backendWidgetId] = result.status === 200
@@ -2532,14 +2556,20 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     const isCrossFilterTarget = (w) => {
       if (w.dataSource?.type !== 'chartLibrary') return false;
       const baseStyle = { ...(w.dataSource.mapping?.style || {}), ...(w.style || {}) };
-      const extraFields = CHART_TYPE_EXTRA_STYLE_FIELDS[w.dataSource.chartType] || [];
+      // OLD: const extraFields = CHART_TYPE_EXTRA_STYLE_FIELDS[w.dataSource.chartType] || []; — wrong set for Map / series charts.
+      const extraFields = chartLibraryExtraStyleFields(w.dataSource.chartType, w.dataSource.mapping);
       return resolveWidgetStyle(w.type, baseStyle, extraFields).crossFilterTarget === 'on';
     };
     const targetIds = Object.entries(widgets)
       .filter(([id, w]) => id !== sourceWidgetId
         && isCrossFilterTarget(w)
-        && w.dataSource?.datasourceId === sourceDatasourceId
-        && Object.values(w.dataSource?.mapping || {}).includes(column))
+        // OLD: && w.dataSource?.datasourceId === sourceDatasourceId
+        // OLD: && Object.values(w.dataSource?.mapping || {}).includes(column))
+        // OLD: && Object.values(w.dataSource?.mapping || {}).some((v) => v === column || (Array.isArray(v) && v.includes(column))))
+        // Same datasource is enough: the clicked column comes from the source's datasource, so it
+        // exists in the target's too. A target no longer has to SHOW the column — a KPI, Big Number
+        // or Gauge (measure only), or a trend over time, is narrowed to the clicked value as well.
+        && w.dataSource?.datasourceId === sourceDatasourceId)
       .map(([id]) => id);
     if (targetIds.length === 0) return;
     await applyCrossFilterTo(targetIds, { column, operator: '=', value });
@@ -2675,7 +2705,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // A widget that only gets point clicks because it has a link (not a cross-filter source) has
     // no single-click action — same chart → placement cascade as resolveWidgetProps' gating.
     const sourceStyle = { ...(sourceWidget.dataSource.mapping?.style || {}), ...(sourceWidget.style || {}) };
-    const sourceFields = CHART_TYPE_EXTRA_STYLE_FIELDS[sourceWidget.dataSource.chartType] || [];
+    // OLD: const sourceFields = CHART_TYPE_EXTRA_STYLE_FIELDS[sourceWidget.dataSource.chartType] || []; — wrong set for Map / series charts.
+    const sourceFields = chartLibraryExtraStyleFields(sourceWidget.dataSource.chartType, sourceWidget.dataSource.mapping);
     if (resolveWidgetStyle(sourceWidget.type, sourceStyle, sourceFields).crossFilterSource !== 'on') return;
     await doCrossFilterForPoint(sourceWidgetId, { column, value });
   };

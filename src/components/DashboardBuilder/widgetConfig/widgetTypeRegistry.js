@@ -567,6 +567,9 @@ const CROSS_FILTER_FIELDS = [
   { key: 'crossFilterSource', label: 'Cross-filter source', type: 'select', default: 'off', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] },
   { key: 'crossFilterTarget', label: 'Cross-filter target', type: 'select', default: 'off', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] },
 ];
+// Target only — single-value charts (KPI Card, Big Number, Gauge) have no point to click, but a
+// click elsewhere can still narrow their number to the clicked value.
+const CROSS_FILTER_TARGET_FIELD = CROSS_FILTER_FIELDS[1];
 
 // Per-category/per-series color scheme — a preset picker (4 curated palettes) plus a fully
 // custom swatch editor (add/remove/recolor), reusing the exact same PaletteEditor already
@@ -690,6 +693,8 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
       options: NUMBER_FORMAT_OPTIONS,
     },
     VALUE_POSITION_FIELD,
+    // Also Big Number's (its fields are KPI Card's + BIG_NUMBER_STYLE_FIELDS).
+    CROSS_FILTER_TARGET_FIELD,
   ],
   // Two-stop gradient (not a flat accent, not a palette) — a heat strip's cells communicate
   // value through color intensity, so it needs a low/high pair rather than one hex like
@@ -728,6 +733,7 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
       options: NUMBER_FORMAT_OPTIONS,
     },
     { key: 'showPercent', label: 'Show as percent', type: 'select', default: 'yes', options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
+    CROSS_FILTER_TARGET_FIELD,
   ],
   FUNNEL: [PALETTE_FIELD, ...CROSS_FILTER_FIELDS],
   WATERFALL: [...CROSS_FILTER_FIELDS],
@@ -781,6 +787,9 @@ export const CHART_TYPE_EXTRA_STYLE_FIELDS = {
     // Toolbar above the table for whoever views it: a search box, "Show N entries per page" (when
     // Rows per page is on) and the row count. Live controls only — nothing the viewer picks is saved.
     { key: 'tableToolbar', label: 'Search & entries', type: 'select', default: 'hide', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }], hint: 'A search box, "Show N entries per page" (when Rows per page is on) and the row count above the table.' },
+    // Source: clicking a cell filters other charts by that cell's column + value (VirtualizedTable
+    // onCellClick). Target: filtered when any of its columns is the clicked one.
+    ...CROSS_FILTER_FIELDS,
   ],
 };
 
@@ -941,6 +950,20 @@ export const BIG_NUMBER_STYLE_FIELDS = [
   { key: 'showDeltaNote', label: 'Show compared period', type: 'select', default: 'hide', options: [{ value: 'show', label: 'Show' }, { value: 'hide', label: 'Hide' }] },
   { key: 'deltaTextSize', label: 'Change text size (px)', type: 'number', default: 12, min: 8, max: 24 },
 ];
+
+// The chart-type-specific style fields of a placed Chart Library widget — the same choice the
+// canvas makes when it renders one (Map → MAP_STYLE_FIELDS, a series-grouped chart →
+// seriesExtraStyleFields, else CHART_TYPE_EXTRA_STYLE_FIELDS; + Big Number's). Everything that
+// reads such a widget's style (render, cross-filter source / target checks) must use this, or a
+// field the Style panel shows (e.g. Map's cross-filter toggles) silently resolves to its default.
+export function chartLibraryExtraStyleFields(chartType, mapping) {
+  const isMapChart = chartType === 'TABLE' && mapping?.chart_variant === 'map';
+  const hasSeriesGrouping = ['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR'].includes(chartType) && !!mapping?.series;
+  return [
+    ...(isMapChart ? MAP_STYLE_FIELDS : hasSeriesGrouping ? seriesExtraStyleFields(chartType) : (CHART_TYPE_EXTRA_STYLE_FIELDS[chartType] || [])),
+    ...(mapping?.kpi_variant === 'big_number' ? BIG_NUMBER_STYLE_FIELDS : []),
+  ];
+}
 
 export function chartLibraryStyleFieldsFor(chartType, mapping) {
   // Map (TABLE + mapping.chart_variant 'map'): the shared card fields (title, background, border)
