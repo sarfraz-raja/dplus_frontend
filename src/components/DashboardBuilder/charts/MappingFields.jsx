@@ -161,6 +161,10 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                       of the row instead of sitting right against it like every other field's
                       label does. */}
                   <span><FieldLabel field={field} /></span>
+                  {/* `field.noCustomSql` (Scatter's X and Y — raw points, no GROUP BY, and the
+                      backend reads X as a plain column name): no "Use custom SQL". A custom
+                      expression already saved there still shows "Use column" to switch back. */}
+                  {(!field.noCustomSql || isSql) && (
                   <button
                     type="button"
                     className="text-[0.65rem] font-semibold text-[#EC7D09] hover:opacity-80"
@@ -176,6 +180,7 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
                   >
                     {isSql ? 'Use column' : 'Use custom SQL'}
                   </button>
+                  )}
                 </label>
                 {columnSelect}
                 {isSql && (
@@ -238,6 +243,84 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
               {/* OLD: <span className="flex items-center text-xs font-medium text-slate-600 mb-1">{field.label}<FieldHintMark hint={field.hint} /></span> */}
               {/* The editor puts the label on its own preset row. */}
               <MapColorRanges value={current} onChange={(next) => onChange(field.key, next)} label={field.label} />
+            </div>
+          );
+        }
+        if (field.type === 'customColumns') {
+          // OLD: Table's custom SQL columns: [{ label, expression }] in their own mapping key.
+          // const list = Array.isArray(current) ? current : [];
+          // const setRow = (idx, patch) => onChange(field.key, list.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+          // const removeRow = (idx) => onChange(field.key, list.filter((_, i) => i !== idx));
+          // Table's custom SQL columns are the { type: 'sql', expression, label } entries of
+          // mapping.columns (the backend's shape), mixed in with the plain column names. Rows edit
+          // those entries in place; plain names are untouched. Half-filled rows stay while being
+          // typed (they're left out of the save and the table until both parts are filled).
+          // `field.aggregate`: Aggregate mode — each expression is a metric and must aggregate.
+          const entries = Array.isArray(current) ? current : [];
+          const list = entries.filter((c) => c && typeof c === 'object');
+          const setRow = (idx, patch) => {
+            const target = list[idx];
+            onChange(field.key, entries.map((c) => (c === target ? { ...c, ...patch } : c)));
+          };
+          const removeRow = (idx) => onChange(field.key, entries.filter((c) => c !== list[idx]));
+          const takenLabels = new Set(columns.map((c) => c.column_name));
+          return (
+            // OLD: <div key={field.key} className="w-full flex flex-col gap-2">
+            <div key={`${field.key}-sql`} className="w-full flex flex-col gap-2">
+              <span className="flex items-center text-xs font-medium text-slate-600">
+                {field.label}<FieldHintMark hint={field.hint} />
+              </span>
+              {list.map((row, idx) => {
+                const label = (row.label || '').trim();
+                const labelClash = label && (takenLabels.has(label) || list.some((r, i) => i !== idx && (r.label || '').trim() === label));
+                return (
+                  // eslint-disable-next-line react/no-array-index-key -- rows have no id; order is the identity
+                  <div key={idx} className="flex flex-col gap-1.5 rounded-lg border border-slate-200 p-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={row.label || ''}
+                        onChange={(e) => setRow(idx, { label: e.target.value })}
+                        placeholder="Column name, e.g. rf_pct"
+                        aria-label="Custom column name"
+                        className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeRow(idx)}
+                        title="Remove this column"
+                        aria-label="Remove this custom column"
+                        className="shrink-0 text-xs text-slate-400 hover:text-red-500"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    {labelClash && <span className="text-[11px] text-red-600">This name is already used by another column.</span>}
+                    {/* The backend quotes the name as "<label>", so it can't hold a double quote. */}
+                    {label.includes('"') && <span className="text-[11px] text-red-600">The name can't contain a double quote (&quot;).</span>}
+                    <textarea
+                      value={row.expression || ''}
+                      onChange={(e) => setRow(idx, { expression: e.target.value })}
+                      // OLD: placeholder="e.g. rf_utilization * 100"
+                      // OLD: placeholder={field.aggregate ? 'e.g. SUM(drops) or AVG(rf_utilization) * 100' : 'e.g. rf_utilization * 100'}
+                      placeholder="e.g. rf_utilization * 100  or  SUM(drops)"
+                      rows={2}
+                      aria-label="Custom column SQL expression"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono"
+                    />
+                    <div><ValidateExpressionButton datasourceId={datasourceId} expression={row.expression || ''} /></div>
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                // OLD: onClick={() => onChange(field.key, [...list, { label: '', expression: '' }])}
+                onClick={() => onChange(field.key, [...entries, { type: 'sql', label: '', expression: '' }])}
+                className="self-start text-xs font-semibold text-[#EC7D09] hover:opacity-80"
+              >
+                {/* OLD: + Add custom SQL column */}
+                {field.aggregate ? '+ Add metric' : '+ Add custom SQL column'}
+              </button>
             </div>
           );
         }
@@ -537,15 +620,29 @@ export default function MappingFields({ fields = [], value = {}, onChange, colum
             if (text) next[colName] = text; else delete next[colName];
             onChange('column_labels', next);
           };
+          // A Table's mapping.columns can also hold custom SQL entries ({ type: 'sql', … } — the
+          // customColumns field edits those). This picker only sees and changes the plain names;
+          // the SQL entries keep their positions, newly ticked names go on the end.
+          const entries = Array.isArray(current) ? current : [];
+          const plainSelected = entries.filter((c) => typeof c === 'string');
+          const setPlain = (next) => {
+            const kept = entries.filter((c) => typeof c !== 'string' || next.includes(c));
+            onChange(field.key, [...kept, ...next.filter((c) => !kept.includes(c))]);
+            // Table Aggregate mode: the picked plain columns are the GROUP BY dimensions.
+            if (field.syncGroupBy) onChange('group_by', next);
+          };
           return (
             <ColumnMultiSelect
-              key={field.key}
+              // OLD: key={field.key}
+              key={`${field.key}-plain`}
               label={field.label}
               required={isRequiredField(field)}
               columns={columns}
               columnsLoading={columnsLoading}
-              selected={current || []}
-              onChange={(next) => onChange(field.key, next)}
+              // OLD: selected={current || []}
+              // OLD: onChange={(next) => onChange(field.key, next)}
+              selected={plainSelected}
+              onChange={setPlain}
               showOrderTray={false}
               columnLabels={columnLabels}
               onColumnLabelChange={setColumnLabel}

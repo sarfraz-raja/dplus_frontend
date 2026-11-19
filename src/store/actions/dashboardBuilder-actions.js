@@ -17,6 +17,16 @@ const Api = {
 import { Urls } from "../../utils/url";
 import { copyNameFor } from "../../components/DashboardBuilder/utils/copyName";
 
+// App rule: lists show the newest addition first. The backend returns these lists oldest first
+// (ORDER BY created_at), so sort by created_at desc; rows without a date keep reversed order.
+function newestFirst(list) {
+  const ts = (o) => { const t = Date.parse(o?.created_at || ''); return Number.isNaN(t) ? null : t; };
+  return list
+    .map((o, i) => ({ o, i, t: ts(o) }))
+    .sort((a, b) => (a.t !== null && b.t !== null && a.t !== b.t ? b.t - a.t : b.i - a.i))
+    .map(({ o }) => o);
+}
+
 /**
  * Dashboard Builder's own datasource namespace (/dashboard-builder/*) — separate from
  * /querybuilder/*, and the database itself is fixed for now (no per-datasource connection
@@ -124,7 +134,8 @@ export async function listDatasources() {
   if (!Array.isArray(body)) {
     throw new Error("Unexpected response shape from GET /dashboard-builder/datasources (see console).");
   }
-  return body;
+  // OLD: return body;
+  return newestFirst(body);
 }
 
 /**
@@ -298,7 +309,8 @@ export async function listDatasourceMetrics(datasourceId) {
   if (!Array.isArray(metrics)) {
     throw new Error(`Unexpected response shape from GET .../datasources/${datasourceId}/metrics (see console).`);
   }
-  return metrics;
+  // OLD: return metrics;
+  return newestFirst(metrics);
 }
 
 export async function createDatasourceMetric(datasourceId, metric) {
@@ -1026,7 +1038,8 @@ export async function listThemes() {
   if (!Array.isArray(list)) {
     throw new Error("Unexpected response shape from GET /dashboard-builder/themes (see console).");
   }
-  return list;
+  // OLD: return list;
+  return newestFirst(list);
 }
 
 /** Full detail for one Theme (name/style). */
@@ -1091,7 +1104,8 @@ export async function listPalettes({ quiet = false } = {}) {
   if (!res || res.status !== 200) throw paletteError(res, 'Listing palettes');
   const list = res.data?.data;
   if (!Array.isArray(list)) throw new Error("Unexpected response shape from GET /dashboard-builder/palettes.");
-  return list.filter((p) => !p.deleted);
+  // OLD: return list.filter((p) => !p.deleted);
+  return newestFirst(list.filter((p) => !p.deleted));
 }
 
 /** Creates a custom palette — name unique (409 on duplicate), 1–24 hex colours. */

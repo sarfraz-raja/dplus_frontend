@@ -775,6 +775,13 @@ const WidgetContent = React.memo(function WidgetContent({
 // own-date-filter and "compare to" fetch effects below.
 const SINGLE_VALUE_CHART_TYPES = new Set(['KPI_CARD', 'GAUGE']);
 
+// A cross-filter's filter rows. Current shape: `rows: [{ column, operator: '=' | 'IN', value }]`
+// (a stacked / series segment sends its category AND its series; Ctrl/⌘-click builds IN lists).
+// The older single-row shape ({ column, value }, still written by "Link to" a tab) reads as one row.
+const crossFilterRowsOf = (acf) => (!acf ? [] : acf.rows || [{ column: acf.column, operator: '=', value: acf.value }]);
+// "region = North · rf_bands IN (G900, G1800)" — the "Filtering by" chip.
+const crossFilterRowText = (r) => `${r.column} ${r.operator === 'IN' ? `in ${r.value.map((v) => (v === null ? 'empty' : String(v))).join(', ')}` : `= ${r.value === null ? 'empty' : String(r.value)}`}`;
+
 /**
  * Canvas editor: palette of widget types (click to add) + a react-grid-layout
  * canvas where placed widgets can be dragged/resized, plus a side panel to
@@ -1839,7 +1846,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   const crossFilterRowsFor = (backendWidgetId) => {
     if (!activeCrossFilter || !backendWidgetId) return [];
     const isTarget = activeCrossFilter.targetIds.some((id) => widgets[id]?.dataSource?.widgetId === backendWidgetId);
-    return isTarget ? [{ column: activeCrossFilter.column, operator: '=', value: activeCrossFilter.value }] : [];
+    return isTarget ? crossFilterRowsOf(activeCrossFilter) : [];
   };
   const kpiEffectiveFilters = (mapping, backendWidgetId) => {
     const base = [...dashboardFilters, ...crossFilterRowsFor(backendWidgetId)];
@@ -1930,7 +1937,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
       // + the active cross-filter when this placement is a target (its rows come from here, not
       // from chartLibraryData, so applyCrossFilterTo alone never reached it).
       const crossRows = activeCrossFilter?.targetIds?.includes(l.i)
-        ? [{ column: activeCrossFilter.column, operator: '=', value: activeCrossFilter.value }] : [];
+        ? crossFilterRowsOf(activeCrossFilter) : [];
       const filters = resolveFiltersForQuery([...dashboardFilters, ...placementFilters(l.i, w), ...crossRows]);
       // OLD: const cacheKey = `${widgetId}:${JSON.stringify(filters)}`;
       const cacheKey = `${widgetId}:${JSON.stringify(filters)}:r${refreshTick}`;
@@ -2478,9 +2485,12 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // itself uses (see WidgetContent's chartLibraryData prop) — only the entries for
   // `targetIds`'s own dataSource.widgetId get merged in, every other widget's cached data is
   // left untouched, unlike persistAndApplyFilters/clearFilterValues which merge everything.
+  // `crossFilterRow`: one filter row, an array of rows (multi-column / IN cross-filter), or null (clear).
   const applyCrossFilterTo = async (targetIds, crossFilterRow) => {
     if (!backendId || targetIds.length === 0) return;
-    const filters = crossFilterRow ? [...dashboardFilters, crossFilterRow] : dashboardFilters;
+    // OLD: const filters = crossFilterRow ? [...dashboardFilters, crossFilterRow] : dashboardFilters;
+    const extraRows = !crossFilterRow ? [] : Array.isArray(crossFilterRow) ? crossFilterRow : [crossFilterRow];
+    const filters = [...dashboardFilters, ...extraRows];
     const dataResult = await loadDashboardData(backendId, { filters: resolveFiltersForQuery(filters) });
     setChartLibraryData((prev) => {
       const next = { ...prev };
@@ -2533,20 +2543,40 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // straight from left-click (handleWidgetPointClickRef below); a widget with BOTH drill-down
   // and cross-filter configured can only reach this via the menu (handleWidgetPointCrossFilterRef),
   // since left-click there is claimed by drilling — the "manual priority" the user asked for.
-  const doCrossFilterForPoint = async (sourceWidgetId, { column, value }) => {
+  // `point`: { column, value } — plus `also` (more { column, value }, e.g. a stacked / series
+  // segment's series) and `additive` (Ctrl/⌘ held: add / remove values on the same chart's filter
+  // instead of replacing it).
+  // OLD: const doCrossFilterForPoint = async (sourceWidgetId, { column, value }) => { … one column = value, same click clears … };
+  const doCrossFilterForPoint = async (sourceWidgetId, point) => {
     const sourceWidget = widgets[sourceWidgetId];
     if (!sourceWidget?.dataSource) return;
-    const clickId = `${sourceWidgetId}:${column}:${value}`;
-    // Clicking the same point again clears the cross-filter — matches Power BI/Superset's
-    // click-to-toggle convention.
-    if (activeCrossFilter?.clickId === clickId) {
-      await applyCrossFilterTo(activeCrossFilter.targetIds, null);
+    const clicked = [{ column: point.column, value: point.value }, ...(point.also || [])];
+    const sameChartSameColumns = activeCrossFilter?.sourceWidgetId === sourceWidgetId
+      && crossFilterRowsOf(activeCrossFilter).length === clicked.length
+      && clicked.every((c) => crossFilterRowsOf(activeCrossFilter).some((r) => r.column === c.column));
+    const listOf = (r) => (r.operator === 'IN' ? r.value : [r.value]);
+    let rows;
+    if (point.additive && sameChartSameColumns) {
+      // Ctrl/⌘-click: toggle each clicked value in its column's list (= one value, IN for several).
+      rows = crossFilterRowsOf(activeCrossFilter).map((r) => {
+        const c = clicked.find((x) => x.column === r.column);
+        const list = listOf(r);
+        const next = list.some((v) => v === c.value) ? list.filter((v) => v !== c.value) : [...list, c.value];
+        return { column: r.column, list: next };
+      });
+      if (rows.some((r) => r.list.length === 0)) rows = null; // took the last value out → clear
+      else rows = rows.map((r) => (r.list.length === 1 ? { column: r.column, operator: '=', value: r.list[0] } : { column: r.column, operator: 'IN', value: r.list }));
+    } else {
+      rows = clicked.map((c) => ({ column: c.column, operator: '=', value: c.value }));
+      // A plain click on exactly the current selection clears it (as before).
+      if (sameChartSameColumns && JSON.stringify(crossFilterRowsOf(activeCrossFilter)) === JSON.stringify(rows)) rows = null;
+    }
+    if (!rows) {
+      if (activeCrossFilter) await applyCrossFilterTo(activeCrossFilter.targetIds, null);
       setActiveCrossFilter(null);
       return;
     }
-    // Match strictness (confirmed with user): column name AND same datasourceId — avoids
-    // matching two widgets that only coincidentally share a column name across different
-    // datasources.
+    const clickId = `${sourceWidgetId}:${JSON.stringify(rows)}`;
     const sourceDatasourceId = sourceWidget.dataSource.datasourceId;
     // `crossFilterTarget` may have been set at the chart's own base default (mapping.style,
     // via ChartLibrary.jsx's own Style tab) rather than this specific placement's own
@@ -2572,8 +2602,13 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         && w.dataSource?.datasourceId === sourceDatasourceId)
       .map(([id]) => id);
     if (targetIds.length === 0) return;
-    await applyCrossFilterTo(targetIds, { column, operator: '=', value });
-    setActiveCrossFilter({ clickId, sourceWidgetId, column, value, label: String(value), targetIds });
+    // OLD: await applyCrossFilterTo(targetIds, { column, operator: '=', value });
+    // OLD: setActiveCrossFilter({ clickId, sourceWidgetId, column, value, label: String(value), targetIds });
+    // Targets dropped since the last click go back to unfiltered data.
+    const stale = (activeCrossFilter?.targetIds || []).filter((id) => !targetIds.includes(id));
+    if (stale.length) applyCrossFilterTo(stale, null);
+    await applyCrossFilterTo(targetIds, rows);
+    setActiveCrossFilter({ clickId, sourceWidgetId, rows, label: rows.map(crossFilterRowText).join(' · '), targetIds });
   };
 
   // Double-click "Link to" (utils/widgetLink.js). On a LINKED widget (read-only views) a point
@@ -2636,7 +2671,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     const w = widgets[widgetId];
     if (!w?.mapLink) return;
     const crossFilter = activeCrossFilter?.targetIds?.includes(widgetId)
-      ? [{ column: activeCrossFilter.column, operator: '=', value: activeCrossFilter.value }]
+      ? crossFilterRowsOf(activeCrossFilter)
       : [];
     const filters = [
       ...(dashboardFilters || []),
@@ -2687,7 +2722,9 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
   // The single-click action itself: drill, else cross-filter.
   // OLD: this body was handleWidgetPointClickRef itself (no double-click check in front of it).
   const handleWidgetSingleClickRef = useRef(() => {});
-  handleWidgetSingleClickRef.current = async (sourceWidgetId, { column, value }) => {
+  // OLD: handleWidgetSingleClickRef.current = async (sourceWidgetId, { column, value }) => {
+  handleWidgetSingleClickRef.current = async (sourceWidgetId, point) => {
+    const { value } = point; // `point` may also carry `also` (series) and `additive` (Ctrl/⌘) — passed through whole
     const sourceWidget = widgets[sourceWidgetId];
     if (!sourceWidget?.dataSource) return;
     // Left-click's default action: drilling wins when this widget can still drill further —
@@ -2708,7 +2745,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
     // OLD: const sourceFields = CHART_TYPE_EXTRA_STYLE_FIELDS[sourceWidget.dataSource.chartType] || []; — wrong set for Map / series charts.
     const sourceFields = chartLibraryExtraStyleFields(sourceWidget.dataSource.chartType, sourceWidget.dataSource.mapping);
     if (resolveWidgetStyle(sourceWidget.type, sourceStyle, sourceFields).crossFilterSource !== 'on') return;
-    await doCrossFilterForPoint(sourceWidgetId, { column, value });
+    // OLD: await doCrossFilterForPoint(sourceWidgetId, { column, value });
+    await doCrossFilterForPoint(sourceWidgetId, point);
   };
   // The actual prop passed down — stable across every render (empty dep array), so it never
   // breaks WidgetContent's memoization; always delegates to the freshest ref above.
@@ -2748,7 +2786,7 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
         loadDashboardData(backendId, { filters: baseFilters, ...tabOpt, quiet: true }),
         activeCrossFilter && crossIds.size > 0
           ? loadDashboardData(backendId, {
-            filters: resolveFiltersForQuery([...dashboardFilters, { column: activeCrossFilter.column, operator: '=', value: activeCrossFilter.value }]),
+            filters: resolveFiltersForQuery([...dashboardFilters, ...crossFilterRowsOf(activeCrossFilter)]),
             ...tabOpt,
             quiet: true,
           })
@@ -4362,7 +4400,8 @@ const DashboardCanvasEditor = React.forwardRef(function DashboardCanvasEditor({
               sites above/below, since it isn't tied to either. */}
           {activeCrossFilter && (
             <div className="dbe-cross-filter-chip">
-              Filtering by {activeCrossFilter.column} = {activeCrossFilter.label}
+              {/* OLD: Filtering by {activeCrossFilter.column} = {activeCrossFilter.label} */}
+              Filtering by {crossFilterRowsOf(activeCrossFilter).map(crossFilterRowText).join(' · ')}
               <button type="button" onClick={clearCrossFilter} aria-label="Clear cross-filter">✕</button>
             </div>
           )}

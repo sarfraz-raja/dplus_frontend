@@ -34,6 +34,7 @@
 - **Styling:** Tailwind first; inline `style` only for runtime values; theme tokens rather than hardcoded colors; the app type scale is `text-ui-*` and the Dashboard Builder editor scale is `text-dbe-*`, never ad-hoc `text-[Npx]`; one brand orange `#EC7D09`; top-level pages use `h-full` (never `h-[calc(100vh-…)]`) and only the inner region scrolls. Never put a backtick inside a `<style>{`…`}</style>` block.
 - **Dashboard Builder:** reuse an existing widget's style keys first; check every level (theme → dashboard → chart → placement) and every chart type; wire **both** render paths (Charts-tab preview and the canvas `style` object in `DashboardCanvasEditor`); keep defaults identical; prefer one input with derived states over a picker per state; update the style matrix doc.
 - **Map geometry:** divide longitude offsets by `cos(latitude)`.
+- **Lists: newest first.** Every list or picker of user-created things (dashboards, charts, datasources, metrics, themes, palettes, …) shows the latest addition on top. The backend returns most lists oldest first (`ORDER BY created_at`), so sort in the list action (`newestFirst` in `dashboardBuilder-actions.js`) rather than per screen.
 - Responsive (sm to 2xl), accessible, PascalCase components, camelCase functions, Redux only for cross-page state, dev-only logging (`import.meta.env.DEV`), stable list keys.
 - Don't touch **parked pages** (CX/IX Support, the `AdvancedTable` family) unless the user starts work on them.
 

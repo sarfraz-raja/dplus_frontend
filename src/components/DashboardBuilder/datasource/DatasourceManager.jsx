@@ -101,6 +101,8 @@ const DatasourceManager = React.forwardRef(function DatasourceManager({ isOpen, 
     setListLoading(true);
     setListError(null);
     try {
+      // OLD (newest first is now done in listDatasources itself, for every picker):
+      // setDatasources((await listDatasources()).slice().reverse());
       setDatasources(await listDatasources());
     } catch (err) {
       setListError(err.message);

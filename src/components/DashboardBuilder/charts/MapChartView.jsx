@@ -154,10 +154,12 @@ export default function MapChartView({ name, mapping = {}, rows = [], height = 3
     // OLD: const onClick = onPointClick ? ({ object }) => { if (object) onPointClick(object.id === null ? null : String(object.id)); } : undefined;
     // The clicked row's own ID value, not the item id: an item with no ID falls back to "lat,lng"
     // (toMapItems), which as a cross-filter value matched nothing. No ID → null (an IS NULL filter).
-    const onClick = onPointClick ? ({ object }) => {
+    // deck.gl onClick(info, event): Ctrl/⌘ from the original pointer event → add / remove the ID.
+    const onClick = onPointClick ? ({ object }, event) => {
       if (!object) return;
       const raw = object.row?.[mapping.map_id];
-      onPointClick(raw === null || raw === undefined || raw === '' ? null : String(raw));
+      const src = event?.srcEvent;
+      onPointClick(raw === null || raw === undefined || raw === '' ? null : String(raw), { additive: !!(src?.ctrlKey || src?.metaKey) });
     } : undefined;
     return isSites
       ? buildSiteLayer({ items, getHex, opacity, radius: pointSize, onClick })

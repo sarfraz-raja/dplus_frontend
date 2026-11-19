@@ -138,8 +138,23 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
   // mis-identifies a genuine string value that happens to literally be "null", which is the
   // same ambiguity the chart's own category label already has (nothing displayed can tell the
   // two apart either).
+  // OLD: const handlePointClick = onPointClick
+  //   ? (label) => onPointClick({ column: xAxis, value: label === 'null' ? null : label })
+  //   : null;
+  // `info` (from the chart's click): { seriesName, additive }. A series-grouped chart (BAR / AREA /
+  // LINE / HORIZONTAL_BAR with mapping.series, and STACKED_BAR) also sends the clicked segment's
+  // series as a second column (`also`) — series names are the raw String(row[series]), "null" for
+  // empty, like the category. `additive` = Ctrl/⌘ held (add / remove values instead of replacing).
+  const seriesColumn = mapping.series && (chartType === 'STACKED_BAR' || (['BAR', 'AREA', 'LINE', 'HORIZONTAL_BAR'].includes(chartType)))
+    ? mapping.series : null;
   const handlePointClick = onPointClick
-    ? (label) => onPointClick({ column: xAxis, value: label === 'null' ? null : label })
+    ? (label, info = {}) => onPointClick({
+      column: xAxis,
+      value: label === 'null' ? null : label,
+      ...(seriesColumn && info.seriesName != null
+        ? { also: [{ column: seriesColumn, value: info.seriesName === 'null' ? null : info.seriesName }] } : {}),
+      additive: !!info.additive,
+    })
     : null;
   // Right-click on a point — separate from handlePointClick above (which drives left-click
   // cross-filter/drill-in); this instead opens the point-anchored "Drill down into X / Drill
@@ -256,7 +271,8 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
           height={height}
           style={style}
           isDark={isDark}
-          onPointClick={onPointClick ? (value) => onPointClick({ column: mapping.map_id, value }) : null}
+          // OLD: onPointClick={onPointClick ? (value) => onPointClick({ column: mapping.map_id, value }) : null}
+          onPointClick={onPointClick ? (value, info = {}) => onPointClick({ column: mapping.map_id, value, additive: !!info.additive }) : null}
           onPointContextMenu={handlePointContextMenu}
         />
       </React.Suspense>
@@ -536,7 +552,28 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
       return <StackedBarChart title={displayName} categories={displayCategories} series={series} height={height} showLegend={showLegend} onPointClick={xAxisCrossFilterDisabled ? null : handlePointClick} onPointContextMenu={xAxisCrossFilterDisabled ? null : handlePointContextMenu} categoryAxisLabel={categoryAxisLabel} valueAxisLabel={valueAxisLabel} truncateYAxis={truncateYAxis} yAxisMin={yAxisMin} yAxisMax={yAxisMax} {...styleProps} />;
     }
     case 'TABLE': {
-      const cols = mapping.columns || [];
+      // OLD: const cols = mapping.columns || [];
+      // OLD (custom columns in their own key, before the backend settled on mapping.columns):
+      // const customCols = (mapping.custom_columns || [])
+      //   .filter((c) => c && (c.label || '').trim() && (c.expression || '').trim())
+      //   .map((c) => c.label.trim());
+      // const cols = [...(mapping.columns || []), ...customCols.filter((c) => !(mapping.columns || []).includes(c))];
+      // mapping.columns mixes plain names and custom SQL entries ({ type: 'sql', expression, label },
+      // returned by the backend as `(<expression>) AS "<label>"`) — each shown under its name / label,
+      // in saved order. Half-filled SQL entries (still being typed) are skipped.
+      const tableEntries = (mapping.columns || []).filter((c) => typeof c === 'string' || ((c?.label || '').trim() && (c?.expression || '').trim()));
+      const entryName = (c) => (typeof c === 'string' ? c : c.label.trim());
+      const cols = tableEntries.map(entryName);
+      // SQL columns aren't datasource columns, so the backend can't filter on them — not clickable.
+      const sqlColNames = tableEntries.filter((c) => typeof c !== 'string').map(entryName);
+      // Header drag-reorder hands back names; map them back to the saved entries so SQL ones survive.
+      const reorderTableColumns = onReorderColumns
+        ? (names) => onReorderColumns([
+          ...names.map((n) => tableEntries.find((c) => entryName(c) === n)).filter(Boolean),
+          // Half-filled SQL rows aren't shown in the table, but must not be lost from the editor.
+          ...(mapping.columns || []).filter((c) => !tableEntries.includes(c)),
+        ])
+        : null;
       // Light or dark table chrome (toolbar, header, text, lines, pager) follows the card's REAL
       // background — a dark Background/gradient picked for Light mode gets dark chrome too, and
       // vice versa — not the app theme. Unset background = the app theme, as before.
@@ -593,7 +630,8 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             bandTextColor={bandTextColor}
             headerBgColor={headerBgColor}
             headerTextColor={headerTextColor}
-            onReorderColumns={onReorderColumns}
+            // OLD: onReorderColumns={onReorderColumns}
+            onReorderColumns={reorderTableColumns}
             // OLD: formatValue={(numberFormat ?? 'compact') === 'compact' ? (v) => formatCompactNumber(v, valueDecimals) : null}
             formatValue={(numberFormat ?? 'compact') === 'full' ? null : (v) => formatScaledNumber(v, numberFormat, valueDecimals)}
             dateFormat={mapping.table_date_format || DEFAULT_TIME_AXIS_FORMAT}
@@ -610,7 +648,9 @@ export default function renderChartWidget({ chartType, name, mapping = {}, rows 
             gridColor={gridColor}
             // Cross-filter source: a cell click sends its own column + raw value (onPointClick is only
             // passed when this placement is a cross-filter source, drillable or linked).
-            onCellClick={onPointClick ? (column, value) => onPointClick({ column, value }) : null}
+            // OLD: onCellClick={onPointClick ? (column, value) => onPointClick({ column, value }) : null}
+            onCellClick={onPointClick ? (column, value, additive) => onPointClick({ column, value, additive: !!additive }) : null}
+            nonClickableColumns={sqlColNames}
           />
           </div>
         </div>

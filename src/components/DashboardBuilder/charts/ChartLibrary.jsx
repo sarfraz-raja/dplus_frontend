@@ -145,6 +145,10 @@ const Y_AXIS_TITLE_FIELD = { key: 'y_axis_title', label: 'Y Axis title', type: '
 // option-builder), so this needs the actual yAxis.min/max wiring added per component before
 // it belongs in that chart_type's fields; extend chart-type by chart-type as each is wired
 // (see LineAreaChart.jsx for the first one).
+// Table: a custom SQL column using an aggregate turns the query into the backend's 'aggregate'
+// table_mode (GROUP BY the picked plain columns, HAVING allowed) — derived on save, never picked.
+const SQL_AGGREGATE_RE = /\b(SUM|AVG|COUNT|MIN|MAX)\s*\(/i;
+const tableHasAggregateColumn = (mapping) => (mapping.columns || []).some((c) => c && typeof c === 'object' && SQL_AGGREGATE_RE.test(c.expression || ''));
 const TRUNCATE_Y_AXIS_FIELD = { key: 'truncate_y_axis', label: 'Truncate Y Axis', type: 'checkbox', default: false, optional: true };
 // `warnIf` — surfaces resolveTruncatedBounds' own silent min>max fallback (axisTypeUtils.js)
 // right where the user is looking, instead of a truncation bound that just quietly does
@@ -431,12 +435,15 @@ const CHART_TYPE_FIELDS = {
     // "X Axis"/"Y Axis" box pattern as every other chart_type, minus Aggregation, which
     // doesn't apply to a raw per-row scatter axis.
     { key: 'x_axis_group', label: 'X Axis', type: 'group', fields: [
-      { key: 'x_axis', label: 'X (measure)', type: 'column', role: 'measure' },
+      // OLD: { key: 'x_axis', label: 'X (measure)', type: 'column', role: 'measure' },
+      // noCustomSql: raw per-row points — no GROUP BY for an aggregate, and the backend reads X as a column name.
+      { key: 'x_axis', label: 'X (measure)', type: 'column', role: 'measure', noCustomSql: true },
       X_AXIS_TITLE_FIELD,
       TRUNCATE_X_AXIS_FIELD, X_AXIS_MIN_FIELD, X_AXIS_MAX_FIELD,
     ] },
     { key: 'y_axis_group', label: 'Y Axis', type: 'group', fields: [
-      { key: 'y_axis', label: 'Y (measure)', type: 'column', role: 'measure' },
+      // OLD: { key: 'y_axis', label: 'Y (measure)', type: 'column', role: 'measure' },
+      { key: 'y_axis', label: 'Y (measure)', type: 'column', role: 'measure', noCustomSql: true },
       Y_AXIS_TITLE_FIELD,
       TRUNCATE_Y_AXIS_FIELD, Y_AXIS_MIN_FIELD, Y_AXIS_MAX_FIELD,
     ] },
@@ -460,7 +467,22 @@ const CHART_TYPE_FIELDS = {
   // than one is ever selected, all of them share this one format rather than needing a
   // separate per-column picker.
   TABLE: [
+    // OLD: { key: 'columns', label: 'Columns to display', type: 'multiColumn' },
+    // Backend TABLE modes (mapping.table_mode): 'raw' (default) selects mapping.columns row by row;
+    // 'aggregate' GROUPs BY mapping.group_by and allows HAVING. Switching mode syncs group_by —
+    // see onMappingChange.
+    // OLD (too many controls — the mode is now derived on save, see tableHasAggregateColumn):
+    // { key: 'table_mode', label: 'Query mode', type: 'select', options: [{ value: 'raw', label: 'Raw rows' }, { value: 'aggregate', label: 'Aggregate (group by)' }], default: 'raw', fullWidth: true, hint: 'Raw rows: one table row per data row. Aggregate: one row per group, with SQL aggregate columns (SUM, AVG, COUNT…) as metrics.' },
+    // { key: 'columns', label: 'Columns to display', type: 'multiColumn', showIf: (m) => m.table_mode !== 'aggregate' },
+    // { key: 'columns', label: 'Group by', type: 'multiColumn', syncGroupBy: true, showIf: (m) => m.table_mode === 'aggregate' },
     { key: 'columns', label: 'Columns to display', type: 'multiColumn' },
+    // OLD: Row-level SQL expressions shown as extra columns — mapping.custom_columns: [{ label, expression }].
+    // OLD: { key: 'custom_columns', label: 'Custom SQL columns', type: 'customColumns', optional: true, hint: 'A per-row expression shown as its own column, e.g. rf_utilization * 100. No SUM / AVG / COUNT (a table has no grouping).' },
+    // Custom SQL columns live inside mapping.columns as { type: 'sql', expression, label } (the
+    // backend's shape, same as KPI Card's custom measure); the backend selects `(<expression>) AS "<label>"`.
+    // OLD: { key: 'columns', label: 'Custom SQL columns', type: 'customColumns', optional: true, showIf: (m) => m.table_mode !== 'aggregate', hint: 'A per-row expression shown as its own column, e.g. rf_utilization * 100. No SUM / AVG / COUNT here (switch Query mode to Aggregate for those).' },
+    // OLD: { key: 'columns', label: 'Metrics (SQL aggregates)', type: 'customColumns', optional: true, aggregate: true, showIf: (m) => m.table_mode === 'aggregate', hint: 'One column per metric, each an aggregate, e.g. SUM(drops) or AVG(rf_utilization) * 100.' },
+    { key: 'columns', label: 'Custom SQL columns', type: 'customColumns', optional: true, hint: 'Your own column written in SQL on the columns above, e.g. rf_utilization * 100. With SUM / AVG / COUNT / MIN / MAX (e.g. SUM(drops)), the table shows one row per combination of the picked columns, and then every custom column must use one.' },
     { key: 'table_date_format', label: 'Date format', type: 'select', options: TIME_AXIS_FORMAT_OPTIONS, default: DEFAULT_TIME_AXIS_FORMAT, optional: true, hint: 'Applied to any date/time column', fullWidth: true },
   ],
   // Map (frontend-only, saved as TABLE + mapping.chart_variant — chartTypeMeta.js). A TABLE with no
@@ -1191,6 +1213,13 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
       if (key === 'date_filter_range' && val !== 'Latest' && prev.date_filter_range === 'Latest' && next.compare_to === 'Custom') {
         delete next.compare_custom_date;
       }
+      // TABLE Query mode: the backend rejects group_by outside 'aggregate', and in 'aggregate'
+      // every plain column must be a group_by dimension — so the picked plain columns become
+      // group_by on the way in, and group_by is dropped on the way out.
+      if (key === 'table_mode') {
+        if (val === 'aggregate') next.group_by = (next.columns || []).filter((c) => typeof c === 'string');
+        else delete next.group_by;
+      }
       // Big Number hides Period until a Date column is picked — clearing the column clears the
       // now-hidden Period too, so a stale 'Latest' can't be saved without its column (which the
       // backend rejects). Plain KPI Cards are left exactly as before.
@@ -1260,11 +1289,27 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
   // sync into any dashboard placement of this same chart, since a placement's own local
   // copy of this data is otherwise never told a shared chart definition changed.
   const saveWidget = async () => {
+    // A Table custom SQL column row still being typed (no name or no expression) stays in the
+    // editor but isn't sent — the backend rejects half-filled { type: 'sql' } entries.
+    // OLD: const savedMapping = Array.isArray(mapping.columns)
+    let savedMapping = Array.isArray(mapping.columns)
+      ? { ...mapping, columns: mapping.columns.filter((c) => typeof c === 'string' || ((c?.label || '').trim() && (c?.expression || '').trim())) }
+      : mapping;
+    // Table query mode is derived, not picked: any aggregate custom column → 'aggregate', grouped
+    // by the picked plain columns; otherwise 'raw' (the backend rejects group_by there).
+    if (chartType === 'TABLE') {
+      const { group_by: _groupBy, ...rest } = savedMapping;
+      savedMapping = tableHasAggregateColumn(savedMapping)
+        ? { ...rest, table_mode: 'aggregate', group_by: (rest.columns || []).filter((c) => typeof c === 'string') }
+        : { ...rest, table_mode: 'raw' };
+    }
     let widget;
     if (editingId) {
-      widget = await updateWidget(editingId, { name: name.trim(), datasource_id: datasourceId, chart_type: toBackendChartType(chartType), mapping });
+      // OLD: widget = await updateWidget(editingId, { name: name.trim(), datasource_id: datasourceId, chart_type: toBackendChartType(chartType), mapping });
+      widget = await updateWidget(editingId, { name: name.trim(), datasource_id: datasourceId, chart_type: toBackendChartType(chartType), mapping: savedMapping });
     } else {
-      widget = await createWidget({ name: name.trim(), datasourceId, chartType: toBackendChartType(chartType), mapping });
+      // OLD: widget = await createWidget({ name: name.trim(), datasourceId, chartType: toBackendChartType(chartType), mapping });
+      widget = await createWidget({ name: name.trim(), datasourceId, chartType: toBackendChartType(chartType), mapping: savedMapping });
       setEditingId(widget.id);
     }
     setDirty(false);
@@ -1564,7 +1609,11 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
             showPercent: mapping.style?.showPercent !== 'no',
             showValueLabels: mapping.style?.showValueLabels !== 'hide',
           }}
-          onPointClick={handlePreviewPointClick}
+          // OLD: onPointClick={handlePreviewPointClick}
+          // Only for drill-down previews: there's no other chart here to cross-filter, and passing it
+          // always made a Table's cells look clickable ("Filter by …") while a click re-ran the
+          // preview with a meaningless drill path.
+          onPointClick={previewData.drillDown?.enabled ? handlePreviewPointClick : undefined}
           onDrillUp={handlePreviewDrillUp}
           drillDown={previewData.drillDown}
           comparison={previewComparison}
@@ -1988,6 +2037,11 @@ const ChartLibrary = React.forwardRef(function ChartLibrary({ prefill, onSavedFo
                     onWhereChange={(v) => onMappingChange('custom_where', v)}
                     onHavingChange={(v) => onMappingChange('custom_having', v)}
                     datasourceId={datasourceId}
+                    // No GROUP BY behind these chart types (Table / Map = raw rows, Scatter = raw points).
+                    // OLD: showHaving={!['TABLE', 'MAP', 'SCATTER'].includes(chartType)}
+                    // A Table in Aggregate mode does GROUP BY, so it gets HAVING.
+                    // OLD: showHaving={!['TABLE', 'MAP', 'SCATTER'].includes(chartType) || (chartType === 'TABLE' && mapping.table_mode === 'aggregate')}
+                    showHaving={!['TABLE', 'MAP', 'SCATTER'].includes(chartType) || (chartType === 'TABLE' && tableHasAggregateColumn(mapping))}
                   />
                 )}
 

@@ -93,7 +93,8 @@ export default function StackedBarChart({
           isn't part of the match for this first cut. */}
       <div className="flex-1 min-h-0">
         <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
-          ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
+          // OLD: ...(onPointClick ? { click: (p) => onPointClick(p.name) } : {}),
+          ...(onPointClick ? { click: (p) => onPointClick(p.name, { seriesName: p.seriesName, additive: !!(p.event?.event?.ctrlKey || p.event?.event?.metaKey) }) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />
       </div>

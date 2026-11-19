@@ -83,6 +83,9 @@ export default function VirtualizedTable({
   showToolbar = false,
   // Cross-filter source: (column, rawValue) when a cell is clicked. Absent = cells aren't clickable.
   onCellClick = null,
+  // Columns whose cells never cross-filter (a Table's custom SQL / metric columns — not real
+  // datasource columns, so the backend can't filter on them).
+  nonClickableColumns = null,
 }) {
   // No column metadata (data_type) is threaded down to this component — same constraint
   // axisTypeUtils.js's own doc comment notes for chart axes — so the date column is detected
@@ -549,10 +552,16 @@ export default function VirtualizedTable({
                 return (
                   <td
                     key={c}
-                    onClick={onCellClick ? (e) => { e.stopPropagation(); onCellClick(c, row[c] ?? null); } : undefined}
-                    title={onCellClick ? `Filter by ${columnLabels?.[c] || c} = ${display}` : undefined}
+                    // OLD: onClick={onCellClick ? (e) => { e.stopPropagation(); onCellClick(c, row[c] ?? null); } : undefined}
+                    // Ctrl/⌘-click adds / removes the value (an IN list) instead of replacing.
+                    // OLD (before nonClickableColumns): onCellClick ? … : undefined on onClick / title / cursor below
+                    // onClick={onCellClick ? (e) => { e.stopPropagation(); onCellClick(c, row[c] ?? null, e.ctrlKey || e.metaKey); } : undefined}
+                    // title={onCellClick ? `Filter by ${columnLabels?.[c] || c} = ${display}` : undefined}
+                    onClick={onCellClick && !nonClickableColumns?.includes(c) ? (e) => { e.stopPropagation(); onCellClick(c, row[c] ?? null, e.ctrlKey || e.metaKey); } : undefined}
+                    title={onCellClick && !nonClickableColumns?.includes(c) ? `Filter by ${columnLabels?.[c] || c} = ${display}` : undefined}
                     // OLD: className={`px-2 py-1 ${tone('text-slate-600', 'text-white/70')} whitespace-nowrap overflow-hidden text-ellipsis${colLines && ci > 0 ? ` border-l ${lineCls}` : ''}`}
-                    className={`px-2 py-1 ${tone('text-slate-600', 'text-white/70')} whitespace-nowrap overflow-hidden text-ellipsis${colLines && ci > 0 ? ` border-l ${lineCls}` : ''}${onCellClick ? ` cursor-pointer ${tone('hover:bg-orange-50', 'hover:bg-white/10')}` : ''}`}
+                    // OLD: className={`…${onCellClick ? ` cursor-pointer ${tone('hover:bg-orange-50', 'hover:bg-white/10')}` : ''}`}
+                    className={`px-2 py-1 ${tone('text-slate-600', 'text-white/70')} whitespace-nowrap overflow-hidden text-ellipsis${colLines && ci > 0 ? ` border-l ${lineCls}` : ''}${onCellClick && !nonClickableColumns?.includes(c) ? ` cursor-pointer ${tone('hover:bg-orange-50', 'hover:bg-white/10')}` : ''}`}
                     style={{
                       ...(colLines && ci > 0 ? lineStyle : null),
                       // Priority: a matching Conditional Formatting text-color rule wins

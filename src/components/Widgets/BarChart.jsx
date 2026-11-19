@@ -177,7 +177,8 @@ export default function BarChart({
       )}
       <div className="flex-1 min-h-0">
         <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
-          ...(onPointClick ? { click: (p) => onPointClick(clickLabels[p.dataIndex]) } : {}),
+          // OLD: ...(onPointClick ? { click: (p) => onPointClick(clickLabels[p.dataIndex]) } : {}),
+          ...(onPointClick ? { click: (p) => onPointClick(clickLabels[p.dataIndex], { seriesName: p.seriesName, additive: !!(p.event?.event?.ctrlKey || p.event?.event?.metaKey) }) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { p.event.event.preventDefault(); onPointContextMenu(clickLabels[p.dataIndex], p.event.event.clientX, p.event.event.clientY); } } : {}),
         } : undefined} />
       </div>

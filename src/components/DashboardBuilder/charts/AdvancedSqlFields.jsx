@@ -50,7 +50,11 @@ export function ValidateExpressionButton({ datasourceId, expression }) {
  * something most widgets need — matches "coexist, not replace" (every existing column/filter
  * picker keeps working exactly as before whether or not this section is ever opened).
  */
-export default function AdvancedSqlFields({ whereValue, havingValue, onWhereChange, onHavingChange, datasourceId }) {
+// `showHaving`: false for chart types whose query has no GROUP BY to apply HAVING to — Table and
+// Map (the backend runs `SELECT * … HAVING`, a SQL error) and Scatter (raw rows; the backend skips
+// it). A HAVING already saved on such a chart is shown as a note with Remove instead of the box.
+// OLD: export default function AdvancedSqlFields({ whereValue, havingValue, onWhereChange, onHavingChange, datasourceId }) {
+export default function AdvancedSqlFields({ whereValue, havingValue, onWhereChange, onHavingChange, datasourceId, showHaving = true }) {
   const [open, setOpen] = useState(!!whereValue || !!havingValue);
   return (
     <div className="flex flex-col gap-2 p-3 rounded-xl border border-slate-200 bg-white w-full">
@@ -75,19 +79,33 @@ export default function AdvancedSqlFields({ whereValue, havingValue, onWhereChan
             />
             <div className="mt-1"><ValidateExpressionButton datasourceId={datasourceId} expression={whereValue} /></div>
           </label>
-          <label className="text-xs font-medium text-slate-600 w-full">
-            Custom HAVING condition
-            <textarea
-              value={havingValue}
-              onChange={(e) => onHavingChange(e.target.value)}
-              placeholder="e.g. SUM(drops) > 100"
-              rows={2}
-              className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono"
-            />
-            <div className="mt-1"><ValidateExpressionButton datasourceId={datasourceId} expression={havingValue} /></div>
-          </label>
+          {showHaving ? (
+            <label className="text-xs font-medium text-slate-600 w-full">
+              Custom HAVING condition
+              <textarea
+                value={havingValue}
+                onChange={(e) => onHavingChange(e.target.value)}
+                placeholder="e.g. SUM(drops) > 100"
+                rows={2}
+                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono"
+              />
+              <div className="mt-1"><ValidateExpressionButton datasourceId={datasourceId} expression={havingValue} /></div>
+            </label>
+          ) : havingValue ? (
+            <div className="flex items-start justify-between gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+              <span>
+                This chart type has no grouping, so its saved HAVING condition (<code className="font-mono">{havingValue}</code>) can't apply and may break the query.
+              </span>
+              <button type="button" onClick={() => onHavingChange('')} className="shrink-0 font-semibold text-amber-800 hover:underline">
+                Remove
+              </button>
+            </div>
+          ) : null}
           <div className="text-[0.7rem] text-slate-400">
-            WHERE filters rows before aggregation (no SUM/AVG/COUNT allowed) — HAVING filters after aggregation (must contain one).
+            {/* OLD: WHERE filters rows before aggregation (no SUM/AVG/COUNT allowed) — HAVING filters after aggregation (must contain one). */}
+            {showHaving
+              ? 'WHERE filters rows before aggregation (no SUM/AVG/COUNT allowed) — HAVING filters after aggregation (must contain one).'
+              : 'WHERE filters rows (no SUM/AVG/COUNT allowed). This chart type shows rows as they are, so there is no HAVING.'}
           </div>
         </div>
       )}

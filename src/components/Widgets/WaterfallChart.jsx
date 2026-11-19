@@ -110,7 +110,8 @@ export default function WaterfallChart({
       )}
       <div className="flex-1 min-h-0">
         <ReactECharts option={applyChartAnimation(option, chartAnimation)} theme={echartsThemeName(isDark)} style={{ height: '100%', width: '100%' }} opts={{ devicePixelRatio: 2 }} notMerge lazyUpdate onEvents={(onPointClick || onPointContextMenu) ? {
-          ...(onPointClick ? { click: (p) => p.seriesName === 'Delta' && onPointClick(p.name) } : {}),
+          // OLD: ...(onPointClick ? { click: (p) => p.seriesName === 'Delta' && onPointClick(p.name) } : {}),
+          ...(onPointClick ? { click: (p) => p.seriesName === 'Delta' && onPointClick(p.name, { seriesName: p.seriesName, additive: !!(p.event?.event?.ctrlKey || p.event?.event?.metaKey) }) } : {}),
           ...(onPointContextMenu ? { contextmenu: (p) => { if (p.seriesName === 'Delta') { p.event.event.preventDefault(); onPointContextMenu(p.name, p.event.event.clientX, p.event.event.clientY); } } } : {}),
         } : undefined} />
       </div>
